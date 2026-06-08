@@ -21,10 +21,11 @@ v0.1 must start with dummy backends and a Nix + uv scaffold. Real STT and real v
 
 ## Required reading for implementation
 
-1. [`docs/SPEC.md`](docs/SPEC.md) — fixed product and user-facing specification.
-2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — backend interfaces and data flow.
-3. [`docs/CLAUDE_IMPLEMENTATION_CONTRACT.md`](docs/CLAUDE_IMPLEMENTATION_CONTRACT.md) — exact implementation contract for Claude or any coding agent.
-4. [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) — acceptance and rejection criteria.
+1. [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md) — clone, Nix, and uv workflow.
+2. [`docs/SPEC.md`](docs/SPEC.md) — fixed product and user-facing specification.
+3. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — backend interfaces and data flow.
+4. [`docs/CLAUDE_IMPLEMENTATION_CONTRACT.md`](docs/CLAUDE_IMPLEMENTATION_CONTRACT.md) — exact implementation contract for Claude or any coding agent.
+5. [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md) — acceptance and rejection criteria.
 
 ## Non-goals for v0.1
 
@@ -39,9 +40,23 @@ Do not implement:
 - real voice cloning inside the initial scaffold
 - heavy model dependencies in the first commit
 
-## Target development commands
+## Local setup and target development commands
 
-The implementation must eventually support:
+Clone the repository first:
+
+```bash
+git clone git@github.com:Unjuno/kuchikae.git
+cd kuchikae
+```
+
+If SSH is not configured, use HTTPS:
+
+```bash
+git clone https://github.com/Unjuno/kuchikae.git
+cd kuchikae
+```
+
+The implementation must then support:
 
 ```bash
 nix develop
@@ -49,3 +64,5 @@ uv sync
 uv run pytest
 uv run python app.py
 ```
+
+Do not use global Python, global pip, or undeclared Homebrew-only dependencies. Nix owns the system development shell; uv owns Python package resolution.
