@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+
+# Nix
+result*
+.nix-defexpr
+
+# Gradio cache
+gradio-cache/
+
+# Output files generated during pipeline
+outputs/*.wav
+
+# OS
+.DS_Store
+Thumbs.db
