@@ -18,7 +18,50 @@ Audio input
   -> VoiceOutputPrompt + VoiceContext-driven audio output
 ```
 
-## 2. Product constraints
+## 2. Local repository workflow
+
+Kuchikae is managed as a GitHub repository with a Nix development environment.
+
+Before implementation, the repository must be cloned locally:
+
+```bash
+git clone git@github.com:Unjuno/kuchikae.git
+cd kuchikae
+```
+
+If SSH is not configured:
+
+```bash
+git clone https://github.com/Unjuno/kuchikae.git
+cd kuchikae
+```
+
+All development must happen inside the Nix dev shell:
+
+```bash
+nix develop
+```
+
+Then Python dependencies must be installed through uv:
+
+```bash
+uv sync
+```
+
+The target command flow is:
+
+```bash
+git clone git@github.com:Unjuno/kuchikae.git
+cd kuchikae
+nix develop
+uv sync
+uv run pytest
+uv run python app.py
+```
+
+Do not rely on global Python, global pip, Homebrew-only setup, or undeclared local machine state.
+
+## 3. Product constraints
 
 Kuchikae is not a fixed-style dropdown app.
 
@@ -29,7 +72,7 @@ The primary controls are:
 
 A fixed style dropdown is not allowed as the primary interface.
 
-## 3. Required stack
+## 4. Required stack
 
 Use:
 
@@ -48,7 +91,7 @@ Use:
 
 Do not add heavy ML dependencies in the first scaffold.
 
-## 4. Required repository tree
+## 5. Required repository tree
 
 Create exactly this project shape:
 
@@ -86,7 +129,7 @@ kuchikae/
     test_voice_output_dummy.py
 ```
 
-## 5. `flake.nix` requirements
+## 6. `flake.nix` requirements
 
 Create `flake.nix` with:
 
@@ -118,7 +161,7 @@ Run: uv run pytest
 Run: uv run python app.py
 ```
 
-## 6. `pyproject.toml` requirements
+## 7. `pyproject.toml` requirements
 
 Use:
 
@@ -148,7 +191,7 @@ Do not add:
 - F5-TTS
 - RVC
 
-## 7. `.gitignore` requirements
+## 8. `.gitignore` requirements
 
 ```gitignore
 .venv/
@@ -164,7 +207,7 @@ models/
 .DS_Store
 ```
 
-## 8. Required dataclasses
+## 9. Required dataclasses
 
 Implement the dataclasses specified in `docs/ARCHITECTURE.md` exactly unless there is a clear Python syntax issue.
 
@@ -180,9 +223,9 @@ Required names:
 Do not rename `TextTransformPrompt` to `Style`.
 Do not rename `transformed_text` to `styled_text`.
 
-## 9. Required backend interfaces
+## 10. Required backend interfaces
 
-### 9.1 STTBackend
+### 10.1 STTBackend
 
 ```python
 class STTBackend(ABC):
@@ -199,7 +242,7 @@ class DummySTTBackend(STTBackend):
         return "明日までに資料を送って"
 ```
 
-### 9.2 TextTransformBackend
+### 10.2 TextTransformBackend
 
 ```python
 class TextTransformBackend(ABC):
@@ -216,7 +259,7 @@ Required dummy behavior:
 - It may use a simple deterministic sentence.
 - It must not implement fixed style dropdown logic.
 
-### 9.3 VoiceOutputBackend
+### 10.3 VoiceOutputBackend
 
 ```python
 class VoiceOutputBackend(ABC):
@@ -239,7 +282,7 @@ Required dummy behavior:
 
 The dummy implementation may not perform real voice synthesis.
 
-## 10. Pipeline requirements
+## 11. Pipeline requirements
 
 Implement `KuchikaePipeline`.
 
@@ -279,7 +322,7 @@ Measure:
 - voice output seconds
 - total seconds
 
-## 11. Gradio UI requirements
+## 12. Gradio UI requirements
 
 `app.py` must expose a one-screen app.
 
@@ -300,7 +343,7 @@ Outputs:
 Do not expose model internals in the main UI.
 Do not add fixed style dropdown as the primary UI.
 
-## 12. Prompt files
+## 13. Prompt files
 
 Create:
 
@@ -316,32 +359,32 @@ Create:
 元の話者の声質に近づけ、自然な声で話してください。
 ```
 
-## 13. Required tests
+## 14. Required tests
 
-### 13.1 `test_audio_cache.py`
+### 14.1 `test_audio_cache.py`
 
 - Add an utterance.
 - Assert latest utterance path is set.
 - Assert reference audio path is set.
 
-### 13.2 `test_voice_context.py`
+### 14.2 `test_voice_context.py`
 
 - Extract context from a provided reference path.
 - Assert result is `VoiceContext`.
 - Assert `ready is True`.
 
-### 13.3 `test_text_transform_dummy.py`
+### 14.3 `test_text_transform_dummy.py`
 
 - Run dummy transformer.
 - Assert output is a non-empty string.
 
-### 13.4 `test_voice_output_dummy.py`
+### 14.4 `test_voice_output_dummy.py`
 
 - Run dummy voice output.
 - Assert output WAV exists.
 - Assert it can be read by `soundfile`.
 
-### 13.5 `test_pipeline_dummy.py`
+### 14.5 `test_pipeline_dummy.py`
 
 - Create temporary dummy WAV.
 - Run full pipeline.
@@ -352,7 +395,7 @@ Create:
   - voice_ready is true
   - latency fields are non-negative
 
-## 14. Forbidden implementation choices
+## 15. Forbidden implementation choices
 
 Claude must not:
 
@@ -366,7 +409,7 @@ Claude must not:
 - commit generated audio, model files, runs, or caches
 - add database, authentication, sharing, streaming, or translation
 
-## 15. Completion response required from Claude
+## 16. Completion response required from Claude
 
 After implementation, Claude must report:
 
