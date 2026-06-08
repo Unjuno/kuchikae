@@ -1,5 +1,7 @@
 """Tests for KuchikaePipeline with dummy backends."""
 
+from __future__ import annotations
+
 import os
 import tempfile
 
@@ -11,101 +13,63 @@ from kuchikae.types import TextTransformPrompt, VoiceOutputPrompt
 
 
 def _write_dummy_wav(path: str) -> None:
-    samples = np.zeros(44_100, dtype=np.float32)  # 1 sec at 44.1 kHz
-    sf.write(path, samples, 44100)
+    samples = np.zeros(44_100, dtype=np.float32)
+    sf.write(path, samples, 44_100)
 
 
-def test_full_pipeline_runs():
+def _run_pipeline():
     pipeline = KuchikaePipeline()
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         _write_dummy_wav(f.name)
         audio_path = f.name
 
-    text_prompt = TextTransformPrompt(prompt_text="丁寧にして")
-    voice_prompt = VoiceOutputPrompt(prompt_text="自然に")
+    return pipeline.process(
+        audio_path,
+        TextTransformPrompt(instruction="確認"),
+        VoiceOutputPrompt(instruction="自然に"),
+    )
 
-    result = pipeline.process(audio_path, text_prompt, voice_prompt)
+
+def test_full_pipeline_runs():
+    result = _run_pipeline()
 
     assert os.path.isfile(result.output_audio_path)
 
 
 def test_pipeline_source_text_exists():
-    pipeline = KuchikaePipeline()
+    result = _run_pipeline()
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        _write_dummy_wav(f.name)
-        audio_path = f.name
-
-    result = pipeline.process(
-        audio_path,
-        TextTransformPrompt(prompt_text="確認"),
-        VoiceOutputPrompt(prompt_text="確認"),
-    )
-
-    assert len(result.source_text) > 0
+    assert result.source_text
 
 
 def test_pipeline_transformed_text_exists():
-    pipeline = KuchikaePipeline()
+    result = _run_pipeline()
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        _write_dummy_wav(f.name)
-        audio_path = f.name
-
-    result = pipeline.process(
-        audio_path,
-        TextTransformPrompt(prompt_text="確認"),
-        VoiceOutputPrompt(prompt_text="確認"),
-    )
-
-    assert len(result.transformed_text) > 0
+    assert result.transformed_text
 
 
 def test_pipeline_output_audio_exists():
-    pipeline = KuchikaePipeline()
-
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        _write_dummy_wav(f.name)
-        audio_path = f.name
-
-    result = pipeline.process(
-        audio_path,
-        TextTransformPrompt(prompt_text="確認"),
-        VoiceOutputPrompt(prompt_text="確認"),
-    )
+    result = _run_pipeline()
 
     assert os.path.isfile(result.output_audio_path)
 
 
 def test_pipeline_voice_ready():
-    pipeline = KuchikaePipeline()
+    result = _run_pipeline()
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        _write_dummy_wav(f.name)
-        audio_path = f.name
+    assert result.voice_ready is True
 
-    result = pipeline.process(
-        audio_path,
-        TextTransformPrompt(prompt_text="確認"),
-        VoiceOutputPrompt(prompt_text="確認"),
-    )
 
-    assert result.voice_context.ready is True
+def test_pipeline_prompt_fields_are_preserved():
+    result = _run_pipeline()
+
+    assert result.text_transform_prompt == "確認"
+    assert result.voice_output_prompt == "自然に"
 
 
 def test_pipeline_latency_fields_non_negative():
-    pipeline = KuchikaePipeline()
-
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        _write_dummy_wav(f.name)
-        audio_path = f.name
-
-    result = pipeline.process(
-        audio_path,
-        TextTransformPrompt(prompt_text="確認"),
-        VoiceOutputPrompt(prompt_text="確認"),
-    )
+    result = _run_pipeline()
 
     assert result.latency.stt_seconds >= 0
     assert result.latency.text_transform_seconds >= 0
