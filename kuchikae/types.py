@@ -39,4 +39,39 @@ class TextTransformPrompt:
             return cls(instruction=f.read().strip())
 
 
-@dat
+@dataclass
+class VoiceOutputPrompt:
+    """Free-form instruction for voice-conditioned audio output."""
+
+    instruction: str
+    emotion: Optional[str] = None
+    speaking_rate: Optional[str] = None
+    intensity: Optional[float] = None
+
+    @classmethod
+    def from_file(cls, path: str) -> "VoiceOutputPrompt":
+        with open(path, encoding="utf-8") as f:
+            return cls(instruction=f.read().strip())
+
+
+@dataclass
+class LatencyReport:
+    """Per-stage latency report in seconds."""
+
+    stt_seconds: float
+    text_transform_seconds: float
+    voice_output_seconds: float
+    total_seconds: float
+
+
+@dataclass
+class PipelineResult:
+    """Full result returned by the Kuchikae pipeline."""
+
+    source_text: str
+    transformed_text: str
+    output_audio_path: str
+    text_transform_prompt: str
+    voice_output_prompt: str
+    voice_ready: bool
+    latency: LatencyReport
