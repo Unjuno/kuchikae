@@ -1,46 +1,40 @@
 """Tests for VoiceContextExtractor."""
 
+from __future__ import annotations
+
 import tempfile
 
-from kuchikae.audio_cache import AudioCache
+import numpy as np
+import soundfile as sf
+
+from kuchikae.types import VoiceContext
 from kuchikae.voice_context import VoiceContextExtractor
 
 
 def _write_dummy_wav(path: str) -> None:
-    """Write a short silent WAV file using numpy + soundfile."""
-    import numpy as np
-    import soundfile as sf
-
     samples = np.zeros(44_100, dtype=np.float32)
-    sf.write(path, samples, 44100)
+    sf.write(path, samples, 44_100)
 
 
-def test_extractor_returns_voice_context():
+def test_extractor_returns_not_ready_context_without_reference():
     extractor = VoiceContextExtractor()
-    cache = AudioCache()
-    ctx = extractor.extract(cache)
 
-    assert isinstance(ctx, type(extractor.extract(cache)))
-    assert ctx.voice_id != ""
+    ctx = extractor.extract(None)
 
-
-def test_ready_false_without_reference():
-    extractor = VoiceContextExtractor()
-    cache = AudioCache()
-    # Don't set a reference path
-    ctx = extractor.extract(cache)
+    assert isinstance(ctx, VoiceContext)
     assert ctx.ready is False
+    assert ctx.reference_audio_path == ""
 
 
-def test_ready_true_with_reference():
+def test_extractor_returns_ready_context_with_reference_path():
     extractor = VoiceContextExtractor()
-    cache = AudioCache()
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         _write_dummy_wav(f.name)
         ref = f.name
 
-    cache.set_reference_audio(ref)
-    ctx = extractor.extract(cache)
+    ctx = extractor.extract(ref)
+
+    assert isinstance(ctx, VoiceContext)
     assert ctx.ready is True
-    assert ctx.reference_path == ref
+    assert ctx.reference_audio_path == ref
