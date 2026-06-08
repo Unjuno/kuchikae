@@ -1,30 +1,27 @@
-"""TextTransformBackend and DummyTextTransformBackend."""
+"""Text transformation backend interfaces."""
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 
-class TextTransformBackend:
-    """Abstract base for text transformation backends."""
+from kuchikae.types import TextTransformPrompt
 
-    def transform(  # pragma: no cover
-        self,
-        text: str,
-        prompt,
-    ) -> str:
+
+class TextTransformBackend(ABC):
+    """Abstract base for prompt-conditioned text transformation backends."""
+
+    @abstractmethod
+    def transform(self, text: str, prompt: TextTransformPrompt) -> str:
+        """Transform source text according to a free-form prompt."""
         raise NotImplementedError
 
 
 class DummyTextTransformBackend(TextTransformBackend):
-    """Accepts a TextTransformPrompt and returns a non-empty transformed string.
+    """Deterministic dummy text transformer for v0.1 scaffold tests."""
 
-    Does not implement fixed style-dropdown logic; the prompt is free-form text.
-    """
-
-    def transform(  # type: ignore[override]
-        self,
-        text: str,
-        prompt,
-    ) -> str:
-        if hasattr(prompt, "prompt_text"):
+    def transform(self, text: str, prompt: TextTransformPrompt) -> str:
+        """Return a non-empty transformed string while preserving prompt shape."""
+        instruction = prompt.instruction.strip()
+        if not instruction:
             return f"[transformed] {text}"
-        return f"[transformed] {text}"
+        return f"[transformed according to prompt] {text}"
