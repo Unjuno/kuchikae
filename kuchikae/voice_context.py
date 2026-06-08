@@ -1,23 +1,26 @@
-"""VoiceContextExtractor — dummy extractor for v0.1."""
+"""Voice context extraction for Kuchikae v0.1."""
 
 from __future__ import annotations
 
-import uuid
-
-from kuchikae.audio_cache import AudioCache
-from kuchikae.types import VoiceContext
+from kuchikae.types import ProsodyProfile, VoiceContext
 
 
 class VoiceContextExtractor:
-    """Extract a VoiceContext from the reference audio path."""
+    """Create a VoiceContext from reference audio.
 
-    def extract(self, cache: AudioCache) -> VoiceContext:
-        if not cache.reference_path:
-            return VoiceContext(voice_id="unknown", ready=False)
+    v0.1 is intentionally model-free: it only marks the context ready when a
+    reference audio path is available. Speaker embeddings and real prosody
+    extraction are reserved for later backends.
+    """
 
-        voice_id = str(uuid.uuid4())[:8]
+    def extract(self, reference_audio_path: str | None) -> VoiceContext:
+        """Return a VoiceContext for the given reference audio path."""
+        if not reference_audio_path:
+            return VoiceContext(reference_audio_path="", ready=False)
+
         return VoiceContext(
-            voice_id=voice_id,
-            reference_path=cache.reference_path,
+            reference_audio_path=reference_audio_path,
             ready=True,
+            speaker_embedding=None,
+            prosody_profile=ProsodyProfile(),
         )
