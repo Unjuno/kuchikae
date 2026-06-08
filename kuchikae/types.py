@@ -2,70 +2,41 @@
 
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Any, Optional
 
 
 @dataclass
 class ProsodyProfile:
-    """Captured prosodic characteristics of a voice."""
+    """Optional prosodic characteristics captured from reference audio."""
 
-    pitch_mean: float = 0.0
-    pitch_std: float = 0.0
-    speed: float = 0.0
-    volume: float = 0.0
+    speech_rate_chars_per_sec: Optional[float] = None
+    mean_pitch_hz: Optional[float] = None
+    rms_energy: Optional[float] = None
 
 
 @dataclass
 class VoiceContext:
-    """Voice identity + captured prosody from a reference audio."""
+    """Reference-audio based voice context for voice-conditioned output."""
 
-    voice_id: str
-    prosody: ProsodyProfile = field(default_factory=ProsodyProfile)
-    ready: bool = False
-    reference_path: str | None = None
+    reference_audio_path: str
+    ready: bool
+    speaker_embedding: Optional[Any] = None
+    prosody_profile: Optional[ProsodyProfile] = None
 
 
 @dataclass
 class TextTransformPrompt:
-    """Free-form text instruction for the transformation."""
+    """Free-form text instruction for transcript transformation."""
 
-    prompt_text: str
-
-    @classmethod
-    def from_file(cls, path: str) -> TextTransformPrompt:
-        with open(path, encoding="utf-8") as f:
-            return cls(prompt_text=f.read().strip())
-
-
-@dataclass
-class VoiceOutputPrompt:
-    """Free-form text instruction for the output voice."""
-
-    prompt_text: str
+    instruction: str
+    preserve_meaning: bool = True
+    max_output_chars: int = 220
 
     @classmethod
-    def from_file(cls, path: str) -> VoiceOutputPrompt:
+    def from_file(cls, path: str) -> "TextTransformPrompt":
         with open(path, encoding="utf-8") as f:
-            return cls(prompt_text=f.read().strip())
+            return cls(instruction=f.read().strip())
 
 
-@dataclass
-class LatencyReport:
-    """Timing for each pipeline stage."""
-
-    stt_seconds: float = 0.0
-    text_transform_seconds: float = 0.0
-    voice_output_seconds: float = 0.0
-    total_seconds: float = 0.0
-
-
-@dataclass
-class PipelineResult:
-    """Final output of the Kuchikae pipeline."""
-
-    source_text: str
-    transformed_text: str
-    output_audio_path: str
-    voice_context: VoiceContext
-    latency: LatencyReport
+@dat
