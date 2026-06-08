@@ -1,37 +1,42 @@
-"""VoiceOutputBackend and DummyVoiceOutputBackend."""
+"""Voice output backend interfaces."""
 
 from __future__ import annotations
 
 import os
-from typing import Any
+from abc import ABC, abstractmethod
 
 import numpy as np
 import soundfile as sf
 
+from kuchikae.types import VoiceContext, VoiceOutputPrompt
+
 OUTPUT_DIR = "outputs"
 
 
-class VoiceOutputBackend:
-    """Abstract base for voice output backends."""
+class VoiceOutputBackend(ABC):
+    """Abstract base for voice-conditioned output backends."""
 
-    def synthesize(  # pragma: no cover
+    @abstractmethod
+    def synthesize(
         self,
         text: str,
-        voice_context: Any,
-        prompt: Any,
+        voice_context: VoiceContext,
+        prompt: VoiceOutputPrompt,
     ) -> str:
+        """Synthesize output audio and return its file path."""
         raise NotImplementedError
 
 
 class DummyVoiceOutputBackend(VoiceOutputBackend):
-    """Creates a valid short silent WAV file at outputs/dummy.wav."""
+    """Create a valid short silent WAV file for v0.1 scaffold tests."""
 
-    def synthesize(  # type: ignore[override]
+    def synthesize(
         self,
         text: str,
-        voice_context: Any,
-        prompt: Any,
+        voice_context: VoiceContext,
+        prompt: VoiceOutputPrompt,
     ) -> str:
+        """Write a silent WAV while preserving the required interface shape."""
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "dummy.wav")
 

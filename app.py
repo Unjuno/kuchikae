@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import gradio as gr
 
@@ -10,6 +11,7 @@ from kuchikae.pipeline import KuchikaePipeline
 from kuchikae.types import TextTransformPrompt, VoiceOutputPrompt
 
 
+<<<<<<< HEAD
 # Default prompt files (at project root level)
 TEXT_TRANSFORM_DEFAULT = "prompts/text_transform_default.txt"
 VOICE_OUTPUT_DEFAULT = "prompts/voice_output_default.txt"
@@ -17,6 +19,14 @@ VOICE_OUTPUT_DEFAULT = "prompts/voice_output_default.txt"
 
 def _load_prompt(path: str) -> str:
     with open(path, encoding="utf-8") as f:
+=======
+TEXT_TRANSFORM_DEFAULT = Path("prompts/text_transform_default.txt")
+VOICE_OUTPUT_DEFAULT = Path("prompts/voice_output_default.txt")
+
+
+def _load_prompt(path: Path) -> str:
+    with path.open(encoding="utf-8") as f:
+>>>>>>> bbd332d86af32a6d3b4996763cf812af78685918
         return f.read().strip()
 
 
@@ -27,12 +37,12 @@ pipeline = KuchikaePipeline()
 
 
 def run(audio_path: str, text_prompt: str, voice_prompt: str):
-    """Run the pipeline and return all UI outputs."""
+    """Run the pipeline and return UI outputs."""
     if not audio_path or not os.path.isfile(str(audio_path)):
-        raise gr.Error("Please upload an audio file first.")
+        raise gr.Error("Please upload or record an audio file first.")
 
-    text_transform_prompt = TextTransformPrompt(prompt_text=text_prompt)
-    voice_output_prompt = VoiceOutputPrompt(prompt_text=voice_prompt)
+    text_transform_prompt = TextTransformPrompt(instruction=text_prompt)
+    voice_output_prompt = VoiceOutputPrompt(instruction=voice_prompt)
 
     result = pipeline.process(
         audio_path=str(audio_path),
@@ -40,12 +50,16 @@ def run(audio_path: str, text_prompt: str, voice_prompt: str):
         voice_output_prompt=voice_output_prompt,
     )
 
+<<<<<<< HEAD
     vc_status = (
         f"Voice ready: {result.voice_ready}  |  "
         f"ID: {result.latency.stt_seconds:.3f}s STT, "
         f"{result.latency.text_transform_seconds:.3f}s transform, "
         f"{result.latency.voice_output_seconds:.3f}s output"
     )
+=======
+    voice_status = f"Voice ready: {result.voice_ready}"
+>>>>>>> bbd332d86af32a6d3b4996763cf812af78685918
 
     latency_lines = (
         f"STT: {result.latency.stt_seconds:.3f}s\n"
@@ -58,35 +72,33 @@ def run(audio_path: str, text_prompt: str, voice_prompt: str):
         result.source_text,
         result.transformed_text,
         result.output_audio_path,
-        vc_status,
+        voice_status,
         latency_lines,
     )
 
 
 with gr.Blocks(title="Kuchikae v0.1") as demo:
-    gr.Markdown("## Kuchikae — Speak once. Say it back your way.")
+    gr.Markdown("## Kuchikae — Speak once. Kuchikae says it back in your voice, following your prompt.")
 
-    with gr.Row():
-        text_prompt = gr.Textbox(
-            label="Text Transform Prompt",
-            value=DEFAULT_TEXT_PROMPT,
-            lines=3,
-        )
-        voice_prompt = gr.Textbox(
-            label="Voice Output Prompt",
-            value=DEFAULT_VOICE_PROMPT,
-            lines=3,
-        )
+    audio_input = gr.Audio(label="Source Audio", type="filepath")
 
-    audio_input = gr.Audio(label="Source Audio (upload)", type="filepath")
-    submit_btn = gr.Button("Transform")
+    text_prompt = gr.Textbox(
+        label="Text Transform Prompt",
+        value=DEFAULT_TEXT_PROMPT,
+        lines=4,
+    )
+    voice_prompt = gr.Textbox(
+        label="Voice Output Prompt",
+        value=DEFAULT_VOICE_PROMPT,
+        lines=4,
+    )
 
-    with gr.Row():
-        source_text = gr.Textbox(label="Source Transcript", lines=2)
-        transformed_text = gr.Textbox(label="Transformed Text", lines=2)
+    submit_btn = gr.Button("Kuchikae")
 
+    source_text = gr.Textbox(label="Source Transcript", lines=2)
+    transformed_text = gr.Textbox(label="Transformed Text", lines=2)
     output_audio = gr.Audio(label="Output Audio", type="filepath")
-    voice_status = gr.Textbox(label="Voice Context Status", lines=4)
+    voice_status = gr.Textbox(label="Voice Context Status", lines=2)
     latency_report = gr.Textbox(label="Latency Report", lines=5)
 
     submit_btn.click(

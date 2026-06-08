@@ -2,72 +2,76 @@
 
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import Any, Optional
 
 
 @dataclass
 class ProsodyProfile:
-    """Captured prosodic characteristics of a voice."""
+    """Optional prosodic characteristics captured from reference audio."""
 
-    speech_rate_chars_per_sec: float | None = None
-    mean_pitch_hz: float | None = None
-    rms_energy: float | None = None
+    speech_rate_chars_per_sec: Optional[float] = None
+    mean_pitch_hz: Optional[float] = None
+    rms_energy: Optional[float] = None
 
 
 @dataclass
 class VoiceContext:
-    """Voice identity + captured prosody from a reference audio."""
+    """Reference-audio based voice context for voice-conditioned output."""
 
-    voice_id: str
-    ready: bool = False
-    speaker_embedding: object | None = None
-    prosody_profile: ProsodyProfile | None = None
-    reference_audio_path: str = ""
+    reference_audio_path: str
+    ready: bool
+    speaker_embedding: Optional[Any] = None
+    prosody_profile: Optional[ProsodyProfile] = None
 
 
 @dataclass
 class TextTransformPrompt:
-    """Free-form text instruction for the transformation."""
+    """Free-form text instruction for transcript transformation."""
 
-    prompt_text: str
+    instruction: str
+    preserve_meaning: bool = True
+    max_output_chars: int = 220
 
     @classmethod
     def from_file(cls, path: str) -> "TextTransformPrompt":
         with open(path, encoding="utf-8") as f:
-            return cls(prompt_text=f.read().strip())
+            return cls(instruction=f.read().strip())
 
 
 @dataclass
 class VoiceOutputPrompt:
-    """Free-form text instruction for the output voice."""
+    """Free-form instruction for voice-conditioned audio output."""
 
-    prompt_text: str
+    instruction: str
+    emotion: Optional[str] = None
+    speaking_rate: Optional[str] = None
+    intensity: Optional[float] = None
 
     @classmethod
     def from_file(cls, path: str) -> "VoiceOutputPrompt":
         with open(path, encoding="utf-8") as f:
-            return cls(prompt_text=f.read().strip())
+            return cls(instruction=f.read().strip())
 
 
 @dataclass
 class LatencyReport:
-    """Timing for each pipeline stage."""
+    """Per-stage latency report in seconds."""
 
-    stt_seconds: float = 0.0
-    text_transform_seconds: float = 0.0
-    voice_output_seconds: float = 0.0
-    total_seconds: float = 0.0
+    stt_seconds: float
+    text_transform_seconds: float
+    voice_output_seconds: float
+    total_seconds: float
 
 
 @dataclass
 class PipelineResult:
-    """Final output of the Kuchikae pipeline."""
+    """Full result returned by the Kuchikae pipeline."""
 
     source_text: str
     transformed_text: str
     output_audio_path: str
     text_transform_prompt: str
     voice_output_prompt: str
-    voice_ready: bool = False
-    latency: LatencyReport = field(default_factory=LatencyReport)
+    voice_ready: bool
+    latency: LatencyReport
