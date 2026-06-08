@@ -4,9 +4,22 @@ This document defines how to accept or reject the initial implementation.
 
 ## 1. Required command flow
 
-The implementation is accepted only if the following command flow is valid:
+The implementation is accepted only if the following command flow is valid from a fresh local clone:
 
 ```bash
+git clone git@github.com:Unjuno/kuchikae.git
+cd kuchikae
+nix develop
+uv sync
+uv run pytest
+uv run python app.py
+```
+
+If SSH is not configured, HTTPS clone is acceptable:
+
+```bash
+git clone https://github.com/Unjuno/kuchikae.git
+cd kuchikae
 nix develop
 uv sync
 uv run pytest
@@ -262,6 +275,7 @@ All values must be non-negative floats.
 
 Before accepting Claude's implementation, check:
 
+- [ ] Does a fresh `git clone` work?
 - [ ] Does `nix develop` enter the dev shell?
 - [ ] Does `uv sync` complete?
 - [ ] Does `uv run pytest` pass?
