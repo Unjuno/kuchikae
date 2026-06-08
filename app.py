@@ -10,13 +10,13 @@ from kuchikae.pipeline import KuchikaePipeline
 from kuchikae.types import TextTransformPrompt, VoiceOutputPrompt
 
 
-# Default prompt files
+# Default prompt files (at project root level)
 TEXT_TRANSFORM_DEFAULT = "prompts/text_transform_default.txt"
 VOICE_OUTPUT_DEFAULT = "prompts/voice_output_default.txt"
 
 
 def _load_prompt(path: str) -> str:
-    with open(os.path.join("kuchikae", path), encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return f.read().strip()
 
 
@@ -41,11 +41,11 @@ def run(audio_path: str, text_prompt: str, voice_prompt: str):
     )
 
     vc_status = (
-        f"Voice ready: {result.voice_context.ready}  |  "
-        f"ID: {result.voice_context.voice_id}"
+        f"Voice ready: {result.voice_ready}  |  "
+        f"ID: {result.latency.stt_seconds:.3f}s STT, "
+        f"{result.latency.text_transform_seconds:.3f}s transform, "
+        f"{result.latency.voice_output_seconds:.3f}s output"
     )
-    if result.voice_context.reference_path:
-        vc_status += f"\nReference: {result.voice_context.reference_path}"
 
     latency_lines = (
         f"STT: {result.latency.stt_seconds:.3f}s\n"

@@ -14,7 +14,6 @@ from kuchikae.types import (
     LatencyReport,
     PipelineResult,
     TextTransformPrompt,
-    VoiceContext,
     VoiceOutputPrompt,
 )
 from kuchikae.voice_context import VoiceContextExtractor
@@ -31,8 +30,12 @@ class KuchikaePipeline:
         voice_output_backend: VoiceOutputBackend | None = None,
     ) -> None:
         self.stt_backend = stt_backend or DummySTTBackend()
-        self.text_transform_backend = text_transform_backend or DummyTextTransformBackend()
-        self.voice_output_backend = voice_output_backend or DummyVoiceOutputBackend()
+        self.text_transform_backend = (
+            text_transform_backend or DummyTextTransformBackend()
+        )
+        self.voice_output_backend = (
+            voice_output_backend or DummyVoiceOutputBackend()
+        )
 
     def process(
         self,
@@ -58,7 +61,9 @@ class KuchikaePipeline:
 
         # 4. Transform text with prompt
         tx_start = time.time()
-        transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+        transformed_text = self.text_transform_backend.transform(
+            source_text, text_transform_prompt
+        )
         text_transform_seconds = time.time() - tx_start
 
         # 5. Synthesize output audio
@@ -83,6 +88,8 @@ class KuchikaePipeline:
             source_text=source_text,
             transformed_text=transformed_text,
             output_audio_path=output_audio_path,
-            voice_context=voice_context,
+            text_transform_prompt=text_transform_prompt.prompt_text,
+            voice_output_prompt=voice_output_prompt.prompt_text,
+            voice_ready=voice_context.ready,
             latency=latency,
         )

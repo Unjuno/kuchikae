@@ -10,10 +10,9 @@ from dataclasses import dataclass, field
 class ProsodyProfile:
     """Captured prosodic characteristics of a voice."""
 
-    pitch_mean: float = 0.0
-    pitch_std: float = 0.0
-    speed: float = 0.0
-    volume: float = 0.0
+    speech_rate_chars_per_sec: float | None = None
+    mean_pitch_hz: float | None = None
+    rms_energy: float | None = None
 
 
 @dataclass
@@ -21,9 +20,10 @@ class VoiceContext:
     """Voice identity + captured prosody from a reference audio."""
 
     voice_id: str
-    prosody: ProsodyProfile = field(default_factory=ProsodyProfile)
     ready: bool = False
-    reference_path: str | None = None
+    speaker_embedding: object | None = None
+    prosody_profile: ProsodyProfile | None = None
+    reference_audio_path: str = ""
 
 
 @dataclass
@@ -33,7 +33,7 @@ class TextTransformPrompt:
     prompt_text: str
 
     @classmethod
-    def from_file(cls, path: str) -> TextTransformPrompt:
+    def from_file(cls, path: str) -> "TextTransformPrompt":
         with open(path, encoding="utf-8") as f:
             return cls(prompt_text=f.read().strip())
 
@@ -45,7 +45,7 @@ class VoiceOutputPrompt:
     prompt_text: str
 
     @classmethod
-    def from_file(cls, path: str) -> VoiceOutputPrompt:
+    def from_file(cls, path: str) -> "VoiceOutputPrompt":
         with open(path, encoding="utf-8") as f:
             return cls(prompt_text=f.read().strip())
 
@@ -67,5 +67,7 @@ class PipelineResult:
     source_text: str
     transformed_text: str
     output_audio_path: str
-    voice_context: VoiceContext
-    latency: LatencyReport
+    text_transform_prompt: str
+    voice_output_prompt: str
+    voice_ready: bool = False
+    latency: LatencyReport = field(default_factory=LatencyReport)
