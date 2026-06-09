@@ -1,28 +1,64 @@
-"""Audio cache for utterance and reference audio paths."""
+"""Audio cache with rolling reference window for multi-frame SE extraction."""
 
 from __future__ import annotations
 
+import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ReferenceAudio:
+    """A single utterance with quality metadata."""
+
+    audio_path: str
+    quality_score: float = 1.0  # higher = better voice quality
+
 
 class AudioCache:
-    """Store the latest utterance and reference audio path.
+    """Stores recent utterances for multi-frame SE extraction.
 
-    v0.1 uses the same file as both the latest utterance and the reference audio.
-    Later versions may replace this with a rolling reference window.
+    Maintains a rolling window of the best N references; uses the highest-
+    scored one as the primary reference tone color source.
     """
 
-    def __init__(self) -> None:
-        self._latest_utterance_path: str | None = None
-        self._reference_audio_path: str | None = None
+    def __init__(self, max_references: int = 5) -> None:
+        self._window: list[ReferenceAudio] = []
+        self.max_references = max_references
 
-    def add_utterance(self, audio_path: str) -> None:
-        """Add an utterance and make it the active reference audio."""
-        self._latest_utterance_path = audio_path
-        self._reference_audio_path = audio_path
+    @property
+    def count(self) -> int:
+        return len(self._window)
+
+    def add_utterance(
+        self, audio_path: str, quality_score: float | None = None,
+    ) -> None:
+        """Add a new utterance to the rolling window."""
+        if not os.path.isfile(audio_path):
+            raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+        ref = ReferenceAudio(
+            audio_path=audio_path,
+            quality_score=quality_score or 1.0,
+        )
+
+        self._window.append(ref)
+        # Trim oldest entries if window is full.
+        while len(self._window) > self.max_references:
+            self._window.pop(0)
+
+    def get_best_reference(self) -> str | None:
+        """Return the path with highest quality_score."""
+        if not self._window:
+            return None
+        best = max(self._window, key=lambda r: r.quality_score)
+        return best.audio_path
 
     def get_latest_utterance_path(self) -> str | None:
-        """Return the latest utterance audio path."""
-        return self._latest_utterance_path
+        """Return the most recently added utterance path."""
+        if not self._window:
+            return None
+        return self._window[-1].audio_path
 
     def get_reference_audio_path(self) -> str | None:
-        """Return the active reference audio path."""
-        return self._reference_audio_path
+        """Alias for get_best_reference (backward compatibility)."""
+        return self.get_best_reference()
