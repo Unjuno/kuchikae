@@ -81,10 +81,10 @@ def run(audio_path: str, text_prompt: str, voice_prompt: str):
     )
 
 
-def run_one_button(audio_path: str):
+def run_one_button(audio_path):
     """Run the pipeline with pre-built default prompts."""
-    if not audio_path or not os.path.isfile(str(audio_path)):
-        raise gr.Error("Please upload or record an audio file first.")
+    if not audio_path or (isinstance(audio_path, str) and not os.path.isfile(str(audio_path))):
+        raise gr.Error("Please speak into the microphone, then press Speak now.")
 
     # Update reference cache.
     audio_cache.add_utterance(audio_path)
@@ -164,46 +164,20 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
     gr.Markdown("## Kuchikae — Speak once. Say it back your way.")
 
     with gr.Tabs():
-        # ── Manual mode (2 prompts) ─────────────────────────────
-        with gr.Tab("Manual"):
-            text_prompt = gr.Textbox(
-                label="Text Transform Prompt",
-                value=DEFAULT_TEXT_PROMPT.instruction,
-                lines=3,
-            )
-            voice_prompt = gr.Textbox(
-                label="Voice Output Prompt",
-                value=DEFAULT_VOICE_PROMPT.instruction,
-                lines=3,
-            )
-
-            audio_input = gr.Audio(label="Source Audio", type="filepath", sources=["upload"])
-            submit_btn = gr.Button("Transform")
-
-            with gr.Row():
-                source_text = gr.Textbox(label="Source Transcript", lines=2)
-                transformed_text = gr.Textbox(label="Transformed Text", lines=2)
-
-            output_audio = gr.Audio(label="Output Audio", type="filepath")
-            voice_status = gr.Textbox(label="Voice Context Status", lines=4)
-            latency_report = gr.Textbox(label="Latency Report", lines=5)
-
-            submit_btn.click(
-                fn=run,
-                inputs=[audio_input, text_prompt, voice_prompt],
-                outputs=[source_text, transformed_text, output_audio, voice_status, latency_report],
-            )
-
-        # ── One-button mode ───────────────────────────────────────
+        # ── One-button mode (main UI) — microphone-first ────────────
         with gr.Tab("One Button"):
-            one_button_audio = gr.Audio(label="Audio (upload)", type="filepath", sources=["upload"])
-            one_button_btn = gr.Button("▶ Play back in your voice!", size="lg")
+            one_button_audio = gr.Audio(
+                label="Record directly",
+                type="filepath",
+                sources=["microphone"],
+            )
+            one_button_btn = gr.Button("▶ Speak now — your voice, reimagined.", size="lg")
 
             with gr.Row():
                 ob_source_text = gr.Textbox(label="Source Transcript", lines=2)
                 ob_transformed_text = gr.Textbox(label="Transformed Text", lines=2)
 
-            ob_output_audio = gr.Audio(label="Output Audio", type="filepath")
+            ob_output_audio = gr.Audio(label="Output Audio (your voice)", type="filepath")
             ob_voice_status = gr.Textbox(label="Status", lines=4)
             ob_latency_report = gr.Textbox(label="Latency Report", lines=5)
 
@@ -213,14 +187,14 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
                 outputs=[ob_source_text, ob_transformed_text, ob_output_audio, ob_voice_status, ob_latency_report],
             )
 
-        # ── Presets mode ──────────────────────────────────────────
+        # ── Presets mode (sub-mode, upload-based) ─────────────────────
         with gr.Tab("Presets"):
             preset_selector = gr.Dropdown(
                 label="Voice Style",
                 choices=list(PRESETS.keys()),
                 value="カジュアル",
             )
-            presets_audio = gr.Audio(label="Source Audio", type="filepath", sources=["upload"])
+            presets_audio = gr.Audio(label="Source Audio (upload)", type="filepath")
             submit_preset_btn = gr.Button("Transform with Preset")
 
             with gr.Row():
@@ -235,6 +209,36 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
                 fn=run_with_preset,
                 inputs=[presets_audio, preset_selector],
                 outputs=[ps_source_text, ps_transformed_text, ps_output_audio, ps_voice_status, ps_latency_report],
+            )
+
+        # ── Manual mode (sub-mode, upload-based) ──────────────────────
+        with gr.Tab("Manual"):
+            text_prompt = gr.Textbox(
+                label="Text Transform Prompt",
+                value=DEFAULT_TEXT_PROMPT.instruction,
+                lines=3,
+            )
+            voice_prompt = gr.Textbox(
+                label="Voice Output Prompt",
+                value=DEFAULT_VOICE_PROMPT.instruction,
+                lines=3,
+            )
+
+            audio_input = gr.Audio(label="Source Audio (upload)", type="filepath")
+            submit_btn = gr.Button("Transform")
+
+            with gr.Row():
+                source_text = gr.Textbox(label="Source Transcript", lines=2)
+                transformed_text = gr.Textbox(label="Transformed Text", lines=2)
+
+            output_audio = gr.Audio(label="Output Audio", type="filepath")
+            voice_status = gr.Textbox(label="Voice Context Status", lines=4)
+            latency_report = gr.Textbox(label="Latency Report", lines=5)
+
+            submit_btn.click(
+                fn=run,
+                inputs=[audio_input, text_prompt, voice_prompt],
+                outputs=[source_text, transformed_text, output_audio, voice_status, latency_report],
             )
 
 
