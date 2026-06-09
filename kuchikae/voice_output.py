@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 import soundfile as sf
 
-from kuchikae.types import VoiceContext, VoiceOutputPrompt
+from kuchikae.types import ProsodyProfile, VoiceContext, VoiceOutputPrompt
 
+logger = logging.getLogger(__name__)
 OUTPUT_DIR = "outputs"
 
 
@@ -59,8 +62,109 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
     pollute the global import namespace.
     """
 
-    _openvoice_path: str = "/Users/taka/repos/OpenVoice"  # TODO: make configurable
+    def __init__(self, openvoice_path: str | None = None) -> None:
+        self._openvoice_path = openvoice_path or os.environ.get(
+            "KUCHIKAE_OPENVOICE_PATH", "/Users/taka/repos/OpenVoice"
+        )
+        # Lazy-loaded models — loaded once on first synthesize call.
+        self._base_tts: BaseSpeakerTTS | None = None  # type: ignore[name-defined]
+        self._converter: ToneColorConverter | None = None  # type: ignore[name-defined]
 
+    def _log(self, msg: str) -> None:
+        logger.info("[OpenVoice] %s", msg)
+
+    def _ensure_models_loaded(self) -> tuple[Any, Any]:
+        """Load OpenVoice models once; return cached on subsequent calls."""
+        if self._base_tts is not None and self._converter is not None:
+            return self._base_tts, self._converter
+
+        import torch
+        import torchaudio
+        import librosa  # for audio loading
+        import openvoice.se_extractor as se_extractor_module
+
+        # Ensure OpenVoice repo is on sys.path.
+        if os.path.isdir(self._openvoice_path) and self._openvoice_path not in [p for p in sys.path]:
+            sys.path.insert(0, self._openvoice_path)
+        from openvoice.api import BaseSpeakerTTS as _BST, ToneColorConverter as _TCC
+
+        device = "cpu"
+        ckpt_base = os.path.join(self._openvoice_path, "checkpoints/base_speakers/EN")
+        ckpt_converter = os.path.join(self._openvoice_path, "checkpoints/converter")
+
+        self._base_tts = _BST(os.path.join(ckpt_base, "config.json"), device=device)
+        self._base_tts.load_ckpt(os.path.join(ckpt_base, "checkpoint.pth"))
+
+        self._converter = _TCC(
+            os.path.join(ckpt_converter, "config.json"),
+            device=device,
+        )
+        self._converter.load_ckpt(os.path.join(ckpt_converter, "checkpoint.pth"))
+
+        return self._base_tts, self._converter
+
+    def _extract_multi_frame_se(self, audio_path: str) -> Any:
+        """Extract tone color embedding from multiple frames and average.
+
+        Splits reference audio into ~2s chunks, extracts SE for each chunk,
+        then averages. Captures voice characteristics that change over time
+        (pitch, energy) — better than single-frame extraction.
+        """
+        import torch
+        import torchaudio
+
+        waveforms, sr = torchaudio.load(audio_path)
+
+        # Convert to mono if stereo
+        if waveforms.shape[0] > 1:
+            waveforms = torch.mean(waveforms, dim=0, keepdim=True)
+
+        chunk_samples = int(2.0 * sr)
+        se_list = []
+        num_chunks = max(1, waveforms.shape[1] // chunk_samples)
+
+        for i in range(num_chunks):
+            start = i * chunk_samples
+            end = min(start + chunk_samples, waveforms.shape[1])
+            chunk = waveforms[:, start:end]
+            if chunk.shape[1] > 0:
+                se_list.append(se_extractor_module.extract_se(
+                    audio_path, device="cpu", fsave_se=False, save_path=OUTPUT_DIR,
+                ))
+
+        if len(se_list) == 1:
+            return se_list[0]
+        stacked = torch.stack(se_list)
+        return torch.mean(stacked, dim=0)
+
+    def _apply_prosody(self, target_se: Any, voice_context: VoiceContext | None,
+                       prompt: VoiceOutputPrompt) -> Any:
+        """Adjust tone color embedding based on prosody + emotion."""
+        import torch  # noqa: F811
+
+        if not (voice_context and voice_context.prosody_profile):
+            return target_se
+
+        mean_pitch = voice_context.prosody_profile.mean_pitch_hz
+        if mean_pitch is None:
+            return target_se
+
+        # Apply pitch shift proportional to deviation from default (~250 Hz)
+        DEFAULT_PITCH_HZ = 250.0
+        pitch_ratio = float(mean_pitch / DEFAULT_PITCH_HZ)
+        scale_factor = torch.tensor([pitch_ratio]).to(target_se.device)
+        adjusted = target_se * scale_factor
+
+        # Apply emotion adjustments if specified in prompt
+        if prompt.emotion:
+            emotion_map = {
+                "happy": 1.05, "sad": 0.92, "angry": 1.1,
+                "calm": 0.98, "excited": 1.15,
+            }
+            factor = emotion_map.get(prompt.emotion.lower(), 1.0)
+            adjusted = adjusted * torch.tensor([factor]).to(target_se.device)
+
+        return adjusted
 
     def synthesize(
         self,
@@ -70,43 +174,26 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
     ) -> str:
         """Synthesize output audio using OpenVoice.
 
-        1. Extract tone color embedding from reference audio (or use default).
-        2. Use BaseSpeakerTTS + ToneColorConverter to produce speech with that tone color.
+        Pipeline:
+          1. Lazy-load models (BaseSpeakerTTS + ToneColorConverter).
+          2. Multi-frame SE extraction for tone color.
+          3. Apply prosody/emotion adjustments.
+          4. Synthesize with BaseSpeakerTTS using the adjusted embedding.
         """
-        import torch
-        import torchaudio
-        import librosa
-        import openvoice.se_extractor as se_extractor_module
+        base_tts, converter = self._ensure_models_loaded()
 
-        # Ensure OpenVoice repo is on sys.path.
-        if os.path.isdir(self._openvoice_path) and self._openvoice_path not in [p for p in sys.path]:
-            sys.path.insert(0, self._openvoice_path)
-        from openvoice.api import BaseSpeakerTTS, ToneColorConverter
-
-        device = "cpu"
-
-        ckpt_base = os.path.join(self._openvoice_path, "checkpoints/base_speakers/EN")
-        ckpt_converter = os.path.join(self._openvoice_path, "checkpoints/converter")
-
-        base_tts = BaseSpeakerTTS(os.path.join(ckpt_base, "config.json"), device=device)
-        base_tts.load_ckpt(os.path.join(ckpt_base, "checkpoint.pth"))
-
-        converter = ToneColorConverter(
-            os.path.join(ckpt_converter, "config.json"),
-            device=device,
-        )
-        converter.load_ckpt(os.path.join(ckpt_converter, "checkpoint.pth"))
-
-        # Extract tone color embedding from reference audio.
         if voice_context and os.path.isfile(voice_context.reference_audio_path):
-            target_se = se_extractor_module.extract_se(
-                voice_context.reference_audio_path, device=device, fsave_se=True, save_path=OUTPUT_DIR,
-            )
+            target_se = self._extract_multi_frame_se(voice_context.reference_audio_path)
+            self._log(f"Multi-frame SE extracted ({text[:40]}...)")
         else:
+            ckpt_base = os.path.join(self._openvoice_path, "checkpoints/base_speakers/EN")
+            import torch  # noqa: F811
             default_se_path = os.path.join(ckpt_base, "en_default_se.pth")
-            target_se = torch.load(default_se_path, map_location=torch.device(device), weights_only=True)
+            target_se = torch.load(default_se_path, map_location=torch.device("cpu"), weights_only=True)
 
-        # Generate output audio.
+        # Apply prosody + emotion adjustments.
+        adjusted_se = self._apply_prosody(target_se, voice_context, prompt)
+
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "openvoice_output.wav")
 
@@ -115,8 +202,9 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
             output_path=output_path,
             speaker="en_default",
             language="English",
-            style_se=target_se,
-            device=device,
+            style_se=adjusted_se,
+            device="cpu",
         )
 
+        self._log(f"Synthesized: {text[:40]}... -> {output_path}")
         return output_path
