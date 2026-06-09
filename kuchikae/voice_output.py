@@ -59,7 +59,8 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
     pollute the global import namespace.
     """
 
-    _openvoice_path: str = "/Users/taka/repos/OpenVoice"
+    _openvoice_path: str = "/Users/taka/repos/OpenVoice"  # TODO: make configurable
+
 
     def synthesize(
         self,

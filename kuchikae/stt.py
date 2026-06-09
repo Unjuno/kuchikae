@@ -35,6 +35,8 @@ class FasterWhisperSTTBackend(STTBackend):
             )
 
     def transcribe(self, audio_path: str) -> str:
+        import os
+
         from faster_whisper import WhisperModel
 
         model_size = os.environ.get("WHISPER_MODEL_SIZE", "small")
