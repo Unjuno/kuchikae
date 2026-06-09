@@ -5,8 +5,17 @@ from __future__ import annotations
 import time
 
 from kuchikae.audio_cache import AudioCache
-from kuchikae.stt import DummySTTBackend, STTBackend
-from kuchikae.text_transform import DummyTextTransformBackend, TextTransformBackend
+from kuchikae.stt import (
+    DummySTTBackend,
+    FasterWhisperSTTBackend,
+    STTBackend,
+)
+from kuchikae.text_transform import (
+    DummyTextTransformBackend,
+    GPTTextTransformBackend,
+    RuleTextTransformBackend,
+    TextTransformBackend,
+)
 from kuchikae.types import (
     LatencyReport,
     PipelineResult,
@@ -14,7 +23,63 @@ from kuchikae.types import (
     VoiceOutputPrompt,
 )
 from kuchikae.voice_context import VoiceContextExtractor
-from kuchikae.voice_output import DummyVoiceOutputBackend, VoiceOutputBackend
+from kuchikae.voice_output import (
+    DummyVoiceOutputBackend,
+    OpenVoiceOutputBackend,
+    VoiceOutputBackend,
+)
+
+
+def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
+    """Factory to create a pipeline with real or dummy backends based on config.
+
+    Config keys (all optional):
+        stt_backend: "dummy" | "faster_whisper" (default: auto-detect faster-whisper).
+        text_transform_backend: "dummy" | "rule" | "gpt_oss" (default: "rule").
+        voice_output_backend: "dummy" | "openvoice" (default: "dummy" unless OPENVOICE_READY=1).
+
+    Example:
+        >>> pipeline = create_pipeline({"text_transform_backend": "gpt_oss"})
+    """
+    config = backend_config or {}
+
+    if config.get("stt_backend") == "faster_whisper":
+        stt = FasterWhisperSTTBackend()
+    else:
+        # Auto-detect faster-whisper.
+        try:
+            from faster_whisper import WhisperModel  # noqa: F401
+            has_faster_whisper = True
+        except ImportError:
+            has_faster_whisper = False
+
+        stt = FasterWhisperSTTBackend() if has_faster_whisper else DummySTTBackend()
+
+    text_backend_type = config.get("text_transform_backend", "rule")
+    text_backends = {"rule": RuleTextTransformBackend, "gpt_oss": GPTTextTransformBackend}
+    tt_class = text_backends.get(text_backend_type, RuleTextTransformBackend)
+    if tt_class == GPTTextTransformBackend and not os.environ.get("OPENAI_API_KEY"):
+        tt_class = DummyTextTransformBackend  # fall back gracefully.
+
+    voice_output_type = config.get("voice_output_backend", "dummy")
+    if voice_output_type == "openvoice" or (config.get("auto_openvoice") and os.environ.get("OPENVOICE_READY")):
+        vo = OpenVoiceOutputBackend()
+    else:
+        # Auto-detect OpenVoice.
+        _ow_ready = os.path.isdir("/Users/taka/repos/OpenVoice") and os.environ.get("OPENVOICE_READY")
+        vo = OpenVoiceOutputBackend() if _ow_ready else DummyVoiceOutputBackend()
+
+    return KuchikaePipeline(
+        stt_backend=stt,
+        text_transform_backend=tt_class(),
+        voice_output_backend=vo,
+    )
+
+
+# Lazy import guard for os (used in create_pipeline).
+import os  # noqa: E402 — imported at module top-level to avoid circular issues with create_pipeline.
+
+# Re-define create_pipeline properly by moving the import up if needed.
 
 
 class KuchikaePipeline:
