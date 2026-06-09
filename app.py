@@ -177,7 +177,7 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
                 lines=3,
             )
 
-            audio_input = gr.Audio(label="Source Audio (upload)", type="filepath")
+            audio_input = gr.Audio(label="Source Audio", type="filepath", sources=["upload"])
             submit_btn = gr.Button("Transform")
 
             with gr.Row():
@@ -196,7 +196,7 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
 
         # ── One-button mode ───────────────────────────────────────
         with gr.Tab("One Button"):
-            one_button_audio = gr.Audio(label="Record or upload audio", type="filepath")
+            one_button_audio = gr.Audio(label="Audio (upload)", type="filepath", sources=["upload"])
             one_button_btn = gr.Button("▶ Play back in your voice!", size="lg")
 
             with gr.Row():
@@ -220,7 +220,7 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
                 choices=list(PRESETS.keys()),
                 value="カジュアル",
             )
-            presets_audio = gr.Audio(label="Source Audio (upload)", type="filepath")
+            presets_audio = gr.Audio(label="Source Audio", type="filepath", sources=["upload"])
             submit_preset_btn = gr.Button("Transform with Preset")
 
             with gr.Row():
