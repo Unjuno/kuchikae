@@ -9,8 +9,8 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs { inherit system; };
-    in rec {
-      packages.default = pkgs.symlinkJoin {
+
+      kuchikae-tools = pkgs.symlinkJoin {
         name = "kuchikae-tools";
         paths = with pkgs; [
           python311
@@ -23,6 +23,9 @@
         ];
         buildInputs = [ pkgs.makeWrapper ];
       };
+
+    in rec {
+      packages.default = kuchikae-tools;
 
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
