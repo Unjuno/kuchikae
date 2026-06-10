@@ -43,7 +43,6 @@ audio_cache = AudioCache(max_references=5)
 def _process_audio(audio_path, label, text_prompt, voice_prompt):
     """Process audio through the pipeline and return UI outputs."""
     if isinstance(audio_path, tuple):
-        # Gradio sometimes passes (sample_rate, numpy_array) — write to temp file.
         sr, data = audio_path
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             sf.write(tmp.name, data, sr)
@@ -134,12 +133,12 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
             one_button_audio = gr.Audio(
                 label="Record directly",
                 type="filepath",
-                sources=["microphone"],
+                sources=["upload", "microphone"],
             )
-            one_button_btn = gr.Button("▶ Speak now — your voice, reimagined.", size="lg")
+            one_button_btn = gr.Button("▶ Speak now.", size="lg")
 
             with gr.Row():
-                ob_source_text = gr.Textbox(label="Source Transcript", lines=2)
+                ob_source_text = gr.Textbox(label="Source Text", lines=2)
                 ob_transformed_text = gr.Textbox(label="Transformed Text", lines=2)
 
             ob_output_audio = gr.Audio(label="Output Audio (your voice)", type="filepath")
@@ -163,7 +162,7 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
             submit_preset_btn = gr.Button("Transform with Preset")
 
             with gr.Row():
-                ps_source_text = gr.Textbox(label="Source Transcript", lines=2)
+                ps_source_text = gr.Textbox(label="Source Text", lines=2)
                 ps_transformed_text = gr.Textbox(label="Transformed Text", lines=2)
 
             ps_output_audio = gr.Audio(label="Output Audio", type="filepath")
@@ -193,11 +192,11 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
             submit_btn = gr.Button("Transform")
 
             with gr.Row():
-                source_text = gr.Textbox(label="Source Transcript", lines=2)
+                source_text = gr.Textbox(label="Source Text", lines=2)
                 transformed_text = gr.Textbox(label="Transformed Text", lines=2)
 
             output_audio = gr.Audio(label="Output Audio", type="filepath")
-            voice_status = gr.Textbox(label="Voice Context Status", lines=4)
+            voice_status = gr.Textbox(label="Status", lines=4)
             latency_report = gr.Textbox(label="Latency Report", lines=5)
 
             submit_btn.click(
