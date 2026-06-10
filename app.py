@@ -23,6 +23,82 @@ DEFAULT_VOICE_PROMPT = VoiceOutputPrompt.from_file(VOICE_OUTPUT_DEFAULT)
 pipeline = KuchikaePipeline()
 
 
+CSS = """
+#mic-btn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+#mic-btn .icon-button-wrapper {
+    display: none !important;
+}
+#mic-btn .component-wrapper {
+    padding: 0 !important;
+}
+#mic-btn .controls {
+    justify-content: center !important;
+}
+#mic-btn .wrapper {
+    justify-content: center;
+}
+#mic-btn .record-button {
+    width: 80px !important;
+    height: 80px !important;
+    border-radius: 50% !important;
+    border: none !important;
+    background: var(--primary-600) !important;
+    font-size: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    transition: transform 0.15s ease !important;
+}
+#mic-btn .record-button::before {
+    display: none !important;
+}
+#mic-btn .record-button::after {
+    content: "\U0001F3A4" !important;
+    font-size: 32px !important;
+    line-height: 1 !important;
+}
+#mic-btn .record-button:hover {
+    transform: scale(1.08) !important;
+    background: var(--primary-500) !important;
+}
+#mic-btn .record-button:active {
+    transform: scale(0.94) !important;
+}
+#mic-btn .stop-button {
+    width: 80px !important;
+    height: 80px !important;
+    border-radius: 50% !important;
+    border: none !important;
+    background: #ef4444 !important;
+    font-size: 0 !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+}
+#mic-btn .stop-button::before {
+    display: none !important;
+}
+#mic-btn .stop-button::after {
+    content: "\u25A0" !important;
+    font-size: 28px !important;
+    line-height: 1 !important;
+}
+#mic-btn .stop-button-paused,
+#mic-btn .pause-button,
+#mic-btn .resume-button,
+#mic-btn .mic-select,
+#mic-btn .timestamps,
+#mic-btn .timestamp,
+#mic-btn .microphone {
+    display: none !important;
+}
+"""
+
+
 def _normalize_audio_path(audio_input):
     if audio_input is None:
         return None
@@ -54,11 +130,12 @@ def _process_audio(audio_path, text_prompt, voice_prompt):
 def run(audio_input, text_prompt: str, voice_prompt: str, use_defaults: bool):
     path = _normalize_audio_path(audio_input)
     if path is None:
-        return None, None, None
+        return "Record audio first...", "", None, gr.update(value=None)
     if use_defaults:
         text_prompt = DEFAULT_TEXT_PROMPT.instruction
         voice_prompt = DEFAULT_VOICE_PROMPT.instruction
-    return _process_audio(path, text_prompt, voice_prompt)
+    source, transformed, audio_path = _process_audio(path, text_prompt, voice_prompt)
+    return source, transformed, audio_path, gr.update(value=None)
 
 
 def on_use_defaults_change(use_defaults):
@@ -73,11 +150,14 @@ def on_use_defaults_change(use_defaults):
     )
 
 
-with gr.Blocks(title="Kuchikae v0.1") as demo:
+with gr.Blocks(title="Kuchikae") as demo:
     gr.Markdown("## Kuchikae")
 
     audio_input = gr.Microphone(
-        label="Tap to record — tap again to stop & transform",
+        elem_id="mic-btn",
+        show_label=False,
+        buttons=[],
+        waveform_options={"show_recording_waveform": False, "skip_length": 0},
         type="filepath",
         format="wav",
     )
@@ -111,9 +191,9 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
     audio_input.stop_recording(
         run,
         inputs=[audio_input, text_prompt, voice_prompt, use_defaults],
-        outputs=[source_text, transformed_text, output_audio],
+        outputs=[source_text, transformed_text, output_audio, audio_input],
     )
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(css=CSS)
