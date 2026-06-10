@@ -195,10 +195,13 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
             SamplingRequest(
                 text=text,
                 ref_wav=audio_path,
-                num_steps=40,
-                cfg_scale_text=3.0,
-                cfg_scale_speaker=5.0,
+                num_steps=20,
+                t_schedule_mode="sway",
+                sway_coeff=-0.5,
+                cfg_scale_text=2.5,
+                cfg_scale_speaker=4.0,
                 trim_tail=True,
+                context_kv_cache=True,
             )
         )
 

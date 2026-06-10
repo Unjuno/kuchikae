@@ -19,6 +19,7 @@ DEFAULT_TEXT_PROMPT = TextTransformPrompt.from_file(TEXT_TRANSFORM_DEFAULT)
 
 
 pipeline = create_pipeline()
+pipeline.warmup()
 
 
 CSS = """
@@ -115,13 +116,14 @@ def _normalize_audio_path(audio_input):
     return result if os.path.isfile(result) else None
 
 
-def run(audio_input, text_prompt: str, use_defaults: bool):
+def run(audio_input, text_prompt: str, use_defaults: bool, applied_prompt: str):
     path = _normalize_audio_path(audio_input)
     if path is None:
         return None, gr.update(value=None)
+    effective = applied_prompt or text_prompt
     if use_defaults:
-        text_prompt = DEFAULT_TEXT_PROMPT.instruction
-    text_transform_prompt_obj = TextTransformPrompt(instruction=text_prompt)
+        effective = DEFAULT_TEXT_PROMPT.instruction
+    text_transform_prompt_obj = TextTransformPrompt(instruction=effective)
     result = pipeline.process(
         audio_path=str(path),
         text_transform_prompt=text_transform_prompt_obj,
@@ -131,8 +133,24 @@ def run(audio_input, text_prompt: str, use_defaults: bool):
 
 def on_use_defaults_change(use_defaults):
     if use_defaults:
-        return gr.update(value=DEFAULT_TEXT_PROMPT.instruction, interactive=False)
-    return gr.update(interactive=True)
+        return (
+            gr.update(value=DEFAULT_TEXT_PROMPT.instruction, interactive=False),
+            DEFAULT_TEXT_PROMPT.instruction,
+            f"**Active Prompt:** {DEFAULT_TEXT_PROMPT.instruction}",
+        )
+    return (
+        gr.update(interactive=True),
+        gr.skip(),
+        gr.skip(),
+    )
+
+
+def on_apply_prompt(text_prompt: str, use_defaults: bool):
+    if use_defaults:
+        effective = DEFAULT_TEXT_PROMPT.instruction
+    else:
+        effective = text_prompt
+    return effective, f"**Active Prompt:** {effective}"
 
 
 with gr.Blocks(title="Kuchikae") as demo:
@@ -153,22 +171,34 @@ with gr.Blocks(title="Kuchikae") as demo:
         lines=2,
     )
 
-    use_defaults = gr.Checkbox(
-        label="Use default prompts",
-        value=False,
-    )
+    with gr.Row():
+        use_defaults = gr.Checkbox(
+            label="Use default prompt",
+            value=False,
+        )
+        apply_btn = gr.Button("Apply", variant="primary", scale=0)
+
+    active_status = gr.Markdown(f"**Active Prompt:** {DEFAULT_TEXT_PROMPT.instruction}")
 
     output_audio = gr.Audio(label="Output Audio", type="filepath")
+
+    applied_state = gr.State(DEFAULT_TEXT_PROMPT.instruction)
 
     use_defaults.change(
         on_use_defaults_change,
         inputs=[use_defaults],
-        outputs=[text_prompt],
+        outputs=[text_prompt, applied_state, active_status],
+    )
+
+    apply_btn.click(
+        on_apply_prompt,
+        inputs=[text_prompt, use_defaults],
+        outputs=[applied_state, active_status],
     )
 
     audio_input.stop_recording(
         run,
-        inputs=[audio_input, text_prompt, use_defaults],
+        inputs=[audio_input, text_prompt, use_defaults, applied_state],
         outputs=[output_audio, audio_input],
     )
 

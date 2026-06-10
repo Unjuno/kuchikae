@@ -98,6 +98,33 @@ class KuchikaePipeline:
         self.text_transform_backend = text_transform_backend or DummyTextTransformBackend()
         self.voice_output_backend = voice_output_backend or DummyVoiceOutputBackend()
 
+    def warmup(self) -> None:
+        """Pre-download and preload models to avoid first-call latency."""
+        import threading
+
+        def _warmup_stt() -> None:
+            try:
+                self.stt_backend.transcribe.__self__.transcribe("")  # noqa: SLF001
+            except Exception:
+                pass  # warmup may fail silently
+
+        def _warmup_voice() -> None:
+            try:
+                if hasattr(self.voice_output_backend, "_ensure_runtime"):
+                    self.voice_output_backend._ensure_runtime()  # noqa: SLF001
+            except Exception:
+                pass
+
+        threads = []
+        if isinstance(self.stt_backend, FasterWhisperSTTBackend):
+            t = threading.Thread(target=_warmup_stt, daemon=True)
+            t.start()
+            threads.append(t)
+        if "IrodoriTTS" in type(self.voice_output_backend).__name__:
+            t = threading.Thread(target=_warmup_voice, daemon=True)
+            t.start()
+            threads.append(t)
+
     def process(
         self,
         audio_path: str,
