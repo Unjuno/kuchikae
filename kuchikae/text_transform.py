@@ -50,20 +50,11 @@ class OllamaTextTransformBackend(TextTransformBackend):
                             "role": "system",
                             "content": (
                                 "あなたはテキスト変換の専門家です。"
-                                "ユーザーから「変換ルール」と「変換対象テキスト」が与えられるので、"
-                                "ルールに従ってテキストを変換し、変換結果だけを出力してください。\n\n"
-                                "絶対ルール：\n"
-                                "- 説明・接頭語・接尾語は一切付けない\n"
-                                "- 元の内容・事実・数値・固有名詞は変えない\n"
-                                "- 新しい情報を追加しない\n"
-                                "- 変換できない場合は元のテキストをそのまま返す\n\n"
-                                "例：\n"
-                                "変換ルール: 「です・ます」調の丁寧な言葉遣いに変換\n"
-                                "変換対象テキスト: これ、本当に裏で変換入ってる？\n"
-                                "出力: これ、本当に裏で変換が入っていますか？\n\n"
-                                "変換ルール: 内容を簡潔に要約してください\n"
-                                "変換対象テキスト: 昨日友達と渋谷でご飯食べてから、カラオケに行って、終電で帰りました。\n"
-                                "出力: 昨日、友達と渋谷で食事とカラオケをして終電で帰った。"
+                                "ユーザーから変換ルールと変換対象のテキストが与えられるので、"
+                                "ルールに従ってテキストを変換し、**変換結果だけ**を出力してください。\n"
+                                "説明や接頭語は一切付けないでください。\n"
+                                "元の内容・事実・数値・固有名詞は絶対に変えないでください。\n"
+                                "新しい情報を追加しないでください。"
                             ),
                         },
                         {
@@ -202,25 +193,3 @@ class RuleTextTransformBackend(TextTransformBackend):
                 part = part[:-4] + "である"
             result_parts.append(part)
         return "".join(result_parts)
-
-
-class SmartTextTransformBackend(TextTransformBackend):
-    """Routes simple transformations to RuleTextTransformBackend, complex ones to Ollama."""
-
-    def __init__(self, model: str = "qwen3:8b") -> None:
-        self._rule = RuleTextTransformBackend()
-        self._ollama = OllamaTextTransformBackend(model=model)
-
-    def transform(self, text: str, prompt: TextTransformPrompt) -> str:
-        instruction = prompt.instruction.strip()
-        # Rule-routeable patterns: 丁寧/ですます/カジュアル/普通形/友達言葉/タメ口
-        if any(kw in instruction for kw in (
-            "丁寧", "です", "ます", "polite",
-            "カジュアル", "casual", "普通形", "plain", "友達", "タメ",
-        )):
-            logger.info("smart: routing to rule-based backend")
-            result = self._rule.transform(text, prompt)
-            # Strip the [desu-masu] or [plain] prefix RuleTextTransformBackend adds
-            return re.sub(r"^\[.*?\]\s*", "", result)
-        logger.info("smart: routing to ollama (%s)", self._ollama.model)
-        return self._ollama.transform(text, prompt)

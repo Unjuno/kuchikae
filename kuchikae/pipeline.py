@@ -16,7 +16,6 @@ from kuchikae.text_transform import (
     GPTTextTransformBackend,
     OllamaTextTransformBackend,
     RuleTextTransformBackend,
-    SmartTextTransformBackend,
     TextTransformBackend,
 )
 from kuchikae.types import (
@@ -46,10 +45,9 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
             has_faster_whisper = False
         stt = FasterWhisperSTTBackend() if has_faster_whisper else DummySTTBackend()
 
-    text_backend_type = config.get("text_transform_backend", "smart")
+    text_backend_type = config.get("text_transform_backend", "ollama")
     text_model = config.get("text_transform_model")
     text_backends = {
-        "smart": SmartTextTransformBackend,
         "ollama": OllamaTextTransformBackend,
         "rule": RuleTextTransformBackend,
         "gpt_oss": GPTTextTransformBackend,
