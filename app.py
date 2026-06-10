@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 import gradio as gr
+import soundfile as sf
 
 from kuchikae.audio_cache import AudioCache
 from kuchikae.pipeline import KuchikaePipeline, create_pipeline
@@ -38,24 +40,31 @@ pipeline = KuchikaePipeline()
 audio_cache = AudioCache(max_references=5)
 
 
-def run(audio_path: str, text_prompt: str, voice_prompt: str):
-    """Run the pipeline and return UI outputs."""
-    if not audio_path or not os.path.isfile(str(audio_path)):
-        raise gr.Error("Please upload or record an audio file first.")
+def _process_audio(audio_path, label, text_prompt, voice_prompt):
+    """Process audio through the pipeline and return UI outputs."""
+    if isinstance(audio_path, tuple):
+        # Gradio sometimes passes (sample_rate, numpy_array) — write to temp file.
+        sr, data = audio_path
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            sf.write(tmp.name, data, sr)
+            audio_path = tmp.name
+
+    if not os.path.isfile(str(audio_path)):
+        raise gr.Error(f"{label}: No audio file found. (path={audio_path!r})")
 
     # Update reference cache.
     audio_cache.add_utterance(audio_path)
 
-    text_transform_prompt = TextTransformPrompt(instruction=text_prompt)
-    voice_output_prompt = VoiceOutputPrompt(
+    text_transform_prompt_obj = TextTransformPrompt(instruction=text_prompt)
+    voice_output_prompt_obj = VoiceOutputPrompt(
         instruction=voice_prompt,
-        emotion=None,  # Can be extended to auto-detect from prompt content.
+        emotion=None,
     )
 
     result = pipeline.process(
         audio_path=str(audio_path),
-        text_transform_prompt=text_transform_prompt,
-        voice_output_prompt=voice_output_prompt,
+        text_transform_prompt=text_transform_prompt_obj,
+        voice_output_prompt=voice_output_prompt_obj,
     )
 
     vc_status = (
@@ -79,85 +88,41 @@ def run(audio_path: str, text_prompt: str, voice_prompt: str):
         vc_status,
         latency_lines,
     )
+
+
+def run(audio_path: str, text_prompt: str, voice_prompt: str):
+    """Run the pipeline and return UI outputs."""
+    return _process_audio(audio_path, "Manual", text_prompt, voice_prompt)
 
 
 def run_one_button(audio_path):
     """Run the pipeline with pre-built default prompts."""
-    if not audio_path or (isinstance(audio_path, str) and not os.path.isfile(str(audio_path))):
-        raise gr.Error("Please speak into the microphone, then press Speak now.")
+    if audio_path is None:
+        raise gr.Error("No recording. Tap Record and try again.")
 
-    # Update reference cache.
-    audio_cache.add_utterance(audio_path)
+    # Gradio passes filepath when sources=["microphone"], but it can be empty string.
+    if isinstance(audio_path, str) and not os.path.isfile(str(audio_path)):
+        raise gr.Error(f"No audio file found after recording. (path={audio_path!r})")
 
-    result = pipeline.process(
-        audio_path=str(audio_path),
-        text_transform_prompt=DEFAULT_TEXT_PROMPT,
-        voice_output_prompt=DEFAULT_VOICE_PROMPT,
-    )
-
-    vc_status = (
-        f"Voice ready: {result.voice_ready}  |  "
-        f"ID: {result.latency.stt_seconds:.3f}s STT, "
-        f"{result.latency.text_transform_seconds:.3f}s transform, "
-        f"{result.latency.voice_output_seconds:.3f}s output"
-    )
-
-    latency_lines = (
-        f"STT: {result.latency.stt_seconds:.3f}s\n"
-        f"Transform: {result.latency.text_transform_seconds:.3f}s\n"
-        f"Voice output: {result.latency.voice_output_seconds:.3f}s\n"
-        f"Total: {result.latency.total_seconds:.3f}s"
-    )
-
-    return (
-        result.source_text,
-        result.transformed_text,
-        result.output_audio_path,
-        vc_status,
-        latency_lines,
-    )
+    return _process_audio(audio_path, "One Button", DEFAULT_TEXT_PROMPT.instruction, DEFAULT_VOICE_PROMPT.instruction)
 
 
 def run_with_preset(audio_path: str, preset_name: str):
     """Run the pipeline with a pre-built prompt pair."""
-    if not audio_path or not os.path.isfile(str(audio_path)):
-        raise gr.Error("Please upload or record an audio file first.")
+    if not audio_path or (isinstance(audio_path, tuple)):
+        return _process_audio(audio_path, "Presets", "", "")
+
+    if isinstance(audio_path, str) and not os.path.isfile(str(audio_path)):
+        raise gr.Error("Please upload an audio file first.")
 
     if preset_name not in PRESETS:
         raise gr.Error(f"Unknown preset: {preset_name}")
 
     text_file, voice_file = PRESETS[preset_name]
-    text_prompt = TextTransformPrompt.from_file(text_file)
-    voice_prompt = VoiceOutputPrompt.from_file(voice_file)
+    text_prompt_obj = TextTransformPrompt.from_file(text_file)
+    voice_prompt_obj = VoiceOutputPrompt.from_file(voice_file)
 
-    # Update reference cache.
-    audio_cache.add_utterance(audio_path)
-
-    result = pipeline.process(
-        audio_path=str(audio_path),
-        text_transform_prompt=text_prompt,
-        voice_output_prompt=voice_prompt,
-    )
-
-    vc_status = (
-        f"Preset: {preset_name}  |  "
-        f"Voice ready: {result.voice_ready}"
-    )
-
-    latency_lines = (
-        f"STT: {result.latency.stt_seconds:.3f}s\n"
-        f"Transform: {result.latency.text_transform_seconds:.3f}s\n"
-        f"Voice output: {result.latency.voice_output_seconds:.3f}s\n"
-        f"Total: {result.latency.total_seconds:.3f}s"
-    )
-
-    return (
-        result.source_text,
-        result.transformed_text,
-        result.output_audio_path,
-        vc_status,
-        latency_lines,
-    )
+    return _process_audio(audio_path, "Presets", text_prompt_obj.instruction, voice_prompt_obj.instruction)
 
 
 with gr.Blocks(title="Kuchikae v0.1") as demo:
