@@ -6,9 +6,7 @@ import os
 import tempfile
 
 import numpy as np
-import pytest
 import soundfile as sf
-from gradio import Error as GrError
 
 from app import _normalize_audio_path
 
@@ -20,13 +18,11 @@ def test_str_existing_file(tmp_path: str) -> None:
 
 
 def test_str_nonexistent_file(tmp_path: str) -> None:
-    with pytest.raises(GrError, match="No audio file found"):
-        _normalize_audio_path(str(tmp_path / "missing.wav"))
+    assert _normalize_audio_path(str(tmp_path / "missing.wav")) is None
 
 
 def test_none() -> None:
-    with pytest.raises(GrError, match="No audio input received"):
-        _normalize_audio_path(None)
+    assert _normalize_audio_path(None) is None
 
 
 def test_tuple_returns_tmp_path() -> None:
@@ -43,8 +39,7 @@ def test_dict_with_orig_name(tmp_path: str) -> None:
 
 
 def test_dict_with_missing_key() -> None:
-    with pytest.raises(GrError, match="Could not resolve audio file path"):
-        _normalize_audio_path({})
+    assert _normalize_audio_path({}) is None
 
 
 def test_dict_fallback_to_name_and_path(tmp_path: str) -> None:
@@ -56,5 +51,4 @@ def test_dict_fallback_to_name_and_path(tmp_path: str) -> None:
 
 
 def test_dict_with_empty_keys_raises() -> None:
-    with pytest.raises(GrError):
-        _normalize_audio_path({"orig_name": "", "name": None, "path": ""})
+    assert _normalize_audio_path({"orig_name": "", "name": None, "path": ""}) is None

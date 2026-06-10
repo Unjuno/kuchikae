@@ -9,18 +9,16 @@ from pathlib import Path
 import gradio as gr
 import soundfile as sf
 
-from kuchikae.pipeline import KuchikaePipeline
-from kuchikae.types import TextTransformPrompt, VoiceOutputPrompt
+from kuchikae.pipeline import create_pipeline
+from kuchikae.types import TextTransformPrompt
 
 
 TEXT_TRANSFORM_DEFAULT = Path("prompts/text_transform_default.txt")
-VOICE_OUTPUT_DEFAULT = Path("prompts/voice_output_default.txt")
 
 DEFAULT_TEXT_PROMPT = TextTransformPrompt.from_file(TEXT_TRANSFORM_DEFAULT)
-DEFAULT_VOICE_PROMPT = VoiceOutputPrompt.from_file(VOICE_OUTPUT_DEFAULT)
 
 
-pipeline = KuchikaePipeline()
+pipeline = create_pipeline()
 
 
 CSS = """
@@ -107,47 +105,34 @@ def _normalize_audio_path(audio_input):
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             sf.write(tmp.name, data, sr)
             return tmp.name
-    path = getattr(audio_input, "path", None) or getattr(audio_input, "orig_name", None)
+    if isinstance(audio_input, dict):
+        path = audio_input.get("orig_name") or audio_input.get("name") or audio_input.get("path")
+        return str(path) if path else None
+    path = getattr(audio_input, "path", None) or getattr(audio_input, "orig_name", None) or getattr(audio_input, "name", None)
     if path:
         return str(path)
     result = str(audio_input)
-    if not os.path.isfile(result):
-        return None
-    return result
+    return result if os.path.isfile(result) else None
 
 
-def _process_audio(audio_path, text_prompt, voice_prompt):
-    text_transform_prompt_obj = TextTransformPrompt(instruction=text_prompt)
-    voice_output_prompt_obj = VoiceOutputPrompt(instruction=voice_prompt, emotion=None)
-    result = pipeline.process(
-        audio_path=str(audio_path),
-        text_transform_prompt=text_transform_prompt_obj,
-        voice_output_prompt=voice_output_prompt_obj,
-    )
-    return result.source_text, result.transformed_text, result.output_audio_path
-
-
-def run(audio_input, text_prompt: str, voice_prompt: str, use_defaults: bool):
+def run(audio_input, text_prompt: str, use_defaults: bool):
     path = _normalize_audio_path(audio_input)
     if path is None:
-        return "Record audio first...", "", None, gr.update(value=None)
+        return None, gr.update(value=None)
     if use_defaults:
         text_prompt = DEFAULT_TEXT_PROMPT.instruction
-        voice_prompt = DEFAULT_VOICE_PROMPT.instruction
-    source, transformed, audio_path = _process_audio(path, text_prompt, voice_prompt)
-    return source, transformed, audio_path, gr.update(value=None)
+    text_transform_prompt_obj = TextTransformPrompt(instruction=text_prompt)
+    result = pipeline.process(
+        audio_path=str(path),
+        text_transform_prompt=text_transform_prompt_obj,
+    )
+    return result.output_audio_path, gr.update(value=None)
 
 
 def on_use_defaults_change(use_defaults):
     if use_defaults:
-        return (
-            gr.update(value=DEFAULT_TEXT_PROMPT.instruction, interactive=False),
-            gr.update(value=DEFAULT_VOICE_PROMPT.instruction, interactive=False),
-        )
-    return (
-        gr.update(interactive=True),
-        gr.update(interactive=True),
-    )
+        return gr.update(value=DEFAULT_TEXT_PROMPT.instruction, interactive=False)
+    return gr.update(interactive=True)
 
 
 with gr.Blocks(title="Kuchikae") as demo:
@@ -167,31 +152,24 @@ with gr.Blocks(title="Kuchikae") as demo:
         value=DEFAULT_TEXT_PROMPT.instruction,
         lines=2,
     )
-    voice_prompt = gr.Textbox(
-        label="Voice Output Prompt",
-        value=DEFAULT_VOICE_PROMPT.instruction,
-        lines=2,
-    )
 
     use_defaults = gr.Checkbox(
         label="Use default prompts",
         value=False,
     )
 
-    source_text = gr.Textbox(label="Source Text (STT)", lines=2)
-    transformed_text = gr.Textbox(label="Transformed Text", lines=2)
     output_audio = gr.Audio(label="Output Audio", type="filepath")
 
     use_defaults.change(
         on_use_defaults_change,
         inputs=[use_defaults],
-        outputs=[text_prompt, voice_prompt],
+        outputs=[text_prompt],
     )
 
     audio_input.stop_recording(
         run,
-        inputs=[audio_input, text_prompt, voice_prompt, use_defaults],
-        outputs=[source_text, transformed_text, output_audio, audio_input],
+        inputs=[audio_input, text_prompt, use_defaults],
+        outputs=[output_audio, audio_input],
     )
 
 

@@ -18,7 +18,7 @@ import numpy as np
 import soundfile as sf
 
 from kuchikae.pipeline import create_pipeline
-from kuchikae.types import TextTransformPrompt, VoiceOutputPrompt
+from kuchikae.types import TextTransformPrompt
 
 
 def main() -> int:
@@ -42,17 +42,10 @@ def main() -> int:
     result = pipe.process(
         audio_path=audio_path,
         text_transform_prompt=TextTransformPrompt(instruction="確認"),
-        voice_output_prompt=VoiceOutputPrompt(instruction="自然に"),
     )
 
     print(f"\n--- PipelineResult ---")
-    print(f"  Source: {result.source_text}")
-    print(f"  Transformed: {result.transformed_text}")
     print(f"  Output audio: {result.output_audio_path} ({os.path.getsize(result.output_audio_path)} bytes)")
-    print(f"  Voice ready: {result.voice_ready}")
-    print(f"  Latency: STT={result.latency.stt_seconds:.3f}s, "
-          f"Transform={result.latency.text_transform_seconds:.3f}s, "
-          f"Voice={result.latency.voice_output_seconds:.3f}s")
 
     # Verify output.
     assert os.path.isfile(result.output_audio_path), "Output audio missing!"

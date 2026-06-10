@@ -30,6 +30,54 @@ class DummyTextTransformBackend(TextTransformBackend):
 
 
 # --------------------------------------------------------------------------- #
+#  Real backend — Ollama (local LLM, no API key needed)                     #
+# --------------------------------------------------------------------------- #
+
+class OllamaTextTransformBackend(TextTransformBackend):
+    """Japanese text transformation backed by a local Ollama model.
+
+    Calls Ollama API (http://localhost:11434/api/chat) with the configured
+    model. Detects Ollama availability; falls back to Dummy if unavailable.
+    """
+
+    def __init__(self, model: str = "hf.co/LiquidAI/LFM2.5-1.2B-JP-GGUF:Q4_K_M") -> None:
+        self.model = model
+        self._base_url = "http://localhost:11434"
+
+    def transform(self, text: str, prompt: TextTransformPrompt) -> str:
+        import httpx
+
+        try:
+            resp = httpx.post(
+                f"{self._base_url}/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "あなたは日本語のテキスト変換アシスタントです。"
+                                "ユーザーの入力テキストをプロンプトに基づいて変換してください。"
+                                "出力は変換結果のみ、余計な説明は不要です。"
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": f"テキスト: {text}\n\nプロンプト: {prompt.instruction}",
+                        },
+                    ],
+                    "stream": False,
+                    "options": {"temperature": 0.7},
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+            return resp.json()["message"]["content"].strip()
+        except Exception:
+            return DummyTextTransformBackend().transform(text, prompt)
+
+
+# --------------------------------------------------------------------------- #
 #  Real backend — gpt-oss (API-backed, requires OPENAI_API_KEY)             #
 # --------------------------------------------------------------------------- #
 

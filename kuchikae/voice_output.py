@@ -11,8 +11,6 @@ from typing import Any
 import numpy as np
 import soundfile as sf
 
-from kuchikae.types import ProsodyProfile, VoiceContext, VoiceOutputPrompt
-
 logger = logging.getLogger(__name__)
 OUTPUT_DIR = "outputs"
 
@@ -21,12 +19,7 @@ class VoiceOutputBackend(ABC):
     """Abstract base for voice-conditioned output backends."""
 
     @abstractmethod
-    def synthesize(
-        self,
-        text: str,
-        voice_context: VoiceContext,
-        prompt: VoiceOutputPrompt,
-    ) -> str:
+    def synthesize(self, text: str, audio_path: str) -> str:
         """Synthesize output audio and return its file path."""
         raise NotImplementedError
 
@@ -34,12 +27,7 @@ class VoiceOutputBackend(ABC):
 class DummyVoiceOutputBackend(VoiceOutputBackend):
     """Create a valid short silent WAV file for v0.1 scaffold tests."""
 
-    def synthesize(
-        self,
-        text: str,
-        voice_context: VoiceContext,
-        prompt: VoiceOutputPrompt,
-    ) -> str:
+    def synthesize(self, text: str, audio_path: str) -> str:
         """Write a silent WAV while preserving the required interface shape."""
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "dummy.wav")
@@ -57,6 +45,7 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
     Requires:
     - OpenVoice repo cloned outside this repository (default: ../OpenVoice).
     - torch, torchaudio installed and accessible via sys.path.
+    - OPENVOICE_READY=1 env set.
 
     The backend adds the OpenVoice repo path to sys.path on first use, so it does not
     pollute the global import namespace.
@@ -66,24 +55,17 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         self._openvoice_path = openvoice_path or os.environ.get(
             "KUCHIKAE_OPENVOICE_PATH", "/Users/taka/repos/OpenVoice"
         )
-        # Lazy-loaded models — loaded once on first synthesize call.
-        self._base_tts: BaseSpeakerTTS | None = None  # type: ignore[name-defined]
-        self._converter: ToneColorConverter | None = None  # type: ignore[name-defined]
+        self._base_tts: Any = None
+        self._converter: Any = None
 
     def _log(self, msg: str) -> None:
         logger.info("[OpenVoice] %s", msg)
 
     def _ensure_models_loaded(self) -> tuple[Any, Any]:
-        """Load OpenVoice models once; return cached on subsequent calls."""
         if self._base_tts is not None and self._converter is not None:
             return self._base_tts, self._converter
 
-        import torch
-        import torchaudio
-        import librosa  # for audio loading
-
-        # Ensure OpenVoice repo is on sys.path.
-        if os.path.isdir(self._openvoice_path) and self._openvoice_path not in [p for p in sys.path]:
+        if os.path.isdir(self._openvoice_path) and self._openvoice_path not in sys.path:
             sys.path.insert(0, self._openvoice_path)
         from openvoice.api import BaseSpeakerTTS as _BST, ToneColorConverter as _TCC
 
@@ -103,19 +85,11 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         return self._base_tts, self._converter
 
     def _extract_multi_frame_se(self, audio_path: str) -> Any:
-        """Extract tone color embedding from multiple frames and average.
-
-        Splits reference audio into ~2s chunks, extracts SE for each chunk,
-        then averages. Captures voice characteristics that change over time
-        (pitch, energy) — better than single-frame extraction.
-        """
         import torch
         import torchaudio
         import openvoice.se_extractor as se_extractor_module
 
         waveforms, sr = torchaudio.load(audio_path)
-
-        # Convert to mono if stereo
         if waveforms.shape[0] > 1:
             waveforms = torch.mean(waveforms, dim=0, keepdim=True)
 
@@ -124,75 +98,26 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         num_chunks = max(1, waveforms.shape[1] // chunk_samples)
 
         for i in range(num_chunks):
-            start = i * chunk_samples
-            end = min(start + chunk_samples, waveforms.shape[1])
-            chunk = waveforms[:, start:end]
-            if chunk.shape[1] > 0:
-                se_list.append(se_extractor_module.extract_se(
-                    audio_path, device="cpu", fsave_se=False, save_path=OUTPUT_DIR,
-                ))
+            se_list.append(se_extractor_module.extract_se(
+                audio_path, device="cpu", fsave_se=False, save_path=OUTPUT_DIR,
+            ))
 
         if len(se_list) == 1:
             return se_list[0]
-        stacked = torch.stack(se_list)
-        return torch.mean(stacked, dim=0)
+        return torch.mean(torch.stack(se_list), dim=0)
 
-    def _apply_prosody(self, target_se: Any, voice_context: VoiceContext | None,
-                       prompt: VoiceOutputPrompt) -> Any:
-        """Adjust tone color embedding based on prosody + emotion."""
-        import torch  # noqa: F811
-
-        if not (voice_context and voice_context.prosody_profile):
-            return target_se
-
-        mean_pitch = voice_context.prosody_profile.mean_pitch_hz
-        if mean_pitch is None:
-            return target_se
-
-        # Apply pitch shift proportional to deviation from default (~250 Hz)
-        DEFAULT_PITCH_HZ = 250.0
-        pitch_ratio = float(mean_pitch / DEFAULT_PITCH_HZ)
-        scale_factor = torch.tensor([pitch_ratio]).to(target_se.device)
-        adjusted = target_se * scale_factor
-
-        # Apply emotion adjustments if specified in prompt
-        if prompt.emotion:
-            emotion_map = {
-                "happy": 1.05, "sad": 0.92, "angry": 1.1,
-                "calm": 0.98, "excited": 1.15,
-            }
-            factor = emotion_map.get(prompt.emotion.lower(), 1.0)
-            adjusted = adjusted * torch.tensor([factor]).to(target_se.device)
-
-        return adjusted
-
-    def synthesize(
-        self,
-        text: str,
-        voice_context: VoiceContext,
-        prompt: VoiceOutputPrompt,
-    ) -> str:
+    def synthesize(self, text: str, audio_path: str) -> str:
         """Synthesize output audio using OpenVoice.
 
         Pipeline:
           1. Lazy-load models (BaseSpeakerTTS + ToneColorConverter).
-          2. Multi-frame SE extraction for tone color.
-          3. Apply prosody/emotion adjustments.
-          4. Synthesize with BaseSpeakerTTS using the adjusted embedding.
+          2. Multi-frame SE extraction from input audio for tone color.
+          3. Synthesize with BaseSpeakerTTS preserving the extracted voice.
         """
         base_tts, converter = self._ensure_models_loaded()
 
-        if voice_context and os.path.isfile(voice_context.reference_audio_path):
-            target_se = self._extract_multi_frame_se(voice_context.reference_audio_path)
-            self._log(f"Multi-frame SE extracted ({text[:40]}...)")
-        else:
-            ckpt_base = os.path.join(self._openvoice_path, "checkpoints/base_speakers/EN")
-            import torch  # noqa: F811
-            default_se_path = os.path.join(ckpt_base, "en_default_se.pth")
-            target_se = torch.load(default_se_path, map_location=torch.device("cpu"), weights_only=True)
-
-        # Apply prosody + emotion adjustments.
-        adjusted_se = self._apply_prosody(target_se, voice_context, prompt)
+        target_se = self._extract_multi_frame_se(audio_path)
+        self._log(f"Multi-frame SE extracted ({text[:40]}...)")
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "openvoice_output.wav")
@@ -202,9 +127,81 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
             output_path=output_path,
             speaker="en_default",
             language="English",
-            style_se=adjusted_se,
+            style_se=target_se,
             device="cpu",
         )
 
         self._log(f"Synthesized: {text[:40]}... -> {output_path}")
         return output_path
+
+
+class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
+    """Japanese voice-conditioned output using Irodori-TTS.
+
+    Uses Aratako/Irodori-TTS-500M-v3 (or v3 VoiceDesign) for zero-shot
+    voice cloning from reference audio. Model weights auto-download from
+    HuggingFace on first use.
+    """
+
+    def __init__(
+        self,
+        hf_checkpoint: str = "Aratako/Irodori-TTS-500M-v3",
+        codec_repo: str = "Aratako/Semantic-DACVAE-Japanese-32dim",
+    ) -> None:
+        self._hf_checkpoint = hf_checkpoint
+        self._codec_repo = codec_repo
+        self._runtime: Any = None
+
+    def _log(self, msg: str) -> None:
+        logger.info("[IrodoriTTS] %s", msg)
+
+    def _ensure_runtime(self) -> Any:
+        if self._runtime is not None:
+            return self._runtime
+
+        from irodori_tts.inference_runtime import (
+            InferenceRuntime,
+            RuntimeKey,
+            default_runtime_device,
+        )
+
+        device = default_runtime_device()  # "mps" on Apple Silicon
+        self._log(f"Loading model {self._hf_checkpoint} on {device}...")
+
+        self._runtime = InferenceRuntime.from_key(
+            RuntimeKey(
+                checkpoint=self._hf_checkpoint,
+                model_device=device,
+                codec_repo=self._codec_repo,
+                codec_device=device,
+                codec_deterministic_encode=True,
+                codec_deterministic_decode=True,
+            )
+        )
+        self._log("Model loaded")
+        return self._runtime
+
+    def synthesize(self, text: str, audio_path: str) -> str:
+        """Synthesize output audio using Irodori-TTS voice cloning."""
+        import torch  # noqa: F811
+
+        runtime = self._ensure_runtime()
+        from irodori_tts.inference_runtime import SamplingRequest, save_wav
+
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        output_path = os.path.join(OUTPUT_DIR, "irodori_output.wav")
+
+        result = runtime.synthesize(
+            SamplingRequest(
+                text=text,
+                ref_wav=audio_path,
+                num_steps=40,
+                cfg_scale_text=3.0,
+                cfg_scale_speaker=5.0,
+                trim_tail=True,
+            )
+        )
+
+        saved = save_wav(output_path, result.audio, result.sample_rate)
+        self._log(f"Synthesized: {text[:40]}... -> {saved}")
+        return str(saved)
