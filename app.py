@@ -128,14 +128,14 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
     gr.Markdown("## Kuchikae — Speak once. Say it back your way.")
 
     with gr.Tabs():
-        # ── One-button mode (main UI) — microphone-first ────────────
+        # ── One-button mode (main UI) — upload first ────────────────
         with gr.Tab("One Button"):
             one_button_audio = gr.Audio(
-                label="Record directly",
+                label="Record or upload audio",
                 type="filepath",
                 sources=["upload", "microphone"],
             )
-            one_button_btn = gr.Button("▶ Speak now.", size="lg")
+            one_button_btn = gr.Button("▶ Transform.", size="lg")
 
             with gr.Row():
                 ob_source_text = gr.Textbox(label="Source Text", lines=2)
