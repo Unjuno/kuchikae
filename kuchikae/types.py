@@ -22,3 +22,5 @@ class PipelineResult:
     """Result returned by the Kuchikae pipeline."""
 
     output_audio_path: str
+    source_text: str = ""
+    transformed_text: str = ""

@@ -2,30 +2,29 @@
 
 from __future__ import annotations
 
+import logging
+import os
+import time
+
+logger = logging.getLogger(__name__)
+
 
 class STTBackend:
-    """Abstract base for speech-to-text backends."""
 
     def transcribe(self, audio_path: str) -> str:  # pragma: no cover
         raise NotImplementedError
 
 
 class DummySTTBackend(STTBackend):
-    """Returns a fixed Japanese sentence for v0.1."""
 
     def transcribe(self, audio_path: str) -> str:
         return "明日までに資料を送って"
 
 
 class FasterWhisperSTTBackend(STTBackend):
-    """Real STT backend using faster-whisper with the Japanese-small model (CPU).
-
-    Model download is lazy — first call downloads if needed (~150 MB for small).
-    Set environment variable ``WHISPER_MODEL_SIZE`` to control size: tiny, base,
-    small, medium, large-v3 (default: small).
-    """
 
     def __init__(self, model_size: str = "small") -> None:
+        self._model_size = model_size
         try:
             from faster_whisper import WhisperModel  # noqa: F401
         except ImportError:
@@ -35,11 +34,18 @@ class FasterWhisperSTTBackend(STTBackend):
             )
 
     def transcribe(self, audio_path: str) -> str:
-        import os
-
         from faster_whisper import WhisperModel
 
-        model_size = os.environ.get("WHISPER_MODEL_SIZE", "small")
+        model_size = os.environ.get("WHISPER_MODEL_SIZE", self._model_size)
+        logger.info("loading whisper model '%s' (CPU int8)...", model_size)
+        t0 = time.time()
         model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        logger.info("whisper model loaded in %.2fs", time.time() - t0)
+
+        t1 = time.time()
         segments, info = model.transcribe(audio_path, language="ja")
-        return " ".join(seg.text for seg in segments)
+        logger.info("whisper transcribe: %.2fs", time.time() - t1)
+
+        result = " ".join(seg.text for seg in segments)
+        logger.info("whisper result: %s", result[:80])
+        return result

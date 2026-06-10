@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -16,22 +17,17 @@ OUTPUT_DIR = "outputs"
 
 
 class VoiceOutputBackend(ABC):
-    """Abstract base for voice-conditioned output backends."""
 
     @abstractmethod
     def synthesize(self, text: str, audio_path: str) -> str:
-        """Synthesize output audio and return its file path."""
         raise NotImplementedError
 
 
 class DummyVoiceOutputBackend(VoiceOutputBackend):
-    """Create a valid short silent WAV file for v0.1 scaffold tests."""
 
     def synthesize(self, text: str, audio_path: str) -> str:
-        """Write a silent WAV while preserving the required interface shape."""
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "dummy.wav")
-
         duration_seconds = 1.0
         sample_rate = 44_100
         samples = np.zeros(int(duration_seconds * sample_rate), dtype=np.float32)
@@ -40,16 +36,6 @@ class DummyVoiceOutputBackend(VoiceOutputBackend):
 
 
 class OpenVoiceOutputBackend(VoiceOutputBackend):
-    """Real voice-conditioned output using OpenVoice v2.
-
-    Requires:
-    - OpenVoice repo cloned outside this repository (default: ../OpenVoice).
-    - torch, torchaudio installed and accessible via sys.path.
-    - OPENVOICE_READY=1 env set.
-
-    The backend adds the OpenVoice repo path to sys.path on first use, so it does not
-    pollute the global import namespace.
-    """
 
     def __init__(self, openvoice_path: str | None = None) -> None:
         self._openvoice_path = openvoice_path or os.environ.get(
@@ -107,21 +93,17 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         return torch.mean(torch.stack(se_list), dim=0)
 
     def synthesize(self, text: str, audio_path: str) -> str:
-        """Synthesize output audio using OpenVoice.
-
-        Pipeline:
-          1. Lazy-load models (BaseSpeakerTTS + ToneColorConverter).
-          2. Multi-frame SE extraction from input audio for tone color.
-          3. Synthesize with BaseSpeakerTTS preserving the extracted voice.
-        """
+        t0 = time.time()
         base_tts, converter = self._ensure_models_loaded()
+        self._log(f"model load: {time.time()-t0:.2f}s")
 
         target_se = self._extract_multi_frame_se(audio_path)
-        self._log(f"Multi-frame SE extracted ({text[:40]}...)")
+        self._log(f"SE extracted ({text[:40]}...)")
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "openvoice_output.wav")
 
+        t1 = time.time()
         base_tts.tts(
             text=text,
             output_path=output_path,
@@ -130,26 +112,21 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
             style_se=target_se,
             device="cpu",
         )
-
-        self._log(f"Synthesized: {text[:40]}... -> {output_path}")
+        self._log(f"TTS: {time.time()-t1:.2f}s → {output_path}")
         return output_path
 
 
 class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
-    """Japanese voice-conditioned output using Irodori-TTS.
-
-    Uses Aratako/Irodori-TTS-500M-v3 (or v3 VoiceDesign) for zero-shot
-    voice cloning from reference audio. Model weights auto-download from
-    HuggingFace on first use.
-    """
 
     def __init__(
         self,
         hf_checkpoint: str = "Aratako/Irodori-TTS-500M-v3",
         codec_repo: str = "Aratako/Semantic-DACVAE-Japanese-32dim",
+        num_steps: int = 10,
     ) -> None:
         self._hf_checkpoint = hf_checkpoint
         self._codec_repo = codec_repo
+        self._num_steps = num_steps
         self._runtime: Any = None
 
     def _log(self, msg: str) -> None:
@@ -159,18 +136,27 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         if self._runtime is not None:
             return self._runtime
 
+        from huggingface_hub import hf_hub_download
         from irodori_tts.inference_runtime import (
             InferenceRuntime,
             RuntimeKey,
             default_runtime_device,
         )
 
-        device = default_runtime_device()  # "mps" on Apple Silicon
-        self._log(f"Loading model {self._hf_checkpoint} on {device}...")
+        device = default_runtime_device()
+        self._log(f"downloading model {self._hf_checkpoint}...")
+        t0 = time.time()
+        checkpoint_path = hf_hub_download(
+            repo_id=self._hf_checkpoint,
+            filename="model.safetensors",
+        )
+        self._log(f"download: {time.time()-t0:.0f}s")
+        self._log(f"loading model on {device}...")
 
+        t1 = time.time()
         self._runtime = InferenceRuntime.from_key(
             RuntimeKey(
-                checkpoint=self._hf_checkpoint,
+                checkpoint=checkpoint_path,
                 model_device=device,
                 codec_repo=self._codec_repo,
                 codec_device=device,
@@ -178,33 +164,37 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
                 codec_deterministic_decode=True,
             )
         )
-        self._log("Model loaded")
+        self._log(f"load: {time.time()-t1:.2f}s")
         return self._runtime
 
     def synthesize(self, text: str, audio_path: str) -> str:
-        """Synthesize output audio using Irodori-TTS voice cloning."""
         import torch  # noqa: F811
 
+        t0 = time.time()
         runtime = self._ensure_runtime()
+        self._log(f"runtime ready: {time.time()-t0:.2f}s")
+
         from irodori_tts.inference_runtime import SamplingRequest, save_wav
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "irodori_output.wav")
 
+        self._log(f"synthesizing ({self._num_steps} steps, linear)...")
+        t1 = time.time()
         result = runtime.synthesize(
             SamplingRequest(
                 text=text,
                 ref_wav=audio_path,
-                num_steps=20,
-                t_schedule_mode="sway",
-                sway_coeff=-0.5,
-                cfg_scale_text=2.5,
-                cfg_scale_speaker=4.0,
+                num_steps=self._num_steps,
+                t_schedule_mode="linear",
+                cfg_scale_text=2.0,
+                cfg_scale_speaker=3.0,
                 trim_tail=True,
                 context_kv_cache=True,
             )
         )
+        self._log(f"inference: {time.time()-t1:.2f}s")
 
         saved = save_wav(output_path, result.audio, result.sample_rate)
-        self._log(f"Synthesized: {text[:40]}... -> {saved}")
+        self._log(f"saved: {os.path.getsize(output_path)/1e6:.1f}MB")
         return str(saved)

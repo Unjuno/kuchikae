@@ -2,51 +2,44 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
+import time
 from abc import ABC, abstractmethod
 
 from kuchikae.types import TextTransformPrompt
 
+logger = logging.getLogger(__name__)
+
 
 class TextTransformBackend(ABC):
-    """Abstract base for prompt-conditioned text transformation backends."""
 
     @abstractmethod
     def transform(self, text: str, prompt: TextTransformPrompt) -> str:
-        """Transform source text according to a free-form prompt."""
         raise NotImplementedError
 
 
 class DummyTextTransformBackend(TextTransformBackend):
-    """Deterministic dummy text transformer for v0.1 scaffold tests."""
 
     def transform(self, text: str, prompt: TextTransformPrompt) -> str:
-        """Return a non-empty transformed string while preserving prompt shape."""
         instruction = prompt.instruction.strip()
         if not instruction:
             return f"[transformed] {text}"
         return f"[transformed according to prompt] {text}"
 
 
-# --------------------------------------------------------------------------- #
-#  Real backend — Ollama (local LLM, no API key needed)                     #
-# --------------------------------------------------------------------------- #
-
 class OllamaTextTransformBackend(TextTransformBackend):
-    """Japanese text transformation backed by a local Ollama model.
 
-    Calls Ollama API (http://localhost:11434/api/chat) with the configured
-    model. Detects Ollama availability; falls back to Dummy if unavailable.
-    """
-
-    def __init__(self, model: str = "hf.co/LiquidAI/LFM2.5-1.2B-JP-GGUF:Q4_K_M") -> None:
+    def __init__(self, model: str = "qwen3:8b") -> None:
         self.model = model
         self._base_url = "http://localhost:11434"
 
     def transform(self, text: str, prompt: TextTransformPrompt) -> str:
         import httpx
 
+        logger.info("ollama: model=%s text=%s", self.model, text[:40])
+        t0 = time.time()
         try:
             resp = httpx.post(
                 f"{self._base_url}/api/chat",
@@ -56,37 +49,52 @@ class OllamaTextTransformBackend(TextTransformBackend):
                         {
                             "role": "system",
                             "content": (
-                                "あなたは日本語のテキスト変換アシスタントです。"
-                                "ユーザーの入力テキストをプロンプトに基づいて変換してください。"
-                                "出力は変換結果のみ、余計な説明は不要です。"
+                                "あなたはテキスト変換の専門家です。"
+                                "ユーザーから「変換ルール」と「変換対象テキスト」が与えられるので、"
+                                "ルールに従ってテキストを変換し、変換結果だけを出力してください。\n\n"
+                                "絶対ルール：\n"
+                                "- 説明・接頭語・接尾語は一切付けない\n"
+                                "- 元の内容・事実・数値・固有名詞は変えない\n"
+                                "- 新しい情報を追加しない\n"
+                                "- 変換できない場合は元のテキストをそのまま返す\n\n"
+                                "例：\n"
+                                "変換ルール: 「です・ます」調の丁寧な言葉遣いに変換\n"
+                                "変換対象テキスト: これ、本当に裏で変換入ってる？\n"
+                                "出力: これ、本当に裏で変換が入っていますか？\n\n"
+                                "変換ルール: 内容を簡潔に要約してください\n"
+                                "変換対象テキスト: 昨日友達と渋谷でご飯食べてから、カラオケに行って、終電で帰りました。\n"
+                                "出力: 昨日、友達と渋谷で食事とカラオケをして終電で帰った。"
                             ),
                         },
                         {
                             "role": "user",
-                            "content": f"テキスト: {text}\n\nプロンプト: {prompt.instruction}",
+                            "content": (
+                                f"## 変換ルール\n"
+                                f"{prompt.instruction}\n\n"
+                                f"## 変換対象テキスト\n"
+                                f"{text}"
+                            ),
                         },
                     ],
                     "stream": False,
-                    "options": {"temperature": 0.7},
+                    "options": {
+                        "temperature": 0.1,
+                        "num_predict": 256,
+                    },
+                    "keep_alive": "5m",
                 },
                 timeout=60,
             )
             resp.raise_for_status()
-            return resp.json()["message"]["content"].strip()
-        except Exception:
+            result = resp.json()["message"]["content"].strip()
+            logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
+            return result
+        except Exception as e:
+            logger.warning("ollama failed (%s), falling back to dummy", e)
             return DummyTextTransformBackend().transform(text, prompt)
 
 
-# --------------------------------------------------------------------------- #
-#  Real backend — gpt-oss (API-backed, requires OPENAI_API_KEY)             #
-# --------------------------------------------------------------------------- #
-
 class GPTTextTransformBackend(TextTransformBackend):
-    """Prompt-conditioned text transformation backed by OpenAI-compatible LLM.
-
-    Detects ``OPENAI_API_KEY`` and falls back to ``DummyTextTransformBackend``
-    if the key is missing so that tests continue to pass without a paid API.
-    """
 
     def __init__(self, model: str = "gpt-oss") -> None:
         self.model = model
@@ -96,8 +104,9 @@ class GPTTextTransformBackend(TextTransformBackend):
         if not api_key:
             return DummyTextTransformBackend().transform(text, prompt)
 
-        import httpx  # lightweight, no heavy deps
+        import httpx
 
+        t0 = time.time()
         resp = httpx.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
@@ -120,24 +129,15 @@ class GPTTextTransformBackend(TextTransformBackend):
             timeout=30,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+        result = resp.json()["choices"][0]["message"]["content"].strip()
+        logger.info("gpt: %.2fs → %s", time.time() - t0, result[:60])
+        return result
 
-
-# --------------------------------------------------------------------------- #
-#  Real backend — rule-based Japanese rewriter (no API needed)               #
-# --------------------------------------------------------------------------- #
 
 class RuleTextTransformBackend(TextTransformBackend):
-    """Rule-based real text transformation for Japanese.
-
-    Works without any external model or API. Handles:
-    - Plain text → polite desu/masu form
-    - Plain text → casual da/dearu form
-    - Content preservation (numbers, dates, names stay intact).
-    """
 
     def __init__(self) -> None:
-        self._desu_masu_map = {  # common plain→polite pairs
+        self._desu_masu_map = {
             "だ": "です",
             "である": "であります",
             "ない": "ません",
@@ -157,12 +157,10 @@ class RuleTextTransformBackend(TextTransformBackend):
         return f"[{target_form}] {transformed}"
 
     def _detect_target_form(self, instruction: str) -> str:
-        """Detect desired style from the prompt."""
         if any(kw in instruction for kw in ("丁寧", "です", "ます", "polite")):
             return "desu-masu"
         if any(kw in instruction for kw in (" casual", "カジュアル", "普通形", "plain")):
             return "plain"
-        # Default to polite form.
         return "desu-masu"
 
     def _apply(self, text: str, target_form: str) -> str:
@@ -171,7 +169,6 @@ class RuleTextTransformBackend(TextTransformBackend):
         return self._to_plain(text)
 
     def _to_desu_masu(self, text: str) -> str:
-        """Convert plain Japanese to polite desu/masu form."""
         parts = re.split(r"(。|、|\s+)", text)
         result_parts = []
         for part in parts:
@@ -194,7 +191,6 @@ class RuleTextTransformBackend(TextTransformBackend):
         return "".join(result_parts)
 
     def _to_plain(self, text: str) -> str:
-        """Convert to plain form."""
         parts = re.split(r"(。|、|\s+)", text)
         result_parts = []
         for part in parts:

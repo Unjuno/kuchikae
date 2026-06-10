@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import time
 
+from kuchikae.logging import setup_logger
 from kuchikae.stt import (
     DummySTTBackend,
     FasterWhisperSTTBackend,
@@ -27,18 +29,10 @@ from kuchikae.voice_output import (
     VoiceOutputBackend,
 )
 
+logger = setup_logger("kuchikae.pipeline")
+
 
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
-    """Factory to create a pipeline with real or dummy backends based on config.
-
-    Config keys (all optional):
-        stt_backend: "dummy" | "faster_whisper" (default: auto-detect faster-whisper).
-        text_transform_backend: "dummy" | "rule" | "gpt_oss" (default: "rule").
-        voice_output_backend: "dummy" | "openvoice" (default: "dummy" unless OPENVOICE_READY=1).
-
-    Example:
-        >>> pipeline = create_pipeline({"text_transform_backend": "gpt_oss"})
-    """
     config = backend_config or {}
 
     if config.get("stt_backend") == "faster_whisper":
@@ -52,12 +46,16 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         stt = FasterWhisperSTTBackend() if has_faster_whisper else DummySTTBackend()
 
     text_backend_type = config.get("text_transform_backend", "ollama")
+    text_model = config.get("text_transform_model")
     text_backends = {
         "ollama": OllamaTextTransformBackend,
         "rule": RuleTextTransformBackend,
         "gpt_oss": GPTTextTransformBackend,
     }
     tt_class = text_backends.get(text_backend_type, OllamaTextTransformBackend)
+    tt_kwargs = {}
+    if text_model:
+        tt_kwargs["model"] = text_model
     if tt_class == GPTTextTransformBackend and not os.environ.get("OPENAI_API_KEY"):
         tt_class = DummyTextTransformBackend
 
@@ -78,15 +76,18 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         _ow_ready = os.path.isdir(_ow_path) and os.environ.get("OPENVOICE_READY")
         vo = OpenVoiceOutputBackend() if _ow_ready else DummyVoiceOutputBackend()
 
+    logger.info("pipeline: stt=%s text=%s(%s) voice=%s",
+                type(stt).__name__, type(tt_class()).__name__,
+                text_model or "default", type(vo).__name__)
+
     return KuchikaePipeline(
         stt_backend=stt,
-        text_transform_backend=tt_class(),
+        text_transform_backend=tt_class(**tt_kwargs),
         voice_output_backend=vo,
     )
 
 
 class KuchikaePipeline:
-    """Run the prompt-conditioned, voice-conditioned pipeline."""
 
     def __init__(
         self,
@@ -99,39 +100,66 @@ class KuchikaePipeline:
         self.voice_output_backend = voice_output_backend or DummyVoiceOutputBackend()
 
     def warmup(self) -> None:
-        """Pre-download and preload models to avoid first-call latency."""
-        import threading
+        logger.info("warming up...")
 
-        def _warmup_stt() -> None:
-            try:
-                self.stt_backend.transcribe.__self__.transcribe("")  # noqa: SLF001
-            except Exception:
-                pass  # warmup may fail silently
-
-        def _warmup_voice() -> None:
-            try:
-                if hasattr(self.voice_output_backend, "_ensure_runtime"):
-                    self.voice_output_backend._ensure_runtime()  # noqa: SLF001
-            except Exception:
-                pass
-
-        threads = []
         if isinstance(self.stt_backend, FasterWhisperSTTBackend):
-            t = threading.Thread(target=_warmup_stt, daemon=True)
-            t.start()
-            threads.append(t)
-        if "IrodoriTTS" in type(self.voice_output_backend).__name__:
-            t = threading.Thread(target=_warmup_voice, daemon=True)
-            t.start()
-            threads.append(t)
+            try:
+                logger.info("warming up STT...")
+                self.stt_backend.transcribe.__self__.transcribe("")  # noqa: SLF001
+            except Exception as e:
+                logger.debug("STT warmup skipped: %s", e)
+
+        if hasattr(self.voice_output_backend, "_ensure_runtime"):
+            try:
+                logger.info("warming up voice model...")
+                self.voice_output_backend._ensure_runtime()  # noqa: SLF001
+            except Exception as e:
+                logger.debug("voice warmup skipped: %s", e)
+
+        if hasattr(self.text_transform_backend, "model"):
+            try:
+                logger.info("warming up LLM...")
+                import httpx
+                httpx.post(
+                    f"{self.text_transform_backend._base_url}/api/generate",
+                    json={
+                        "model": self.text_transform_backend.model,
+                        "prompt": "warmup",
+                        "stream": False,
+                        "keep_alive": "5m",
+                    },
+                    timeout=10,
+                )
+            except Exception as e:
+                logger.debug("LLM warmup skipped: %s", e)
+
+        logger.info("warmup done")
 
     def process(
         self,
         audio_path: str,
         text_transform_prompt: TextTransformPrompt,
     ) -> PipelineResult:
-        """Process one utterance: STT → transform → voice output."""
+        t0 = time.time()
+
+        t1 = time.time()
         source_text = self.stt_backend.transcribe(audio_path)
+        logger.info("STT: %.2fs → %s", time.time() - t1, source_text[:60])
+
+        t2 = time.time()
         transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+        logger.info("TEXT: %.2fs → %s", time.time() - t2, transformed_text[:60])
+
+        t3 = time.time()
         output_audio_path = self.voice_output_backend.synthesize(transformed_text, audio_path)
-        return PipelineResult(output_audio_path=output_audio_path)
+        logger.info("VOICE: %.2fs → %s", time.time() - t3, output_audio_path)
+
+        total = time.time() - t0
+        logger.info("TOTAL: %.2fs (STT %.2f + TEXT %.2f + VOICE %.2f)",
+                    total, t2 - t1, t3 - t2, time.time() - t3)
+
+        return PipelineResult(
+            output_audio_path=output_audio_path,
+            source_text=source_text,
+            transformed_text=transformed_text,
+        )

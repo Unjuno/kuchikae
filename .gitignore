@@ -21,3 +21,9 @@ outputs/*.wav
 # OS
 .DS_Store
 Thumbs.db
+
+# Playwright artifacts
+.playwright-mcp/
+
+# Screenshots
+*.png
