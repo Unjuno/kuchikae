@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from importlib.resources import files
 from typing import NamedTuple
 
 
@@ -12,9 +13,12 @@ class TextTransformPrompt:
     instruction: str
 
     @classmethod
-    def from_file(cls, path: str) -> "TextTransformPrompt":
-        with open(path, encoding="utf-8") as f:
-            return cls(instruction=f.read().strip())
+    def from_file(cls, path: str | None = None) -> "TextTransformPrompt":
+        if path is not None:
+            with open(path, encoding="utf-8") as f:
+                return cls(instruction=f.read().strip())
+        text = files("kuchikae.prompts").joinpath("text_transform_default.txt").read_text(encoding="utf-8")
+        return cls(instruction=text.strip())
 
 
 @dataclass

@@ -15,6 +15,9 @@ dependencies = [
     "silentcipher",
 ]
 
+[project.scripts]
+kuchikae = "kuchikae.cli:main"
+
 [tool.uv]
 environments = ["sys_platform == 'darwin'"]
 
@@ -25,3 +28,6 @@ silentcipher = { git = "https://github.com/SesameAILabs/silentcipher.git", rev =
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[project.urls]
+Homepage = "https://github.com/Unjuno/kuchikae"

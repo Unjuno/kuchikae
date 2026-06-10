@@ -36,6 +36,8 @@ from kuchikae.voice_output import (
 logger = setup_logger("kuchikae.pipeline")
 
 MAX_AUDIO_DURATION = 30.0
+MAX_FILE_SIZE = 25 * 1024 * 1024
+ALLOWED_EXTENSIONS = {".wav"}
 
 
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
@@ -153,7 +155,13 @@ class KuchikaePipeline:
 
         logger.info("warmup done")
 
-    def check_duration(self, audio_path: str) -> None:
+    def check_audio(self, audio_path: str) -> None:
+        ext = os.path.splitext(audio_path)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise ValueError(f"Unsupported format ({ext})")
+        size = os.path.getsize(audio_path)
+        if size > MAX_FILE_SIZE:
+            raise ValueError(f"File too large ({size / 1e6:.1f}MB > {MAX_FILE_SIZE / 1e6:.0f}MB)")
         import soundfile as sf
         info = sf.info(audio_path)
         if info.duration > MAX_AUDIO_DURATION:
@@ -182,7 +190,7 @@ class KuchikaePipeline:
     ) -> PipelineResult:
         t0 = time.time()
 
-        self.check_duration(audio_path)
+        self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
 
         t1 = time.time()
@@ -213,7 +221,7 @@ class KuchikaePipeline:
         text_transform_prompt: TextTransformPrompt,
     ) -> Generator[tuple[str, str | None, str | None, str | None], None, None]:
         t0 = time.time()
-        self.check_duration(audio_path)
+        self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
 
         yield "STT", None, None, None

@@ -1,22 +1,22 @@
-"""Kuchikae v0.1 — entry point."""
+"""Kuchikae web server entry point."""
 
 from __future__ import annotations
 
 import logging
 import sys
 
-from kuchikae.pipeline import create_pipeline
-from kuchikae.types import TextTransformPrompt
-from kuchikae.ui import CSS, create_app
 
-
-def main() -> None:
+def serve() -> None:
     logging.basicConfig(
         stream=sys.stderr,
         level=logging.DEBUG,
         format="[%(asctime)s] %(name)s %(levelname)s %(message)s",
         datefmt="%H:%M:%S",
     )
+
+    from kuchikae.pipeline import create_pipeline
+    from kuchikae.types import TextTransformPrompt
+    from kuchikae.ui import CSS, create_app
 
     default_prompt = TextTransformPrompt.from_file()
     pipeline = create_pipeline()
@@ -26,4 +26,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    serve()
