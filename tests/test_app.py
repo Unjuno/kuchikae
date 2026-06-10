@@ -43,5 +43,18 @@ def test_dict_with_orig_name(tmp_path: str) -> None:
 
 
 def test_dict_with_missing_key() -> None:
-    with pytest.raises(GrError):
+    with pytest.raises(GrError, match="Could not resolve audio file path"):
         _normalize_audio_path({})
+
+
+def test_dict_fallback_to_name_and_path(tmp_path: str) -> None:
+    wav = tmp_path / "fallback.wav"
+    sf.write(str(wav), np.zeros(44_100, dtype=np.float32), 44_100)
+
+    assert _normalize_audio_path({"name": str(wav)}) == str(wav)
+    assert _normalize_audio_path({"path": str(wav)}) == str(wav)
+
+
+def test_dict_with_empty_keys_raises() -> None:
+    with pytest.raises(GrError):
+        _normalize_audio_path({"orig_name": "", "name": None, "path": ""})

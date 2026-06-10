@@ -126,15 +126,12 @@ def run_one_button(audio_input):
     )
 
 
-def run_with_preset(audio_input: str, preset_name: str):
+def run_with_preset(audio_input, preset_name: str):
     """Run the pipeline with a pre-built prompt pair."""
     audio_path = _normalize_audio_path(audio_input)
 
     if not os.path.isfile(audio_path):
         raise gr.Error("Please upload an audio file first.")
-
-    if preset_name not in PRESETS:
-        raise gr.Error(f"Unknown preset: {preset_name}")
 
     if preset_name not in PRESETS:
         raise gr.Error(f"Unknown preset: {preset_name}")
@@ -213,7 +210,11 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
                 lines=3,
             )
 
-            audio_input = gr.Audio(label="Source Audio (upload)", type="filepath")
+            audio_input = gr.Audio(
+                label="Source / Reference Audio",
+                type="filepath",
+                sources=["upload", "microphone"],
+            )
             submit_btn = gr.Button("Transform")
 
             with gr.Row():
