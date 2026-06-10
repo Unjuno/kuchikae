@@ -25,7 +25,7 @@ pipeline = KuchikaePipeline()
 
 def _normalize_audio_path(audio_input):
     if audio_input is None:
-        raise gr.Error("Record audio first, then click Transform.")
+        return None
     if isinstance(audio_input, tuple):
         sr, data = audio_input
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -36,13 +36,11 @@ def _normalize_audio_path(audio_input):
         return str(path)
     result = str(audio_input)
     if not os.path.isfile(result):
-        raise gr.Error(f"No audio file found. (path={result!r})")
+        return None
     return result
 
 
 def _process_audio(audio_path, text_prompt, voice_prompt):
-    if not os.path.isfile(str(audio_path)):
-        raise gr.Error(f"No audio file found. (path={audio_path!r})")
     text_transform_prompt_obj = TextTransformPrompt(instruction=text_prompt)
     voice_output_prompt_obj = VoiceOutputPrompt(instruction=voice_prompt, emotion=None)
     result = pipeline.process(
@@ -55,6 +53,8 @@ def _process_audio(audio_path, text_prompt, voice_prompt):
 
 def run(audio_input, text_prompt: str, voice_prompt: str, use_defaults: bool):
     path = _normalize_audio_path(audio_input)
+    if path is None:
+        return "Record audio first, then click Transform.", "", None
     if use_defaults:
         text_prompt = DEFAULT_TEXT_PROMPT.instruction
         voice_prompt = DEFAULT_VOICE_PROMPT.instruction

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp@latest", "--browser", "chromium", "--headless"],
+      "enabled": true
+    },
+    "context7": {
+      "type": "local",
+      "command": ["npx", "@upstash/context7-mcp@latest"],
+      "enabled": true
+    },
+    "chrome-devtools": {
+      "type": "local",
+      "command": ["npx", "-y", "chrome-devtools-mcp@latest", "--autoConnect", "--channel=stable"],
+      "enabled": true
+    },
+    "deepl": {
+      "type": "local",
+      "command": ["npx", "deepl-mcp-server"],
+      "enabled": true,
+      "env": {
+        "DEEPL_API_KEY": ""
+      }
+    }
+  }
+}
