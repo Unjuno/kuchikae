@@ -1,10 +1,13 @@
-"""STTBackend and backends (Dummy + faster-whisper)."""
+"""STTBackend and backends (Dummy + faster-whisper + segmented wrapper)."""
 
 from __future__ import annotations
 
 import logging
 import os
 import time
+from typing import List
+
+from kuchikae.audio import AudioSegmenter, TranscriptJoiner
 
 logger = logging.getLogger(__name__)
 
@@ -49,3 +52,26 @@ class FasterWhisperSTTBackend(STTBackend):
         result = " ".join(seg.text for seg in segments)
         logger.info("whisper result: %s", result[:80])
         return result
+
+
+class SegmentedSTTBackend(STTBackend):
+
+    def __init__(self, inner: STTBackend, segmenter: AudioSegmenter) -> None:
+        self._inner = inner
+        self._segmenter = segmenter
+        self._joiner = TranscriptJoiner()
+
+    def transcribe(self, audio_path: str) -> str:
+        chunks = self._segmenter.segment(audio_path)
+        logger.info("segmented stt: %d chunks", len(chunks))
+        results: List[str] = []
+        for chunk in chunks:
+            import tempfile
+            import soundfile as sf
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                sf.write(tmp.name, chunk.samples, chunk.sample_rate)
+                text = self._inner.transcribe(tmp.name)
+                results.append(text)
+            os.unlink(tmp.name)
+        return self._joiner.join(results)

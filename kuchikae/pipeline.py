@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import os
 import time
+from typing import Generator
 
+from kuchikae.audio import AudioSegmenter, FixedWindowSegmenter
 from kuchikae.logging import setup_logger
 from kuchikae.stt import (
     DummySTTBackend,
     FasterWhisperSTTBackend,
+    SegmentedSTTBackend,
     STTBackend,
 )
 from kuchikae.text_transform import (
@@ -19,6 +22,7 @@ from kuchikae.text_transform import (
     TextTransformBackend,
 )
 from kuchikae.types import (
+    AudioCacheKey,
     PipelineResult,
     TextTransformPrompt,
 )
@@ -31,19 +35,31 @@ from kuchikae.voice_output import (
 
 logger = setup_logger("kuchikae.pipeline")
 
+MAX_AUDIO_DURATION = 30.0
+
 
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     config = backend_config or {}
 
-    if config.get("stt_backend") == "faster_whisper":
-        stt = FasterWhisperSTTBackend()
+    stt_type = config.get("stt_backend", "faster_whisper")
+    use_segmented = config.get("segmented_stt", False)
+    try:
+        from faster_whisper import WhisperModel  # noqa: F401
+        has_faster_whisper = True
+    except ImportError:
+        has_faster_whisper = False
+
+    if stt_type == "faster_whisper" and has_faster_whisper:
+        inner = FasterWhisperSTTBackend()
     else:
-        try:
-            from faster_whisper import WhisperModel  # noqa: F401
-            has_faster_whisper = True
-        except ImportError:
-            has_faster_whisper = False
-        stt = FasterWhisperSTTBackend() if has_faster_whisper else DummySTTBackend()
+        inner = DummySTTBackend()
+
+    stt: STTBackend
+    if use_segmented:
+        segmenter: AudioSegmenter = FixedWindowSegmenter(chunk_sec=30.0, overlap_sec=2.0)
+        stt = SegmentedSTTBackend(inner=inner, segmenter=segmenter)
+    else:
+        stt = inner
 
     text_backend_type = config.get("text_transform_backend", "ollama")
     text_model = config.get("text_transform_model")
@@ -98,6 +114,8 @@ class KuchikaePipeline:
         self.stt_backend = stt_backend or DummySTTBackend()
         self.text_transform_backend = text_transform_backend or DummyTextTransformBackend()
         self.voice_output_backend = voice_output_backend or DummyVoiceOutputBackend()
+        self._stt_cache: dict[AudioCacheKey, str] = {}
+        self._voice_cache: dict[AudioCacheKey, str] = {}
 
     def warmup(self) -> None:
         logger.info("warming up...")
@@ -135,6 +153,28 @@ class KuchikaePipeline:
 
         logger.info("warmup done")
 
+    def check_duration(self, audio_path: str) -> None:
+        import soundfile as sf
+        info = sf.info(audio_path)
+        if info.duration > MAX_AUDIO_DURATION:
+            raise ValueError(f"Audio too long ({info.duration:.0f}s > {MAX_AUDIO_DURATION:.0f}s)")
+
+    def _step_stt(self, audio_path: str, cache_key: AudioCacheKey) -> str:
+        cached = self._stt_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        text = self.stt_backend.transcribe(audio_path)
+        self._stt_cache[cache_key] = text
+        return text
+
+    def _step_voice(self, text: str, audio_path: str, cache_key: AudioCacheKey) -> str:
+        cached = self._voice_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        out = self.voice_output_backend.synthesize(text, audio_path)
+        self._voice_cache[cache_key] = out
+        return out
+
     def process(
         self,
         audio_path: str,
@@ -142,8 +182,11 @@ class KuchikaePipeline:
     ) -> PipelineResult:
         t0 = time.time()
 
+        self.check_duration(audio_path)
+        cache_key = AudioCacheKey.from_file(audio_path)
+
         t1 = time.time()
-        source_text = self.stt_backend.transcribe(audio_path)
+        source_text = self._step_stt(audio_path, cache_key)
         logger.info("STT: %.2fs → %s", time.time() - t1, source_text[:60])
 
         t2 = time.time()
@@ -151,7 +194,7 @@ class KuchikaePipeline:
         logger.info("TEXT: %.2fs → %s", time.time() - t2, transformed_text[:60])
 
         t3 = time.time()
-        output_audio_path = self.voice_output_backend.synthesize(transformed_text, audio_path)
+        output_audio_path = self._step_voice(transformed_text, audio_path, cache_key)
         logger.info("VOICE: %.2fs → %s", time.time() - t3, output_audio_path)
 
         total = time.time() - t0
@@ -163,3 +206,26 @@ class KuchikaePipeline:
             source_text=source_text,
             transformed_text=transformed_text,
         )
+
+    def process_stream(
+        self,
+        audio_path: str,
+        text_transform_prompt: TextTransformPrompt,
+    ) -> Generator[tuple[str, str | None, str | None, str | None], None, None]:
+        t0 = time.time()
+        self.check_duration(audio_path)
+        cache_key = AudioCacheKey.from_file(audio_path)
+
+        yield "STT", None, None, None
+        source_text = self._step_stt(audio_path, cache_key)
+        logger.info("STT: %.2fs %s", time.time() - t0, source_text[:60])
+
+        yield "TXT", source_text, None, None
+        transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+        logger.info("TXT: %.2fs %s", time.time() - t0, transformed_text[:60])
+
+        yield "VOX", source_text, transformed_text, None
+        output_audio_path = self._step_voice(transformed_text, audio_path, cache_key)
+        logger.info("VOX: %.2fs %s", time.time() - t0, output_audio_path)
+
+        yield "DONE", source_text, transformed_text, output_audio_path
