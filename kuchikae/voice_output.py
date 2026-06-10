@@ -81,7 +81,6 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         import torch
         import torchaudio
         import librosa  # for audio loading
-        import openvoice.se_extractor as se_extractor_module
 
         # Ensure OpenVoice repo is on sys.path.
         if os.path.isdir(self._openvoice_path) and self._openvoice_path not in [p for p in sys.path]:
@@ -112,6 +111,7 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         """
         import torch
         import torchaudio
+        import openvoice.se_extractor as se_extractor_module
 
         waveforms, sr = torchaudio.load(audio_path)
 

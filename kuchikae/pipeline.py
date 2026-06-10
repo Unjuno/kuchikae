@@ -77,12 +77,6 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     )
 
 
-# Lazy import guard for os (used in create_pipeline).
-import os  # noqa: E402 — imported at module top-level to avoid circular issues with create_pipeline.
-
-# Re-define create_pipeline properly by moving the import up if needed.
-
-
 class KuchikaePipeline:
     """Run the prompt-conditioned, voice-conditioned scaffold pipeline."""
 
