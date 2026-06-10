@@ -1,4 +1,4 @@
-"""Kuchikae v0.1 — single-screen Gradio app."""
+"""Kuchikae v0.1 — push-to-talk Gradio app."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def _process_audio(audio_path, text_prompt, voice_prompt):
 def run(audio_input, text_prompt: str, voice_prompt: str, use_defaults: bool):
     path = _normalize_audio_path(audio_input)
     if path is None:
-        return "Record audio first, then click Transform.", "", None
+        return None, None, None
     if use_defaults:
         text_prompt = DEFAULT_TEXT_PROMPT.instruction
         voice_prompt = DEFAULT_VOICE_PROMPT.instruction
@@ -74,38 +74,33 @@ def on_use_defaults_change(use_defaults):
 
 
 with gr.Blocks(title="Kuchikae v0.1") as demo:
-    gr.Markdown("## Kuchikae — Speak once. Say it back your way.")
+    gr.Markdown("## Kuchikae")
 
     audio_input = gr.Microphone(
-        label="Source / Reference Audio",
+        label="Tap to record — tap again to stop & transform",
         type="filepath",
         format="wav",
     )
 
-    with gr.Row():
-        with gr.Column():
-            text_prompt = gr.Textbox(
-                label="Text Transform Prompt",
-                value=DEFAULT_TEXT_PROMPT.instruction,
-                lines=3,
-            )
-            voice_prompt = gr.Textbox(
-                label="Voice Output Prompt",
-                value=DEFAULT_VOICE_PROMPT.instruction,
-                lines=3,
-            )
+    text_prompt = gr.Textbox(
+        label="Text Transform Prompt",
+        value=DEFAULT_TEXT_PROMPT.instruction,
+        lines=2,
+    )
+    voice_prompt = gr.Textbox(
+        label="Voice Output Prompt",
+        value=DEFAULT_VOICE_PROMPT.instruction,
+        lines=2,
+    )
 
-        with gr.Column():
-            use_defaults = gr.Checkbox(
-                label="Use default prompts",
-                value=False,
-            )
-            transform_btn = gr.Button("▶ Transform.", size="lg")
-            output_audio = gr.Audio(label="Output Audio", type="filepath")
+    use_defaults = gr.Checkbox(
+        label="Use default prompts",
+        value=False,
+    )
 
-    with gr.Row():
-        source_text = gr.Textbox(label="Source Text (STT)", lines=2)
-        transformed_text = gr.Textbox(label="Transformed Text", lines=2)
+    source_text = gr.Textbox(label="Source Text (STT)", lines=2)
+    transformed_text = gr.Textbox(label="Transformed Text", lines=2)
+    output_audio = gr.Audio(label="Output Audio", type="filepath")
 
     use_defaults.change(
         on_use_defaults_change,
@@ -113,8 +108,8 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
         outputs=[text_prompt, voice_prompt],
     )
 
-    transform_btn.click(
-        fn=run,
+    audio_input.stop_recording(
+        run,
         inputs=[audio_input, text_prompt, voice_prompt, use_defaults],
         outputs=[source_text, transformed_text, output_audio],
     )
