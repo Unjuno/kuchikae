@@ -202,3 +202,25 @@ class RuleTextTransformBackend(TextTransformBackend):
                 part = part[:-4] + "である"
             result_parts.append(part)
         return "".join(result_parts)
+
+
+class SmartTextTransformBackend(TextTransformBackend):
+    """Routes simple transformations to RuleTextTransformBackend, complex ones to Ollama."""
+
+    def __init__(self, model: str = "qwen3:8b") -> None:
+        self._rule = RuleTextTransformBackend()
+        self._ollama = OllamaTextTransformBackend(model=model)
+
+    def transform(self, text: str, prompt: TextTransformPrompt) -> str:
+        instruction = prompt.instruction.strip()
+        # Rule-routeable patterns: 丁寧/ですます/カジュアル/普通形/友達言葉/タメ口
+        if any(kw in instruction for kw in (
+            "丁寧", "です", "ます", "polite",
+            "カジュアル", "casual", "普通形", "plain", "友達", "タメ",
+        )):
+            logger.info("smart: routing to rule-based backend")
+            result = self._rule.transform(text, prompt)
+            # Strip the [desu-masu] or [plain] prefix RuleTextTransformBackend adds
+            return re.sub(r"^\[.*?\]\s*", "", result)
+        logger.info("smart: routing to ollama (%s)", self._ollama.model)
+        return self._ollama.transform(text, prompt)
