@@ -40,14 +40,37 @@ pipeline = KuchikaePipeline()
 audio_cache = AudioCache(max_references=5)
 
 
-def _process_audio(audio_path, label, text_prompt, voice_prompt):
-    """Process audio through the pipeline and return UI outputs."""
-    if isinstance(audio_path, tuple):
-        sr, data = audio_path
+def _normalize_audio_path(audio_input):
+    """Normalize Gradio's variable audio input into a real filesystem path.
+
+    Gradio can pass: str (filepath), tuple (sr, data), dict (with "orig_name"), or None.
+    Returns the resolved file path as a string.
+    """
+    if audio_input is None:
+        raise gr.Error("No audio input received.")
+
+    if isinstance(audio_input, tuple):
+        sr, data = audio_input
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             sf.write(tmp.name, data, sr)
-            audio_path = tmp.name
+            return tmp.name
 
+    # dict form (e.g. from uploaded files in some Gradio versions).
+    if isinstance(audio_input, dict):
+        path = audio_input.get("orig_name") or audio_input.get("name") or audio_input.get("path")
+        if not path:
+            raise gr.Error(f"Could not resolve audio file path from dict: {audio_input!r}")
+        return str(path)
+
+    # string form (filepath).
+    result = str(audio_input)
+    if not os.path.isfile(result):
+        raise gr.Error(f"No audio file found. (path={result!r})")
+    return result
+
+
+def _process_audio(audio_path, label, text_prompt, voice_prompt):
+    """Process audio through the pipeline and return UI outputs."""
     if not os.path.isfile(str(audio_path)):
         raise gr.Error(f"{label}: No audio file found. (path={audio_path!r})")
 
@@ -89,30 +112,29 @@ def _process_audio(audio_path, label, text_prompt, voice_prompt):
     )
 
 
-def run(audio_path: str, text_prompt: str, voice_prompt: str):
+def run(audio_input, text_prompt: str, voice_prompt: str):
     """Run the pipeline and return UI outputs."""
-    return _process_audio(audio_path, "Manual", text_prompt, voice_prompt)
+    path = _normalize_audio_path(audio_input)
+    return _process_audio(path, "Manual", text_prompt, voice_prompt)
 
 
-def run_one_button(audio_path):
+def run_one_button(audio_input):
     """Run the pipeline with pre-built default prompts."""
-    if audio_path is None:
-        raise gr.Error("No recording. Tap Record and try again.")
-
-    # Gradio passes filepath when sources=["microphone"], but it can be empty string.
-    if isinstance(audio_path, str) and not os.path.isfile(str(audio_path)):
-        raise gr.Error(f"No audio file found after recording. (path={audio_path!r})")
-
-    return _process_audio(audio_path, "One Button", DEFAULT_TEXT_PROMPT.instruction, DEFAULT_VOICE_PROMPT.instruction)
+    path = _normalize_audio_path(audio_input)
+    return _process_audio(
+        path, "One Button", DEFAULT_TEXT_PROMPT.instruction, DEFAULT_VOICE_PROMPT.instruction
+    )
 
 
-def run_with_preset(audio_path: str, preset_name: str):
+def run_with_preset(audio_input: str, preset_name: str):
     """Run the pipeline with a pre-built prompt pair."""
-    if not audio_path or (isinstance(audio_path, tuple)):
-        return _process_audio(audio_path, "Presets", "", "")
+    audio_path = _normalize_audio_path(audio_input)
 
-    if isinstance(audio_path, str) and not os.path.isfile(str(audio_path)):
+    if not os.path.isfile(audio_path):
         raise gr.Error("Please upload an audio file first.")
+
+    if preset_name not in PRESETS:
+        raise gr.Error(f"Unknown preset: {preset_name}")
 
     if preset_name not in PRESETS:
         raise gr.Error(f"Unknown preset: {preset_name}")
@@ -158,7 +180,10 @@ with gr.Blocks(title="Kuchikae v0.1") as demo:
                 choices=list(PRESETS.keys()),
                 value="カジュアル",
             )
-            presets_audio = gr.Audio(label="Source Audio (upload)", type="filepath")
+            presets_audio = gr.Audio(
+                label="Source / Reference Audio",
+                type="filepath",
+            )
             submit_preset_btn = gr.Button("Transform with Preset")
 
             with gr.Row():
