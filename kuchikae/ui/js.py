@@ -4,11 +4,9 @@ PTT_HTML = """
 <div id="ptt-container">
   <button id="ptt-btn"
     class="ptt-idle"
-    onmousedown="pttStart(event)"
-    onmouseup="pttStop()"
-    onmouseleave="pttStop()"
-    ontouchstart="pttStart(event)"
-    ontouchend="pttStop()">
+    onpointerdown="pttStart(event)"
+    onpointerup="pttStop(event)"
+    onpointercancel="pttStop(event)">
     <span id="ptt-label">押して話す</span>
   </button>
   <div id="ptt-hint">ボタンを押しながら話す、離すと自動変換</div>
@@ -16,13 +14,6 @@ PTT_HTML = """
 <script>
 let pttState = 0;
 let pttTimer = null;
-
-function findBtn(wrap, selector) {
-  if (!wrap) return null;
-  let b = wrap.querySelector(selector);
-  if (b) return b;
-  return null;
-}
 
 function findAudioButton(wrap, candidates) {
   if (!wrap) return null;

@@ -66,5 +66,9 @@ def test_dict_prefers_path_over_orig_name(tmp_path: str) -> None:
 
 def test_ptt_html_uses_find_audio_button_and_no_raw_button_fallback() -> None:
     assert "findAudioButton" in PTT_HTML
+    assert "function findBtn" not in PTT_HTML
     assert "querySelector('button')" not in PTT_HTML
     assert 'querySelectorAll(\'#simple-audio-wrap button' not in PTT_HTML
+    assert "onmouseleave" not in PTT_HTML
+    assert "onpointerdown" in PTT_HTML
+    assert "onpointerup" in PTT_HTML

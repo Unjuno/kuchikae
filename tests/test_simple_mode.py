@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-import tempfile
-
 import numpy as np
 import soundfile as sf
 
 from kuchikae.pipeline import KuchikaePipeline
-from kuchikae.ui import run_simple
+from kuchikae.ui.handlers import run, run_simple
+
+
+class _FailingPipeline:
+    def process_stream(self, *args, **kwargs):
+        yield "STT", "聞き取った内容", None, None
+        raise RuntimeError("stream failed")
+
+    def process_stream_live(self, *args, **kwargs):
+        yield "STT_PARTIAL", "聞き取った", None, None
+        raise RuntimeError("live stream failed")
 
 
 def test_run_simple_none_input_yields_empty():
@@ -67,3 +75,28 @@ def test_run_simple_dict_input(tmp_path):
     assert len(results) >= 1
     last = results[-1]
     assert last[3] == "言い直しました"
+
+
+def test_run_simple_pipeline_exception_updates_status(tmp_path) -> None:
+    wav = tmp_path / "simple_exception.wav"
+    sf.write(str(wav), np.zeros(44100, dtype=np.float32), 44100)
+    gen = run_simple(_FailingPipeline(), str(wav))
+    results = list(gen)
+    assert results[-1][3].startswith("STT 段階で失敗しました:")
+    assert "RuntimeError" in results[-1][3]
+
+
+def test_run_pipeline_exception_updates_status(tmp_path) -> None:
+    wav = tmp_path / "run_exception.wav"
+    sf.write(str(wav), np.zeros(44100, dtype=np.float32), 44100)
+    gen = run(str(wav), "自然に", "", _FailingPipeline())
+    results = list(gen)
+    assert results[-1][3].startswith("STT 段階で失敗しました:")
+    assert "RuntimeError" in results[-1][3]
+
+
+def test_run_simple_none_path_message_has_no_upload_word() -> None:
+    gen = run_simple(KuchikaePipeline(), None)
+    result = list(gen)[0]
+    assert "アップロード" not in result[3]
+    assert "録音ファイルを取得できませんでした" in result[3]

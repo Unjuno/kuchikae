@@ -91,6 +91,9 @@ def run_simple(
         "set" if voice_output_prompt is not None else "none",
     )
     path = normalize_audio_path(audio_input)
+    last_status = "音声認識中"
+    last_source = ""
+    last_text = ""
     if path is None:
         logger.warning("[run_simple] no path, aborting")
         yield (
@@ -117,6 +120,9 @@ def run_simple(
             stream_fn(path, prompt, voice_prompt),
             start=1,
         ):
+            last_status = status
+            last_source = src or ""
+            last_text = txt or ""
             logger.info(
                 "[run_simple] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
                 idx,
@@ -137,9 +143,15 @@ def run_simple(
                 yield gr.update(value=None), src, "", "文字起こし中..."
             else:
                 yield gr.update(value=None), "", "", "音声認識中..."
-    except Exception:
+    except Exception as e:
         logger.exception("[run_simple] inference failed")
-        raise
+        yield (
+            gr.update(value=None),
+            last_source,
+            last_text,
+            f"{last_status} 段階で失敗しました: {type(e).__name__}: {e}",
+        )
+        return
 
 
 def run(
@@ -159,9 +171,18 @@ def run(
         "set" if voice_output_prompt is not None else "none",
     )
     path = normalize_audio_path(audio_input)
+    last_status = "音声認識中"
+    last_source = ""
+    last_text = ""
     if path is None:
         logger.error("[run] no path! audio_input type=%s", type(audio_input).__name__)
-        raise gr.Error("音声を録音してください。必要なら通常モードで録音し直してください。")
+        yield (
+            gr.update(value=None),
+            "",
+            "",
+            f"AudioInput 段階で失敗しました: ValueError: 音声を録音してください。必要なら通常モードで録音し直してください。 (audio_input_type={type(audio_input).__name__})",
+        )
+        return
 
     if template_name == "カスタム" and custom_prompt.strip():
         prompt_text = custom_prompt
@@ -186,6 +207,9 @@ def run(
             stream_fn(path, prompt, voice_prompt),
             start=1,
         ):
+            last_status = status
+            last_source = src or ""
+            last_text = txt or ""
             logger.info(
                 "[run] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
                 idx,
@@ -206,9 +230,15 @@ def run(
                 yield gr.update(value=None), src, "", "文字起こし中..."
             else:
                 yield gr.update(value=None), "", "", "音声認識中..."
-    except Exception:
+    except Exception as e:
         logger.exception("[run] inference failed")
-        raise
+        yield (
+            gr.update(value=None),
+            last_source,
+            last_text,
+            f"{last_status} 段階で失敗しました: {type(e).__name__}: {e}",
+        )
+        return
 
 
 def on_template_change(template_name: str):
