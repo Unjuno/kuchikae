@@ -14,32 +14,31 @@ from kuchikae.types import TextTransformPrompt
 
 CSS = """
 body { background: #f5f5f7 !important; }
-.gradio-container { max-width: 520px !important; margin: 40px auto !important; }
-#title { text-align: center; font-size: 28px; font-weight: 700; color: #1d1d1f; margin-bottom: 20px; letter-spacing: -0.02em; }
-#mic-btn { display: flex; justify-content: center; align-items: center; margin-bottom: 20px; }
-#mic-btn .icon-button-wrapper { display: none !important; }
-#mic-btn .component-wrapper { padding: 0 !important; }
-#mic-btn .controls { justify-content: center !important; }
-#mic-btn .wrapper { justify-content: center; }
-#mic-btn .record-button { width: 120px; height: 120px; border-radius: 50%; border: none; background: linear-gradient(135deg,#6e8efb,#a777e3); box-shadow: 0 8px 32px rgba(110,142,251,.35); font-size: 0; align-items: center; justify-content: center; margin: 0; transition: all .2s ease; cursor: pointer; }
-#mic-btn .record-button::before { display: none !important; }
-#mic-btn .record-button::after { content: "\U0001F3A4"; font-size: 44px; line-height: 1; }
-#mic-btn .record-button:hover { transform: scale(1.06); box-shadow: 0 12px 40px rgba(110,142,251,.45); }
-#mic-btn .record-button:active { transform: scale(.96); }
-#mic-btn .stop-button { width: 120px; height: 120px; border-radius: 50%; border: none; background: #ef4444; box-shadow: 0 8px 32px rgba(239,68,68,.35); font-size: 0; align-items: center; justify-content: center; margin: 0; transition: all .2s ease; }
-#mic-btn .stop-button::before { display: none !important; }
-#mic-btn .stop-button::after { content: "\u25A0"; font-size: 36px; line-height: 1; }
-#mic-btn .stop-button-paused, #mic-btn .pause-button, #mic-btn .resume-button, #mic-btn .mic-select, #mic-btn .timestamps, #mic-btn .timestamp, #mic-btn .microphone { display: none !important; }
-#status { font-size: 11px; color: #9ca3af; text-align: center; margin-bottom: 8px; letter-spacing: .08em; min-height: 16px; }
-#template-box label, #prompt-box label { font-size: 11px; font-weight: 600; color: #9ca3af; letter-spacing: .06em; text-transform: uppercase; }
-#prompt-box textarea { border-radius: 10px; border: 1.5px solid #e5e7eb; padding: 10px 14px; font-size: 13px; line-height: 1.5; color: #1d1d1f; background: white; transition: border-color .15s ease; resize: vertical; min-height: 60px; }
-#prompt-box textarea:focus { border-color: #6e8efb; box-shadow: 0 0 0 3px rgba(110,142,251,.15); }
+.gradio-container { max-width: 520px !important; margin: 0 auto !important; padding: 20px 16px !important; }
+.wrap { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+#title { text-align: center; font-size: 22px; font-weight: 700; color: #1d1d1f; margin-bottom: 20px; }
+#mic-wrap { display: flex; justify-content: center !important; margin-bottom: 16px; }
+#mic-wrap .icon-button-wrapper { display: none !important; }
+#mic-wrap label.container { border: none !important; box-shadow: none !important; padding: 0 !important; background: transparent !important; }
+#mic-wrap .controls { justify-content: center !important; gap: 0 !important; }
+#mic-wrap .record-button { width: 88px; height: 88px; border-radius: 50%; border: none; background: linear-gradient(135deg,#6e8efb,#a777e3); box-shadow: 0 6px 24px rgba(110,142,251,.3) !important; font-size: 0; transition: all .15s ease; }
+#mic-wrap .record-button::before { display: none !important; }
+#mic-wrap .record-button::after { content: "\U0001F3A4"; font-size: 32px; line-height: 1; }
+#mic-wrap .record-button:hover { transform: scale(1.05); }
+#mic-wrap .stop-button { width: 88px; height: 88px; border-radius: 50%; border: none; background: #ef4444; box-shadow: 0 6px 24px rgba(239,68,68,.3) !important; font-size: 0; transition: all .15s ease; }
+#mic-wrap .stop-button::before { display: none !important; }
+#mic-wrap .stop-button::after { content: "\u25A0"; font-size: 26px; line-height: 1; }
+#mic-wrap .stop-button-paused, #mic-wrap .pause-button, #mic-wrap .resume-button, #mic-wrap .mic-select, #mic-wrap .timestamps, #mic-wrap .timestamp, #mic-wrap .microphone { display: none !important; }
+#status { font-size: 11px; color: #9ca3af; text-align: center; min-height: 14px; }
+#template-box { margin-bottom: 8px; }
+#template-box label { font-size: 10px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+#prompt-box textarea { border-radius: 8px; border: 1px solid #e5e7eb; padding: 8px 12px; font-size: 13px; color: #1d1d1f; background: #fafafa; min-height: 52px; }
+#prompt-box textarea:focus { border-color: #6e8efb; background: #fff; }
 #source-text label, #transformed-text label { display: none !important; }
-#source-text textarea, #transformed-text textarea { border: none; background: transparent; padding: 2px 0; font-size: 12px; line-height: 1.5; resize: none; box-shadow: none; min-height: 20px; }
-#source-text textarea { color: #6b7280; font-style: italic; }
-#transformed-text textarea { color: #1d1d1f; font-weight: 500; }
-#output-audio { margin-top: 8px; }
-#output-audio audio { height: 40px; border-radius: 6px; }
+#source-text textarea, #transformed-text textarea { border: none; background: transparent; padding: 4px 0; font-size: 13px; line-height: 1.5; resize: none; box-shadow: none; }
+#source-text textarea { color: #9ca3af; font-style: italic; }
+#transformed-text textarea { color: #1d1d1f; }
+#output-audio { margin-top: 2px; }
 """
 
 TEMPLATES = {
@@ -68,7 +67,7 @@ def normalize_audio_path(audio_input):
     return result if os.path.isfile(result) else None
 
 
-def create_app(pipeline: KuchikaePipeline, default_prompt: TextTransformPrompt) -> gr.Blocks:
+def create_app(pipeline: KuchikaePipeline, default_prompt: TextTransformPrompt, live_streaming: bool = False) -> gr.Blocks:
 
     import logging
     logger = logging.getLogger("kuchikae.ui")
@@ -79,13 +78,16 @@ def create_app(pipeline: KuchikaePipeline, default_prompt: TextTransformPrompt) 
             raise gr.Error("No audio")
         prompt = TextTransformPrompt(instruction=text_prompt)
 
-        for status, src, txt, aud in pipeline.process_stream(path, prompt):
+        stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
+        for status, src, txt, aud in stream_fn(path, prompt):
             if status == "DONE":
                 yield aud, src, txt, "DONE", None
             elif status == "VOX":
                 yield gr.update(value=None), src, txt, "VOX", None
             elif status == "TXT":
                 yield gr.update(value=None), src, "", "TXT", None
+            elif status == "STT_PARTIAL":
+                yield gr.update(value=None), src, "", "STT...", None
             else:
                 yield gr.update(value=None), "", "", "STT", None
 
@@ -94,55 +96,57 @@ def create_app(pipeline: KuchikaePipeline, default_prompt: TextTransformPrompt) 
         return gr.update(value=text)
 
     with gr.Blocks(title="Kuchikae") as demo:
-        gr.HTML('<div id="title">Kuchikae</div>')
+        with gr.Column(elem_classes="wrap"):
+            gr.HTML('<div id="title">Kuchikae</div>')
 
-        audio_input = gr.Microphone(
-            elem_id="mic-btn",
-            show_label=False,
-            buttons=[],
-            waveform_options={"show_recording_waveform": False, "skip_length": 0},
-            type="filepath",
-            format="wav",
-        )
+            audio_input = gr.Microphone(
+                elem_id="mic-wrap",
+                show_label=False,
+                buttons=[],
+                waveform_options={"show_recording_waveform": False, "skip_length": 0},
+                type="filepath",
+                format="wav",
+            )
 
-        status = gr.HTML(elem_id="status", value="", visible=True)
+            status = gr.HTML(elem_id="status", value="", visible=True)
 
-        template = gr.Radio(
-            elem_id="template-box",
-            label="TEMPLATE",
-            choices=list(TEMPLATES.keys()),
-            value="Custom",
-        )
+            with gr.Column(scale=0, min_width=0):
+                template = gr.Radio(
+                    elem_id="template-box",
+                    label="TEMPLATE",
+                    choices=list(TEMPLATES.keys()),
+                    value="Custom",
+                )
 
-        text_prompt = gr.Textbox(
-            elem_id="prompt-box",
-            show_label=False,
-            value=default_prompt.instruction,
-            lines=2,
-        )
+                text_prompt = gr.Textbox(
+                    elem_id="prompt-box",
+                    show_label=False,
+                    value=default_prompt.instruction,
+                    lines=2,
+                )
 
-        source_text = gr.Textbox(
-            elem_id="source-text",
-            show_label=False,
-            lines=1,
-            interactive=False,
-            visible=True,
-        )
+            source_text = gr.Textbox(
+                elem_id="source-text",
+                show_label=False,
+                lines=1,
+                interactive=False,
+                visible=True,
+            )
 
-        transformed_text = gr.Textbox(
-            elem_id="transformed-text",
-            show_label=False,
-            lines=1,
-            interactive=False,
-            visible=True,
-        )
+            transformed_text = gr.Textbox(
+                elem_id="transformed-text",
+                show_label=False,
+                lines=1,
+                interactive=False,
+                visible=True,
+            )
 
-        output_audio = gr.Audio(
-            elem_id="output-audio",
-            show_label=False,
-            type="filepath",
-            autoplay=True,
-        )
+            output_audio = gr.Audio(
+                elem_id="output-audio",
+                show_label=False,
+                type="filepath",
+                autoplay=True,
+            )
 
         template.change(on_template_change, inputs=[template], outputs=[text_prompt])
 

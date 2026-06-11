@@ -7,10 +7,18 @@ import os
 import re
 import time
 from abc import ABC, abstractmethod
+from importlib.resources import files
+from functools import lru_cache
 
 from kuchikae.types import TextTransformPrompt
 
 logger = logging.getLogger(__name__)
+
+PROMPT_FILES = {
+    "polite": "text_transform_polite.txt",
+    "casual": "text_transform_casual.txt",
+    "summarize": "text_transform_summarize.txt",
+}
 
 
 class TextTransformBackend(ABC):
@@ -77,8 +85,14 @@ class OllamaTextTransformBackend(TextTransformBackend):
                 timeout=60,
             )
             resp.raise_for_status()
-            result = resp.json()["message"]["content"].strip()
-            logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
+            body = resp.json()
+            msg = body["message"]
+            result = (msg.get("content") or msg.get("thinking") or "").strip()
+            if not result:
+                logger.warning("ollama returned empty response, using original text")
+                result = text
+            else:
+                logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
             return result
         except Exception as e:
             logger.warning("ollama failed (%s), falling back to dummy", e)
@@ -193,3 +207,57 @@ class RuleTextTransformBackend(TextTransformBackend):
                 part = part[:-4] + "である"
             result_parts.append(part)
         return "".join(result_parts)
+
+
+class PromptedRuleTextTransformBackend(TextTransformBackend):
+    """Lightweight backend: rule-based transformation with prompt type detection.
+    Prompt templates (with few-shot examples) are loaded for documentation/future LLM use.
+    """
+
+    def __init__(self) -> None:
+        self._rule_backend = RuleTextTransformBackend()
+
+    def transform(self, text: str, prompt: TextTransformPrompt) -> str:
+        return self._rule_backend.transform(text, prompt)
+
+    def _detect_prompt_type(self, instruction: str) -> str:
+        if any(kw in instruction for kw in ("要約", "まとめ", "summarize")):
+            return "summarize"
+        if any(kw in instruction for kw in ("カジュアル", "普通形", "タメ口", "casual", "plain")):
+            return "casual"
+        return "polite"
+
+    @lru_cache(maxsize=4)
+    def _load_template(self, prompt_type: str) -> str:
+        filename = PROMPT_FILES.get(prompt_type, PROMPT_FILES["polite"])
+        try:
+            return files("kuchikae.prompts").joinpath(filename).read_text(encoding="utf-8")
+        except Exception as e:
+            logger.warning("Failed to load prompt template %s: %s", filename, e)
+            return ""
+
+
+class TemplateTextTransformBackend(TextTransformBackend):
+    """Minimal backend using prompt template substitution only (for testing)."""
+
+    def transform(self, text: str, prompt: TextTransformPrompt) -> str:
+        instruction = prompt.instruction.strip().lower()
+        if any(kw in instruction for kw in ("要約", "まとめ", "summarize")):
+            template = self._load_template("summarize")
+        elif any(kw in instruction for kw in ("カジュアル", "普通形", "タメ口", "casual", "plain")):
+            template = self._load_template("casual")
+        else:
+            template = self._load_template("polite")
+
+        if "{text}" in template:
+            return template.replace("{text}", text)
+        return text
+
+    @lru_cache(maxsize=4)
+    def _load_template(self, prompt_type: str) -> str:
+        filename = PROMPT_FILES.get(prompt_type, PROMPT_FILES["polite"])
+        try:
+            return files("kuchikae.prompts").joinpath(filename).read_text(encoding="utf-8")
+        except Exception as e:
+            logger.warning("Failed to load prompt template %s: %s", filename, e)
+            return ""

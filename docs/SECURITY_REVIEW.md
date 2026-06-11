@@ -8,17 +8,19 @@
 ## Controls
 
 ### Audio file validation
-- Extension: only `.wav` allowed (rejected otherwise)
-- Size: max 25 MB per file
-- Duration: max 30 seconds per file
-- Path: `normalize_audio_path()` resolves through Gradio's temp layer; raw filename is never trusted
+- **validate uploaded audio extension** - only `.wav` allowed (rejected otherwise)
+- **validate file size** - max 25 MB per file
+- **validate audio duration** - max 30 seconds per file
+- **do not trust uploaded filenames** - `normalize_audio_path()` resolves through Gradio's temp layer; raw filename is never trusted
+- **write temp/chunk files under a controlled directory** - temporary chunk files use temp directory under project control
+- **clean temporary chunk files** - all temporary chunk files are cleaned up
 
 ### Prompt safety
-- Prompt text is passed to the local LLM (Ollama) and never sent to an external API unless the user explicitly configures `GPTTextTransformBackend` with `OPENAI_API_KEY`.
-- Dummy mode requires no API keys.
+- **do not upload user audio to third-party services unless explicitly configured** - prompt text is passed to the local LLM (Ollama) and never sent to an external API unless the user explicitly configures `GPTTextTransformBackend` with `OPENAI_API_KEY`.
+- **dummy mode must require no API keys** - Dummy mode requires no API keys.
 
 ### Output path safety
-- Output audio is always written to `outputs/` under the project root.
+- **never allow user-controlled output paths** - Output audio is always written to `outputs/` under the project root.
 - The output filename is hardcoded per backend (`dummy.wav`, `irodori_output.wav`, `openvoice_output.wav`).
 - User-controlled strings never appear in output paths.
 
@@ -26,6 +28,9 @@
 - Uploaded audio files live in Gradio's temp directory and are cleaned up by Gradio.
 - The `outputs/` directory is gitignored (`.gitignore`).
 - Pipeline caches (`_stt_cache`, `_voice_cache`) are in-memory only and lost on restart.
+
+### Git hygiene
+- **never commit generated/user audio, model weights, external repos, cache files, or secrets** - All heavy dependencies and model files are external or via package managers.
 
 ## Threat model
 - **Local single-user desktop app.** No network service beyond localhost Gradio.

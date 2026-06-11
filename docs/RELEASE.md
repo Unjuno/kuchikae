@@ -1,20 +1,15 @@
 # Release
 
 ## Build
-```bash
-uv build
-```
+- **package via uv build** - Use `uv build` to create wheel and sdist
 
 ## Install from wheel
-```bash
-uv pip install dist/kuchikae-0.1.0-py3-none-any.whl
-```
+- **install locally via uv tool install --force .** - Use `uv tool install --force .` for local development
+- **run via kuchikae** - The CLI entry point is `kuchikae`
 
-## Run
-```bash
-kuchikae          # CLI entry point (starts web server)
-kuchikae web      # same
-```
+## GitHub Release
+- **GitHub Release should attach wheel and sdist** - The dist/ directory contains both wheel and sdist
+- **PyPI can come later** - Package may be ready for PyPI submission after testing
 
 ## Package structure
 ```
@@ -32,7 +27,12 @@ kuchikae/
   logging.py       # Shared logging
   prompts/         # Package-data prompt files
     text_transform_default.txt
+    voice_output_default.txt
 ```
+
+## Model weights
+- **model weights must not be bundled in wheel or release assets** - All model files are external or via package managers
+- **release artifacts belong in dist/, but dist/ should not be committed** - Use .gitignore to prevent accidental commits
 
 ## Dependencies
 See `pyproject.toml`. Core deps are lightweight (gradio, numpy, soundfile).

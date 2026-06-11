@@ -19,6 +19,16 @@ v0.1 is not a fixed-style dropdown app. The main controls are free-form prompts:
 
 v0.1 must start with dummy backends and a Nix + uv scaffold. Real STT and real voice-conditioned output backends are added only after the architecture is in place.
 
+## Implemented features
+
+- **Prompt-based text transformation** with few-shot templates (polite, casual, summarize)
+- **Voice-conditioned output** via Irodori-TTS (or OpenVoice)
+- **Caching layer** (`ProcessingCache`) avoids redundant STT and VoiceContext extraction
+- **Streaming pipeline** (`process_stream_live`) for push-to-talk UX with partial transcripts
+- **Segmented STT** for long audio via `FixedWindowSegmenter`
+- **Fast rule-based text transform** as default (no LLM required)
+- **Progressive Gradio UI** shows transcript → transformed text → audio
+
 ## Required reading for implementation
 
 1. [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md) — clone, Nix, and uv workflow.
@@ -33,7 +43,6 @@ Do not implement:
 
 - fixed style dropdown as the primary UI
 - translation
-- streaming
 - user accounts
 - database
 - sharing
@@ -66,3 +75,21 @@ uv run python app.py
 ```
 
 Do not use global Python, global pip, or undeclared Homebrew-only dependencies. Nix owns the system development shell; uv owns Python package resolution.
+
+## Configuration
+
+Backend selection via `create_pipeline()` config:
+
+```python
+# Default: fast rule-based text transform + Irodori-TTS voice
+create_pipeline()
+
+# Streaming STT for push-to-talk (partial transcripts)
+create_pipeline({"streaming_stt": True})
+
+# Segmented STT for long audio
+create_pipeline({"segmented_stt": True})
+
+# Ollama LLM text transform (requires Ollama server)
+create_pipeline({"text_transform_backend": "ollama", "text_transform_model": "qwen3:8b"})
+```

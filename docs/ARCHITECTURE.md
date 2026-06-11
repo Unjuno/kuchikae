@@ -52,15 +52,24 @@ kuchikae/
     __init__.py
     types.py
     audio_cache.py
+    audio_key.py
     voice_context.py
     stt.py
     text_transform.py
     voice_output.py
     pipeline.py
-    timing.py
+    processing_cache.py
+    counting_backends.py
+    logging.py
+    ui.py
+    web.py
+    cli.py
 
   prompts/
     text_transform_default.txt
+    text_transform_polite.txt
+    text_transform_casual.txt
+    text_transform_summarize.txt
     voice_output_default.txt
 
   outputs/
@@ -72,6 +81,9 @@ kuchikae/
     test_pipeline_dummy.py
     test_text_transform_dummy.py
     test_voice_output_dummy.py
+    test_performance.py
+    test_audio.py
+    test_app.py
 ```
 
 ## 4. Data types
@@ -80,14 +92,8 @@ kuchikae/
 
 ```python
 from dataclasses import dataclass
-from typing import Any, Optional
-
-
-@dataclass
-class ProsodyProfile:
-    speech_rate_chars_per_sec: Optional[float] = None
-    mean_pitch_hz: Optional[float] = None
-    rms_energy: Optional[float] = None
+from typing import Any, Optional, NamedTuple
+import os
 
 
 @dataclass
@@ -95,41 +101,50 @@ class VoiceContext:
     reference_audio_path: str
     ready: bool
     speaker_embedding: Optional[Any] = None
-    prosody_profile: Optional[ProsodyProfile] = None
+    prosody_profile: Optional[Any] = None
 
 
 @dataclass
 class TextTransformPrompt:
     instruction: str
-    preserve_meaning: bool = True
-    max_output_chars: int = 220
+
+    @classmethod
+    def from_file(cls, path: str | None = None) -> "TextTransformPrompt":
+        ...
 
 
 @dataclass
 class VoiceOutputPrompt:
     instruction: str
-    emotion: Optional[str] = None
-    speaking_rate: Optional[str] = None
-    intensity: Optional[float] = None
 
-
-@dataclass
-class LatencyReport:
-    stt_seconds: float
-    text_transform_seconds: float
-    voice_output_seconds: float
-    total_seconds: float
+    @classmethod
+    def from_file(cls, path: str | None = None) -> "VoiceOutputPrompt":
+        ...
 
 
 @dataclass
 class PipelineResult:
-    source_text: str
-    transformed_text: str
     output_audio_path: str
-    text_transform_prompt: str
-    voice_output_prompt: str
-    voice_ready: bool
-    latency: LatencyReport
+    source_text: str = ""
+    transformed_text: str = ""
+
+
+class AudioCacheKey(NamedTuple):
+    path: str
+    size: int
+    mtime: float
+
+    @classmethod
+    def from_file(cls, path: str) -> "AudioCacheKey":
+        ...
+
+
+@dataclass
+class AudioSegment:
+    start_sec: float
+    end_sec: float
+    samples: object
+    sample_rate: int
 ```
 
 ## 5. AudioCache
@@ -153,6 +168,32 @@ class AudioCache:
 v0.1 may use the same audio file as both latest utterance and reference audio.
 
 Future versions may implement a rolling reference window. v0.1 must not overbuild this.
+
+## 5b. AudioKey and ProcessingCache
+
+`AudioKey` provides a stable identity for an audio file (path + size + mtime).
+
+```python
+class AudioKey:
+    def __init__(self, path: str, size: int, mtime: float): ...
+    def __eq__(self, other) -> bool: ...
+    def __hash__(self) -> int: ...
+
+class AudioKeyFromCacheKey:
+    def __call__(self, cache_key: AudioCacheKey) -> AudioKey: ...
+```
+
+`ProcessingCache` caches STT results and VoiceContext per `AudioKey`:
+
+```python
+class ProcessingCache:
+    def get_stt(self, audio_key: AudioKey) -> str | None: ...
+    def set_stt(self, audio_key: AudioKey, text: str) -> None: ...
+    def get_voice_context(self, audio_key: AudioKey) -> VoiceContext | None: ...
+    def set_voice_context(self, audio_key: AudioKey, context: VoiceContext) -> None: ...
+```
+
+Pipeline uses `ProcessingCache` to avoid redundant STT and VoiceContext extraction when the same audio is processed with different prompts.
 
 ## 6. VoiceContextExtractor
 
@@ -221,6 +262,22 @@ Important:
 - Do not hard-code `polite`, `casual`, `rpg` as the primary control.
 - Prompt presets may be added later, but the backend interface is prompt-based.
 
+### Available implementations
+
+| Backend | Description |
+|---------|-------------|
+| `DummyTextTransformBackend` | Returns placeholder `[transformed] {text}` |
+| `RuleTextTransformBackend` | Rule-based verb ending conversion (desu-masu/plain) |
+| `PromptedRuleTextTransformBackend` | Rule-based with prompt type detection; loads few-shot templates from `prompts/` (default) |
+| `OllamaTextTransformBackend` | Calls local Ollama API (requires Ollama server) |
+| `GPTTextTransformBackend` | Calls OpenAI-compatible API (requires API key) |
+
+Prompt templates with few-shot examples are stored in `kuchikae/prompts/`:
+- `text_transform_polite.txt` — 6 examples for polite conversion
+- `text_transform_casual.txt` — 6 examples for casual conversion
+- `text_transform_summarize.txt` — 5 examples for summarization
+- `text_transform_default.txt` — template with `{instruction}` and `{text}` placeholders
+
 ## 9. VoiceOutputBackend
 
 Required interface:
@@ -280,20 +337,29 @@ Sketch:
 class KuchikaePipeline:
     def __init__(
         self,
-        audio_cache,
-        voice_context_extractor,
-        stt_backend,
-        text_transform_backend,
-        voice_output_backend,
-    ):
+        stt_backend: STTBackend | None = None,
+        text_transform_backend: TextTransformBackend | None = None,
+        voice_output_backend: VoiceOutputBackend | None = None,
+        processing_cache: ProcessingCache | None = None,
+    ) -> None:
         ...
 
     def process(
         self,
         audio_path: str,
         text_transform_prompt: TextTransformPrompt,
-        voice_output_prompt: VoiceOutputPrompt,
     ) -> PipelineResult:
+        ...
+
+    def process_stream(
+        self,
+        audio_path: str,
+        text_transform_prompt: TextTransformPrompt,
+    ) -> Generator[tuple[str, str | None, str | None, str | None], None, None]:
+        """Progressive output for UI streaming.
+        Yields: (status, source_text, transformed_text, output_audio_path)
+        Status: "STT" | "TXT" | "VOX" | "DONE"
+        """
         ...
 ```
 
@@ -331,6 +397,18 @@ external_models:
 ```
 
 The Kuchikae repository should contain adapters, not copied model repositories or model weights.
+
+### Vendor directory (optional)
+
+For fully self-contained distribution, optional `_vendor/` directory may contain minimal copies of runtime-required model code (e.g., `irodori_tts/inference_runtime.py`). This is not required for v0.1 development but enables single-repo distribution.
+
+```
+kuchikae/_vendor/
+  irodori_tts/
+    inference_runtime.py
+    config.py
+    ...
+```
 
 ## 13. v0.1 dependency policy
 

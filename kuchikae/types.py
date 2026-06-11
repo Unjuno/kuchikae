@@ -22,6 +22,19 @@ class TextTransformPrompt:
 
 
 @dataclass
+class VoiceOutputPrompt:
+    instruction: str
+
+    @classmethod
+    def from_file(cls, path: str | None = None) -> "VoiceOutputPrompt":
+        if path is not None:
+            with open(path, encoding="utf-8") as f:
+                return cls(instruction=f.read().strip())
+        text = files("kuchikae.prompts").joinpath("voice_output_default.txt").read_text(encoding="utf-8")
+        return cls(instruction=text.strip())
+
+
+@dataclass
 class PipelineResult:
     output_audio_path: str
     source_text: str = ""
@@ -45,3 +58,11 @@ class AudioSegment:
     end_sec: float
     samples: object
     sample_rate: int
+
+
+@dataclass
+class VoiceContext:
+    reference_audio_path: str
+    ready: bool
+    speaker_embedding: object | None = None
+    prosody_profile: object | None = None

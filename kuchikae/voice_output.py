@@ -19,13 +19,13 @@ OUTPUT_DIR = "outputs"
 class VoiceOutputBackend(ABC):
 
     @abstractmethod
-    def synthesize(self, text: str, audio_path: str) -> str:
+    def synthesize(self, text: str, voice_context: VoiceContext) -> str:
         raise NotImplementedError
 
 
 class DummyVoiceOutputBackend(VoiceOutputBackend):
 
-    def synthesize(self, text: str, audio_path: str) -> str:
+    def synthesize(self, text: str, voice_context: VoiceContext) -> str:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "dummy.wav")
         duration_seconds = 1.0
@@ -92,12 +92,15 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
             return se_list[0]
         return torch.mean(torch.stack(se_list), dim=0)
 
-    def synthesize(self, text: str, audio_path: str) -> str:
+    def synthesize(self, text: str, voice_context: VoiceContext) -> str:
+        if not voice_context.ready or not voice_context.reference_audio_path:
+            return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
+
         t0 = time.time()
         base_tts, converter = self._ensure_models_loaded()
         self._log(f"model load: {time.time()-t0:.2f}s")
 
-        target_se = self._extract_multi_frame_se(audio_path)
+        target_se = self._extract_multi_frame_se(voice_context.reference_audio_path)
         self._log(f"SE extracted ({text[:40]}...)")
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -167,7 +170,10 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         self._log(f"load: {time.time()-t1:.2f}s")
         return self._runtime
 
-    def synthesize(self, text: str, audio_path: str) -> str:
+    def synthesize(self, text: str, voice_context: VoiceContext) -> str:
+        if not voice_context.ready or not voice_context.reference_audio_path:
+            return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
+
         import torch  # noqa: F811
 
         t0 = time.time()
@@ -184,7 +190,7 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         result = runtime.synthesize(
             SamplingRequest(
                 text=text,
-                ref_wav=audio_path,
+                ref_wav=voice_context.reference_audio_path,
                 num_steps=self._num_steps,
                 t_schedule_mode="linear",
                 cfg_scale_text=2.0,

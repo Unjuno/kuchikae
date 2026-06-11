@@ -1,5 +1,7 @@
 """Kuchikae — prompt-conditioned voice transformation prototype."""
 
+from kuchikae.audio_cache import AudioCache, VoiceContextExtractor
+from kuchikae.audio_key import AudioKey
 from kuchikae.pipeline import KuchikaePipeline
 from kuchikae.stt import DummySTTBackend, STTBackend
 from kuchikae.text_transform import (
@@ -7,7 +9,7 @@ from kuchikae.text_transform import (
     OllamaTextTransformBackend,
     TextTransformBackend,
 )
-from kuchikae.types import PipelineResult, TextTransformPrompt
+from kuchikae.types import AudioCacheKey, PipelineResult, TextTransformPrompt, VoiceContext, VoiceOutputPrompt
 from kuchikae.voice_output import (
     DummyVoiceOutputBackend,
     IrodoriTTSVoiceOutputBackend,
@@ -15,6 +17,9 @@ from kuchikae.voice_output import (
 )
 
 __all__ = [
+    "AudioCache",
+    "AudioCacheKey",
+    "AudioKey",
     "DummySTTBackend",
     "DummyTextTransformBackend",
     "DummyVoiceOutputBackend",
@@ -25,5 +30,8 @@ __all__ = [
     "STTBackend",
     "TextTransformBackend",
     "TextTransformPrompt",
+    "VoiceContext",
+    "VoiceContextExtractor",
     "VoiceOutputBackend",
+    "VoiceOutputPrompt",
 ]
