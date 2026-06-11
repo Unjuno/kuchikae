@@ -1,0 +1,108 @@
+"""Kuchikae domain — backend logic (monolith core)."""
+
+from kuchikae.domain.audio import AudioSegmenter, FixedWindowSegmenter, TranscriptJoiner
+from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor
+from kuchikae.domain.audio_stream import AudioChunk, AudioChunker, AudioStreamBuffer, EnergyVAD
+from kuchikae.domain.audio_key import AudioKey, AudioKeyFromCacheKey, AudioKeyFromPath
+from kuchikae.domain.metrics import LatencyLogger, StreamingMetricsRecorder
+from kuchikae.domain.processing_cache import ProcessingCache
+from kuchikae.domain.stt import (
+    DummySTTBackend,
+    DummyStreamingSTTBackend,
+    SegmentedSTTBackend,
+    STTBackend,
+    StreamingSTTBackend,
+)
+from kuchikae.domain.text_transform import (
+    DummyIncrementalTextTransformBackend,
+    DummyTextTransformBackend,
+    GPTTextTransformBackend,
+    IncrementalTextTransformBackend,
+    OllamaTextTransformBackend,
+    PromptedRuleTextTransformBackend,
+    RuleTextTransformBackend,
+    TemplateTextTransformBackend,
+    TextTransformBackend,
+)
+from kuchikae.domain.timing import PerfTimer, Timer, now_ms
+from kuchikae.domain.types import (
+    AudioCacheKey,
+    AudioSegment,
+    PipelineResult,
+    STTCommit,
+    STTFinal,
+    STTPartial,
+    StreamChunk,
+    StreamingAudioSegment,
+    StreamingLatencyReport,
+    TextTransformPrompt,
+    TransformState,
+    TransformUpdate,
+    VoiceContext,
+    VoiceOutputPrompt,
+)
+from kuchikae.domain.voice_output import (
+    AudioSegmentQueue,
+    DummyStreamingVoiceOutputBackend,
+    DummyVoiceOutputBackend,
+    StreamingVoiceOutputBackend,
+    VoiceOutputBackend,
+    segment_clauses,
+    segment_sentences,
+)
+
+__all__ = [
+    "AudioCache",
+    "AudioCacheKey",
+    "AudioChunk",
+    "AudioChunker",
+    "AudioKey",
+    "AudioKeyFromCacheKey",
+    "AudioKeyFromPath",
+    "AudioSegment",
+    "AudioSegmenter",
+    "AudioSegmentQueue",
+    "AudioStreamBuffer",
+    "DummyIncrementalTextTransformBackend",
+    "DummyStreamingVoiceOutputBackend",
+    "DummyStreamingSTTBackend",
+    "DummySTTBackend",
+    "EnergyVAD",
+    "DummyTextTransformBackend",
+    "DummyVoiceOutputBackend",
+    "FixedWindowSegmenter",
+    "GPTTextTransformBackend",
+    "IncrementalTextTransformBackend",
+    "LatencyLogger",
+    "OllamaTextTransformBackend",
+    "PerfTimer",
+    "PipelineResult",
+    "ProcessingCache",
+    "PromptedRuleTextTransformBackend",
+    "RuleTextTransformBackend",
+    "segment_clauses",
+    "segment_sentences",
+    "SegmentedSTTBackend",
+    "STTBackend",
+    "STTCommit",
+    "STTFinal",
+    "STTPartial",
+    "StreamChunk",
+    "StreamingAudioSegment",
+    "StreamingMetricsRecorder",
+    "StreamingSTTBackend",
+    "StreamingVoiceOutputBackend",
+    "StreamingLatencyReport",
+    "TemplateTextTransformBackend",
+    "TextTransformBackend",
+    "TextTransformPrompt",
+    "Timer",
+    "TranscriptJoiner",
+    "TransformState",
+    "TransformUpdate",
+    "VoiceContext",
+    "VoiceContextExtractor",
+    "VoiceOutputBackend",
+    "VoiceOutputPrompt",
+    "now_ms",
+]

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from kuchikae.stt import STTBackend, DummySTTBackend
-from kuchikae.text_transform import TextTransformBackend, DummyTextTransformBackend
-from kuchikae.types import TextTransformPrompt
-from kuchikae.voice_output import VoiceOutputBackend, DummyVoiceOutputBackend
-from kuchikae.voice_context import VoiceContext, DummyVoiceContextExtractor
+from kuchikae.domain.stt import STTBackend, DummySTTBackend
+from kuchikae.domain.text_transform import TextTransformBackend, DummyTextTransformBackend
+from kuchikae.domain.types import TextTransformPrompt, VoiceContext
+from kuchikae.domain.voice_output import VoiceOutputBackend, DummyVoiceOutputBackend
+from kuchikae.domain.audio_cache import DummyVoiceContextExtractor
 
 
 class CountingSTTBackend(STTBackend):
@@ -62,10 +62,16 @@ class CountingVoiceOutputBackend(VoiceOutputBackend):
     def __init__(self, inner: VoiceOutputBackend | None = None) -> None:
         self.inner = inner or DummyVoiceOutputBackend()
         self.call_count = 0
+        self.last_text: str | None = None
+        self.last_voice_context: VoiceContext | None = None
 
     def synthesize(self, text: str, voice_context: VoiceContext) -> str:
         self.call_count += 1
+        self.last_text = text
+        self.last_voice_context = voice_context
         return self.inner.synthesize(text, voice_context)
 
     def reset(self) -> None:
         self.call_count = 0
+        self.last_text = None
+        self.last_voice_context = None

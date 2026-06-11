@@ -5,11 +5,11 @@ from __future__ import annotations
 import numpy as np
 import soundfile as sf
 
-from kuchikae.audio import (
+from kuchikae.domain.audio import (
     FixedWindowSegmenter,
     TranscriptJoiner,
 )
-from kuchikae.types import AudioSegment
+from kuchikae.domain.types import AudioSegment
 
 
 def test_audio_segment_fields() -> None:
