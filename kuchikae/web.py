@@ -7,7 +7,7 @@ import os
 import sys
 from typing import Any
 
-from kuchikae.domain.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.pipeline.audio_validation import validate_audio
 from kuchikae.pipeline import create_pipeline
 from kuchikae.ui import CSS, create_app
@@ -69,6 +69,7 @@ def serve() -> None:
     )
 
     default_prompt = TextTransformPrompt.from_file()
+    default_voice_prompt = VoiceOutputPrompt.from_file()
     
     # Check for streaming STT config via env var
     import os
@@ -85,7 +86,12 @@ def serve() -> None:
         }
     )
     pipeline.warmup()
-    demo = create_app(pipeline, default_prompt, live_streaming=streaming_stt)
+    demo = create_app(
+        pipeline,
+        default_prompt,
+        default_voice_prompt,
+        live_streaming=streaming_stt,
+    )
     demo.launch(css=CSS, server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")))
 
 

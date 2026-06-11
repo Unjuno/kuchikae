@@ -5,8 +5,9 @@ from __future__ import annotations
 import gradio as gr
 
 from kuchikae.pipeline import KuchikaePipeline
-from kuchikae.domain.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.ui import CSS, TEMPLATES, create_app
+from kuchikae.ui.handlers import normalize_voice_output_prompt
 
 
 def test_create_app_returns_blocks():
@@ -45,6 +46,7 @@ def test_create_app_normal_tab_components():
     assert "transformed-text" in config_str
     assert "output-audio" in config_str
     assert "prompt-box" in config_str
+    assert "voice-prompt-box" in config_str
 
 
 def test_create_app_simple_tab_components():
@@ -57,6 +59,7 @@ def test_create_app_simple_tab_components():
     assert "simple-trf" in config_str
     assert "simple-output-audio" in config_str
     assert "simple-status" in config_str
+    assert "simple-voice-prompt-box" in config_str
 
 
 def test_create_app_ptt_button():
@@ -85,3 +88,14 @@ def test_create_app_live_streaming_param():
     prompt = TextTransformPrompt(instruction="test")
     demo = create_app(pipeline, prompt, live_streaming=True)
     assert isinstance(demo, gr.Blocks)
+
+
+def test_normalize_voice_output_prompt_from_string():
+    prompt = normalize_voice_output_prompt(" 声を柔らかく ")
+    assert isinstance(prompt, VoiceOutputPrompt)
+    assert prompt.instruction == "声を柔らかく"
+
+
+def test_normalize_voice_output_prompt_from_empty():
+    assert normalize_voice_output_prompt("   ") is None
+    assert normalize_voice_output_prompt(None) is None

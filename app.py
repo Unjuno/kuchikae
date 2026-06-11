@@ -6,7 +6,7 @@ import logging
 import os
 import sys
 
-from kuchikae.domain.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.pipeline import create_pipeline
 from kuchikae.ui import CSS, create_app
 
@@ -20,6 +20,7 @@ def main() -> None:
     )
 
     default_prompt = TextTransformPrompt.from_file()
+    default_voice_prompt = VoiceOutputPrompt.from_file()
     pipeline = create_pipeline(
         {
             "stt_backend": os.environ.get("KUCHIKAE_STT_BACKEND", "faster_whisper"),
@@ -32,7 +33,7 @@ def main() -> None:
         }
     )
     pipeline.warmup()
-    demo = create_app(pipeline, default_prompt)
+    demo = create_app(pipeline, default_prompt, default_voice_prompt)
     demo.launch(css=CSS, server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")))
 
 

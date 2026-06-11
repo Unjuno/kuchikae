@@ -6,12 +6,11 @@ CSS, JS, and handlers live in sibling modules.
 
 from __future__ import annotations
 
-import functools
 import logging
 
 import gradio as gr
 
-from kuchikae.domain.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.pipeline import KuchikaePipeline
 from kuchikae.ui.css import CSS
 from kuchikae.ui.handlers import (
@@ -28,6 +27,7 @@ logger = logging.getLogger("kuchikae.ui.app")
 def create_app(
     pipeline: KuchikaePipeline,
     default_prompt: TextTransformPrompt,
+    default_voice_prompt: VoiceOutputPrompt | None = None,
     live_streaming: bool = False,
 ) -> gr.Blocks:
     with gr.Blocks(title="Kuchikae") as demo:
@@ -82,6 +82,22 @@ def create_app(
                             value=default_prompt.instruction,
                             lines=3,
                         )
+                        voice_prompt = gr.Textbox(
+                            elem_id="voice-prompt-box",
+                            label="声の出し方プロンプト",
+                            value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
+                            lines=3,
+                        )
+
+                    def _run_handler(audio_value, template_value, text_prompt_value, voice_prompt_value):
+                        return run(
+                            audio_value,
+                            template_value,
+                            text_prompt_value,
+                            pipeline=pipeline,
+                            live_streaming=live_streaming,
+                            voice_output_prompt=voice_prompt_value,
+                        )
 
                     template.change(
                         on_template_change,
@@ -89,8 +105,8 @@ def create_app(
                         outputs=[text_prompt],
                     )
                     run_btn.click(
-                        functools.partial(run, pipeline=pipeline, live_streaming=live_streaming),
-                        inputs=[audio_input, template, text_prompt],
+                        _run_handler,
+                        inputs=[audio_input, template, text_prompt, voice_prompt],
                         outputs=[output_audio, source_text, transformed_text, status],
                     )
 
@@ -125,11 +141,27 @@ def create_app(
                         autoplay=True,
                     )
 
+                    with gr.Accordion("声の詳細プロンプト", open=False):
+                        simple_voice_prompt = gr.Textbox(
+                            elem_id="simple-voice-prompt-box",
+                            label="声の出し方プロンプト",
+                            value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
+                            lines=3,
+                        )
+
+                    def _run_simple_handler(audio_value, voice_prompt_value):
+                        return run_simple(
+                            pipeline,
+                            audio_value,
+                            live_streaming=live_streaming,
+                            voice_output_prompt=voice_prompt_value,
+                        )
+
                     simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
 
                     simple_audio.stop(
-                        functools.partial(run_simple, pipeline=pipeline, live_streaming=live_streaming),
-                        inputs=[simple_audio],
+                        _run_simple_handler,
+                        inputs=[simple_audio, simple_voice_prompt],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],
                     )
 

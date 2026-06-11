@@ -13,7 +13,7 @@ from typing import Generator
 import gradio as gr
 import soundfile as sf
 
-from kuchikae.domain.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.pipeline import KuchikaePipeline
 
 logger = logging.getLogger("kuchikae.ui.handlers")
@@ -73,6 +73,17 @@ def normalize_audio_path(audio_input) -> str | None:
     return None
 
 
+def normalize_voice_output_prompt(value) -> VoiceOutputPrompt | None:
+    if value is None:
+        return None
+    if isinstance(value, VoiceOutputPrompt):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    return VoiceOutputPrompt(instruction=text)
+
+
 def run_simple(
     pipeline: KuchikaePipeline,
     audio_input,
@@ -93,18 +104,19 @@ def run_simple(
         return
 
     prompt = TextTransformPrompt(instruction=TEMPLATES["自然に"])
+    voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
     logger.info(
         "[run_simple] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
         getattr(stream_fn, "__name__", repr(stream_fn)),
         path,
         prompt.instruction[:160],
-        "set" if voice_output_prompt is not None else "none",
+        "set" if voice_prompt is not None else "none",
     )
 
     try:
         for idx, (status, src, txt, aud) in enumerate(
-            stream_fn(path, prompt, voice_output_prompt),
+            stream_fn(path, prompt, voice_prompt),
             start=1,
         ):
             logger.info(
@@ -161,18 +173,19 @@ def run(
         prompt_text = TEMPLATES["自然に"]
 
     prompt = TextTransformPrompt(instruction=prompt_text)
+    voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
     logger.info(
         "[run] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
         getattr(stream_fn, "__name__", repr(stream_fn)),
         path,
         prompt.instruction[:160],
-        "set" if voice_output_prompt is not None else "none",
+        "set" if voice_prompt is not None else "none",
     )
 
     try:
         for idx, (status, src, txt, aud) in enumerate(
-            stream_fn(path, prompt, voice_output_prompt),
+            stream_fn(path, prompt, voice_prompt),
             start=1,
         ):
             logger.info(
