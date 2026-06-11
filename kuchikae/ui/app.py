@@ -52,7 +52,14 @@ def create_app(
 
                     run_btn = gr.Button("言い直す", elem_id="run-btn")
 
-                    with gr.Row(elem_id="text-compare"):
+                    voice_prompt = gr.Textbox(
+                        elem_id="voice-prompt-box",
+                        label="声の出し方プロンプト",
+                        value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
+                        lines=3,
+                    )
+
+                    with gr.Row(elem_id="normal-text-compare"):
                         source_text = gr.Textbox(
                             elem_id="source-text",
                             label="聞き取った内容",
@@ -75,19 +82,12 @@ def create_app(
 
                     status = gr.HTML(elem_id="status", value="", visible=True)
 
-                    with gr.Accordion("詳細プロンプト", open=False):
-                        text_prompt = gr.Textbox(
-                            elem_id="prompt-box",
-                            label="LLMに渡す言い換え指示",
-                            value=default_prompt.instruction,
-                            lines=3,
-                        )
-                        voice_prompt = gr.Textbox(
-                            elem_id="voice-prompt-box",
-                            label="声の出し方プロンプト",
-                            value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
-                            lines=3,
-                        )
+                    text_prompt = gr.Textbox(
+                        elem_id="prompt-box",
+                        label="LLMに渡す言い換え指示",
+                        value=default_prompt.instruction,
+                        lines=3,
+                    )
 
                     def _run_handler(audio_value, template_value, text_prompt_value, voice_prompt_value):
                         return run(
@@ -120,7 +120,14 @@ def create_app(
 
                     gr.HTML(PTT_HTML)
 
-                    with gr.Row(elem_id="text-compare"):
+                    simple_voice_prompt = gr.Textbox(
+                        elem_id="simple-voice-prompt-box",
+                        label="声の出し方プロンプト",
+                        value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
+                        lines=3,
+                    )
+
+                    with gr.Row(elem_id="simple-text-compare"):
                         simple_source = gr.Textbox(
                             elem_id="simple-src",
                             label="聞き取った内容",
@@ -140,14 +147,6 @@ def create_app(
                         type="filepath",
                         autoplay=True,
                     )
-
-                    with gr.Accordion("声の詳細プロンプト", open=False):
-                        simple_voice_prompt = gr.Textbox(
-                            elem_id="simple-voice-prompt-box",
-                            label="声の出し方プロンプト",
-                            value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
-                            lines=3,
-                        )
 
                     def _run_simple_handler(audio_value, voice_prompt_value):
                         return run_simple(

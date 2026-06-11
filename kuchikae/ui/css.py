@@ -19,8 +19,8 @@ gradio-app, .gradio-app { background: transparent !important; }
 #template-select label.svelte-19qdtil input { display: none; }
 #run-btn { background: #7C3AED !important; color: white !important; border: none !important; border-radius: 8px; padding: 8px 24px !important; font-size: 14px; font-weight: 600; transition: all .15s ease; margin: 8px 0; }
 #run-btn:hover { opacity: .9; }
-#text-compare { gap: 12px; }
-#text-compare > span { font-size: 11px; font-weight: 600; color: #A1A1AA; text-transform: uppercase; letter-spacing: .04em; display: block; }
+#text-compare, #normal-text-compare, #simple-text-compare { gap: 12px; }
+#text-compare > span, #normal-text-compare > span, #simple-text-compare > span { font-size: 11px; font-weight: 600; color: #A1A1AA; text-transform: uppercase; letter-spacing: .04em; display: block; }
 #source-text > span, #transformed-text > span { font-size: 11px; font-weight: 600; color: #A1A1AA; text-transform: uppercase; letter-spacing: .04em; }
 #audio-input-wrap { background: #27272A; border-radius: 12px; padding: 12px; margin-bottom: 8px; border: 1px solid #3F3F46; }
 #audio-input-wrap .block { background: transparent !important; box-shadow: none !important; }

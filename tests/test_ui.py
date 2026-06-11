@@ -47,6 +47,7 @@ def test_create_app_normal_tab_components():
     assert "output-audio" in config_str
     assert "prompt-box" in config_str
     assert "voice-prompt-box" in config_str
+    assert "normal-text-compare" in config_str
 
 
 def test_create_app_simple_tab_components():
@@ -60,6 +61,7 @@ def test_create_app_simple_tab_components():
     assert "simple-output-audio" in config_str
     assert "simple-status" in config_str
     assert "simple-voice-prompt-box" in config_str
+    assert "simple-text-compare" in config_str
 
 
 def test_create_app_ptt_button():
