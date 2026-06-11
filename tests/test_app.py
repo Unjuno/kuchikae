@@ -18,7 +18,7 @@ def test_str_existing_file(tmp_path: str) -> None:
 
 
 def test_str_nonexistent_file(tmp_path: str) -> None:
-    assert normalize_audio_path(str(tmp_path / "missing.wav")) == str(tmp_path / "missing.wav")
+    assert normalize_audio_path(str(tmp_path / "missing.wav")) is None
 
 
 def test_none() -> None:
@@ -48,6 +48,18 @@ def test_dict_fallback_to_name_and_path(tmp_path: str) -> None:
 
     assert normalize_audio_path({"name": str(wav)}) == str(wav)
     assert normalize_audio_path({"path": str(wav)}) == str(wav)
+
+
+def test_dict_rejects_missing_path(tmp_path: str) -> None:
+    assert normalize_audio_path({"path": str(tmp_path / "missing.wav")}) is None
+
+
+def test_dict_rejects_blob_url() -> None:
+    assert normalize_audio_path({"url": "blob:abc"}) is None
+
+
+def test_dict_rejects_value_string() -> None:
+    assert normalize_audio_path({"value": "not-a-file"}) is None
 
 
 def test_dict_with_empty_keys_raises() -> None:

@@ -32,6 +32,14 @@ def normalize_audio_path(audio_input) -> str | None:
         logger.warning("[normalize] input is None")
         return None
 
+    def _valid_local_file(candidate) -> str | None:
+        if not candidate:
+            return None
+        path = str(candidate).strip()
+        if path and os.path.isfile(path):
+            return path
+        return None
+
     if isinstance(audio_input, tuple):
         if len(audio_input) == 2 and isinstance(audio_input[0], (int, float)) and hasattr(audio_input[1], "__array__"):
             sr, data = audio_input
@@ -40,8 +48,10 @@ def normalize_audio_path(audio_input) -> str | None:
                 logger.info("[normalize] tuple(sr,data) -> %s", tmp.name)
                 return tmp.name
         if len(audio_input) >= 1 and isinstance(audio_input[0], str) and audio_input[0]:
-            logger.info("[normalize] tuple[0] -> %s", audio_input[0])
-            return str(audio_input[0])
+            path = _valid_local_file(audio_input[0])
+            if path:
+                logger.info("[normalize] tuple[0] -> %s", path)
+                return path
         if len(audio_input) == 2:
             sr, data = audio_input
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -52,24 +62,33 @@ def normalize_audio_path(audio_input) -> str | None:
         return None
 
     if isinstance(audio_input, dict):
-        for key in ("path", "name", "orig_name", "value", "file", "url", "filepath"):
+        for key in ("path", "name", "orig_name", "filepath"):
             candidate = audio_input.get(key)
-            if candidate:
-                logger.info("[normalize] dict.%s -> %s", key, candidate)
-                return str(candidate)
-        logger.warning("[normalize] dict but no valid file. keys=%s", list(audio_input.keys()))
+            path = _valid_local_file(candidate)
+            if path:
+                logger.info("[normalize] dict.%s -> %s", key, path)
+                return path
+        logger.warning(
+            "[normalize] dict but no valid local file. keys=%s repr=%r",
+            list(audio_input.keys()),
+            audio_input,
+        )
         return None
 
-    for attr in ("path", "name", "orig_name", "value", "file", "url", "filepath"):
+    for attr in ("path", "name", "orig_name", "filepath"):
         candidate = getattr(audio_input, attr, None)
-        if candidate:
-            logger.info("[normalize] obj.%s -> %s", attr, candidate)
-            return str(candidate)
+        path = _valid_local_file(candidate)
+        if path:
+            logger.info("[normalize] obj.%s -> %s", attr, path)
+            return path
 
-    result = str(audio_input)
-    if result and result != "None":
-        logger.info("[normalize] str -> %s", result)
-        return result
+    if isinstance(audio_input, str):
+        path = _valid_local_file(audio_input)
+        if path:
+            logger.info("[normalize] str -> %s", path)
+            return path
+        logger.warning("[normalize] str but not a local file: %r", audio_input)
+        return None
 
     logger.warning("[normalize] unresolvable: type=%s repr=%s", type(audio_input).__name__, repr(audio_input)[:200])
     return None

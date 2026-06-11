@@ -118,6 +118,9 @@ def create_app(
                         type="filepath",
                     )
 
+                    # NOTE: This is a temporary Gradio Audio stop-event flow.
+                    # It intentionally avoids a DOM fallback click chain and is not
+                    # the final Web Audio API MediaRecorder design.
                     gr.HTML(PTT_HTML)
 
                     simple_voice_prompt = gr.Textbox(
