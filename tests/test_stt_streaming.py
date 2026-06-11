@@ -10,6 +10,7 @@ from kuchikae.domain.stt import (
     DummyStreamingSTTBackend,
     StreamingSTTBackend,
 )
+from kuchikae.backends.stt import ChunkedStreamingSTTBackend
 from kuchikae.domain.types import STTCommit, STTFinal, STTPartial
 
 
@@ -146,3 +147,76 @@ class TestDummyStreamingSTTBackend:
         assert "push_audio" in StreamingSTTBackend.__abstractmethods__
         assert "flush" in StreamingSTTBackend.__abstractmethods__
 
+
+# ---------------------------------------------------------------------------
+# ChunkedStreamingSTTBackend (with DummySTTBackend inner)
+# ---------------------------------------------------------------------------
+
+
+class CountingSTTForStreaming:
+    """Minimal STT double that returns incrementing text."""
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def transcribe(self, audio_path: str) -> str:
+        self.call_count += 1
+        return f"chunk_{self.call_count}"
+
+
+class TestChunkedStreamingSTTBackend:
+    def test_push_audio_returns_partial(self) -> None:
+        inner = CountingSTTForStreaming()
+        backend = ChunkedStreamingSTTBackend(inner=inner)  # type: ignore[arg-type]
+        chunk = AudioChunk(
+            session_id="test",
+            samples=np.ones(16000, dtype=np.float32) * 0.1,
+            sample_rate=16000,
+            start_sec=0.0,
+            end_sec=1.0,
+        )
+        result = backend.push_audio(chunk)
+        assert isinstance(result, STTPartial)
+        assert "chunk" in result.text
+
+    def test_flush_returns_partial(self) -> None:
+        inner = CountingSTTForStreaming()
+        backend = ChunkedStreamingSTTBackend(inner=inner)  # type: ignore[arg-type]
+        chunk = AudioChunk(
+            session_id="test",
+            samples=np.ones(16000, dtype=np.float32) * 0.1,
+            sample_rate=16000,
+            start_sec=0.0,
+            end_sec=1.0,
+        )
+        backend.push_audio(chunk)
+        result = backend.flush("test")
+        assert isinstance(result, STTPartial)
+
+    def test_flush_returns_none_if_empty(self) -> None:
+        inner = CountingSTTForStreaming()
+        backend = ChunkedStreamingSTTBackend(inner=inner)  # type: ignore[arg-type]
+        assert backend.flush("test") is None
+
+    def test_stable_prefix_emerges_after_window(self) -> None:
+        inner = CountingSTTForStreaming()
+        backend = ChunkedStreamingSTTBackend(inner=inner, stable_window=2)  # type: ignore[arg-type]
+
+        for i in range(4):
+            chunk = AudioChunk(
+                session_id="test",
+                samples=np.ones(16000, dtype=np.float32) * 0.1,
+                sample_rate=16000,
+                start_sec=float(i),
+                end_sec=float(i + 1),
+            )
+            partial = backend.push_audio(chunk)
+            if i == 0:
+                assert partial.stable_prefix == ""
+                assert partial.unstable_suffix == partial.text
+
+    def test_longest_common_prefix(self) -> None:
+        assert ChunkedStreamingSTTBackend._longest_common_prefix("hello", "hello world") == "hello"
+        assert ChunkedStreamingSTTBackend._longest_common_prefix("hello world", "hello") == "hello"
+        assert ChunkedStreamingSTTBackend._longest_common_prefix("abc", "xyz") == ""
+        assert ChunkedStreamingSTTBackend._longest_common_prefix("", "test") == ""

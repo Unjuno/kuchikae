@@ -10,6 +10,11 @@ dependencies = [
     "pytest",
 ]
 
+[project.optional-dependencies]
+stt = [
+    "faster-whisper",
+]
+
 [project.scripts]
 kuchikae = "kuchikae.cli:main"
 

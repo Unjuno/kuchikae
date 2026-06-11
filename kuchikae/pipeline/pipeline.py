@@ -45,15 +45,27 @@ logger = setup_logger("kuchikae.pipeline")
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     config = backend_config or {}
 
-    stt_type = config.get("stt_backend", "dummy")
+    stt_type = config.get("stt_backend", "faster_whisper")
     use_segmented = config.get("segmented_stt", False)
+    try:
+        from faster_whisper import WhisperModel  # noqa: F401
+        has_faster_whisper = True
+    except ImportError:
+        has_faster_whisper = False
 
-    inner: STTBackend = DummySTTBackend()
+    if stt_type == "faster_whisper" and has_faster_whisper:
+        from kuchikae.backends.stt import FasterWhisperSTTBackend
+        inner = FasterWhisperSTTBackend()
+    else:
+        inner = DummySTTBackend()
 
     stt: STTBackend
     if use_segmented:
         segmenter: AudioSegmenter = FixedWindowSegmenter(chunk_sec=30.0, overlap_sec=2.0)
         stt = SegmentedSTTBackend(inner=inner, segmenter=segmenter)
+    elif config.get("streaming_stt", False):
+        from kuchikae.backends.stt import StreamingFasterWhisperSTTBackend
+        stt = StreamingFasterWhisperSTTBackend(chunk_sec=5.0, overlap_sec=1.0)
     else:
         stt = inner
 
@@ -72,7 +84,11 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     if tt_class == GPTTextTransformBackend and not os.environ.get("OPENAI_API_KEY"):
         tt_class = DummyTextTransformBackend
 
-    vo = DummyVoiceOutputBackend()
+    voice_output_type = config.get("voice_output_backend", "dummy")
+    if voice_output_type == "dummy":
+        vo = DummyVoiceOutputBackend()
+    else:
+        vo = DummyVoiceOutputBackend()
 
     logger.info("pipeline: stt=%s text=%s(%s) voice=%s",
                 type(stt).__name__, type(tt_class()).__name__,
@@ -105,6 +121,13 @@ class KuchikaePipeline:
 
     def warmup(self) -> None:
         logger.info("warming up...")
+
+        if hasattr(self.stt_backend, "_load_model"):
+            try:
+                logger.info("warming up STT...")
+                self.stt_backend._load_model()  # noqa: SLF001
+            except Exception as e:
+                logger.debug("STT warmup skipped: %s", e)
 
         if hasattr(self.voice_output_backend, "_ensure_runtime"):
             try:
