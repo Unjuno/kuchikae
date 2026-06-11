@@ -5,7 +5,6 @@ from kuchikae.domain.audio_key import AudioKey
 from kuchikae.domain.stt import DummySTTBackend, STTBackend
 from kuchikae.domain.text_transform import (
     DummyTextTransformBackend,
-    OllamaTextTransformBackend,
     TextTransformBackend,
 )
 from kuchikae.domain.types import AudioCacheKey, PipelineResult, TextTransformPrompt, VoiceContext, VoiceOutputPrompt
@@ -23,7 +22,6 @@ __all__ = [
     "DummyTextTransformBackend",
     "DummyVoiceOutputBackend",
     "KuchikaePipeline",
-    "OllamaTextTransformBackend",
     "PipelineResult",
     "STTBackend",
     "TextTransformBackend",

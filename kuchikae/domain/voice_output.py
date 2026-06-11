@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 import soundfile as sf
 
-from kuchikae.domain.types import VoiceContext
+from kuchikae.domain.types import VoiceContext, VoiceOutputPrompt
 
 logger = logging.getLogger(__name__)
 OUTPUT_DIR = "outputs"
@@ -21,13 +21,23 @@ OUTPUT_DIR = "outputs"
 class VoiceOutputBackend(ABC):
 
     @abstractmethod
-    def synthesize(self, text: str, voice_context: VoiceContext) -> str:
+    def synthesize(
+        self,
+        text: str,
+        voice_context: VoiceContext,
+        prompt: VoiceOutputPrompt | None = None,
+    ) -> str:
         raise NotImplementedError
 
 
 class DummyVoiceOutputBackend(VoiceOutputBackend):
 
-    def synthesize(self, text: str, voice_context: VoiceContext) -> str:
+    def synthesize(
+        self,
+        text: str,
+        voice_context: VoiceContext,
+        prompt: VoiceOutputPrompt | None = None,
+    ) -> str:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         output_path = os.path.join(OUTPUT_DIR, "dummy.wav")
         duration_seconds = 1.0

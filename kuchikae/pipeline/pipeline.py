@@ -31,6 +31,7 @@ from kuchikae.domain.types import (
     PipelineResult,
     StreamingLatencyReport,
     TextTransformPrompt,
+    VoiceOutputPrompt,
 )
 from kuchikae.domain.voice_output import (
     DummyVoiceOutputBackend,
@@ -188,14 +189,21 @@ class KuchikaePipeline:
         self.processing_cache.set_stt(audio_key, text)
         return text
 
-    def _step_voice(self, text: str, audio_path: str, audio_key: AudioKey, voice_context) -> str:
+    def _step_voice(
+        self,
+        text: str,
+        audio_path: str,
+        audio_key: AudioKey,
+        voice_context,
+        voice_output_prompt: VoiceOutputPrompt | None = None,
+    ) -> str:
         cached_context = self.processing_cache.get_voice_context(audio_key)
         if cached_context is not None:
             voice_context = cached_context
         else:
             self.processing_cache.set_voice_context(audio_key, voice_context)
         
-        out = self.voice_output_backend.synthesize(text, voice_context)
+        out = self.voice_output_backend.synthesize(text, voice_context, voice_output_prompt)
         return out
 
     def process(

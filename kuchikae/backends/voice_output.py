@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from kuchikae.domain.voice_output import DummyVoiceOutputBackend, VoiceOutputBackend
-from kuchikae.domain.types import VoiceContext
+from kuchikae.domain.types import VoiceContext, VoiceOutputPrompt
 
 logger = logging.getLogger(__name__)
 OUTPUT_DIR = "outputs"
@@ -72,7 +72,12 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
             return se_list[0]
         return torch.mean(torch.stack(se_list), dim=0)
 
-    def synthesize(self, text: str, voice_context: VoiceContext) -> str:
+    def synthesize(
+        self,
+        text: str,
+        voice_context: VoiceContext,
+        prompt: VoiceOutputPrompt | None = None,
+    ) -> str:
         if not voice_context.ready or not voice_context.reference_audio_path:
             return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
 
@@ -150,7 +155,12 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         self._log(f"load: {time.time()-t1:.2f}s")
         return self._runtime
 
-    def synthesize(self, text: str, voice_context: VoiceContext) -> str:
+    def synthesize(
+        self,
+        text: str,
+        voice_context: VoiceContext,
+        prompt: VoiceOutputPrompt | None = None,
+    ) -> str:
         if not voice_context.ready or not voice_context.reference_audio_path:
             return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
 
