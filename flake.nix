@@ -26,6 +26,13 @@
 
     in rec {
       packages.default = kuchikae-tools;
+      formatter = pkgs.alejandra;
+      checks.format = pkgs.runCommand "kuchikae-format-check" {
+        nativeBuildInputs = [ pkgs.alejandra ];
+      } ''
+        alejandra --check ${./.}
+        touch $out
+      '';
 
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [

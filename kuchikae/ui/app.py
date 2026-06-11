@@ -20,6 +20,7 @@ from kuchikae.ui.handlers import (
     run,
     run_simple,
 )
+from kuchikae.ui.js import PTT_HTML
 
 logger = logging.getLogger("kuchikae.ui.app")
 
@@ -95,11 +96,13 @@ def create_app(
 
                 with gr.Tab("簡易"):
                     simple_audio = gr.Audio(
-                        elem_id="simple-audio",
-                        label="音声を録音",
+                        elem_id="simple-audio-wrap",
+                        label="",
                         sources=["microphone"],
                         type="filepath",
                     )
+
+                    gr.HTML(PTT_HTML)
 
                     with gr.Row(elem_id="text-compare"):
                         simple_source = gr.Textbox(

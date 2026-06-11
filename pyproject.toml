@@ -7,10 +7,12 @@ dependencies = [
     "numpy",
     "soundfile",
     "pyyaml",
-    "pytest",
 ]
 
 [project.optional-dependencies]
+test = [
+    "pytest",
+]
 stt = [
     "faster-whisper",
 ]
@@ -38,6 +40,10 @@ silentcipher = { git = "https://github.com/SesameAILabs/silentcipher.git", rev =
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
+    "unit: fast pure tests",
+    "contract: backend contract tests",
+    "golden: text quality golden tests",
+    "e2e: browser and UI tests",
     "slow: tests that load real models (e.g. Whisper, TTS)",
 ]
 
@@ -45,6 +51,7 @@ markers = [
 dev = [
     "playwright",
     "pytest-playwright",
+    "pytest",
 ]
 
 [project.urls]

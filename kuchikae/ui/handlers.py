@@ -40,6 +40,10 @@ def normalize_audio_path(audio_input) -> str | None:
             return tmp.name
 
     if isinstance(audio_input, dict):
+        orig_name = audio_input.get("orig_name")
+        if orig_name and os.path.isfile(orig_name):
+            logger.info("[normalize] dict.orig_name -> %s", orig_name)
+            return str(orig_name)
         path = audio_input.get("path")
         if path and os.path.isfile(path):
             logger.info("[normalize] dict.path -> %s", path)
@@ -55,6 +59,10 @@ def normalize_audio_path(audio_input) -> str | None:
     if path and os.path.isfile(path):
         logger.info("[normalize] obj.path -> %s", path)
         return str(path)
+    orig_name = getattr(audio_input, "orig_name", None)
+    if orig_name and os.path.isfile(orig_name):
+        logger.info("[normalize] obj.orig_name -> %s", orig_name)
+        return str(orig_name)
 
     result = str(audio_input)
     if os.path.isfile(result):
@@ -74,7 +82,7 @@ def run_simple(
     path = normalize_audio_path(audio_input)
     if path is None:
         logger.warning("[run_simple] no path, aborting")
-        yield gr.update(), "", "", "音声を録音してください"
+        yield gr.update(), "", "", ""
         return
 
     prompt = TextTransformPrompt(instruction=TEMPLATES["自然に"])

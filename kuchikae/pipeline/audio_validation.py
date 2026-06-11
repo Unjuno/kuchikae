@@ -21,12 +21,23 @@ def validate_audio(audio_path: str) -> None:
 
     Raises ValueError with a descriptive message on failure.
     """
+    if not audio_path:
+        raise ValueError("Audio path is required")
+    if not os.path.exists(audio_path):
+        raise ValueError(f"Audio file not found: {audio_path}")
     ext = os.path.splitext(audio_path)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise ValueError(f"Unsupported format ({ext})")
     size = os.path.getsize(audio_path)
     if size > MAX_FILE_SIZE:
         raise ValueError(f"File too large ({size / 1e6:.1f}MB > {MAX_FILE_SIZE / 1e6:.0f}MB)")
-    info = sf.info(audio_path)
+    try:
+        info = sf.info(audio_path)
+    except Exception as e:
+        raise ValueError(
+            "Audio file could not be read. Please use WAV or FLAC, or re-record the audio."
+        ) from e
+    if info.duration <= 0:
+        raise ValueError("Audio is empty")
     if info.duration > MAX_AUDIO_DURATION:
         raise ValueError(f"Audio too long ({info.duration:.0f}s > {MAX_AUDIO_DURATION:.0f}s)")

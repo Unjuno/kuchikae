@@ -173,7 +173,12 @@ class KuchikaePipeline:
         logger.info("warmup done")
 
     def check_audio(self, audio_path: str) -> None:
-        validate_audio(audio_path)
+        try:
+            validate_audio(audio_path)
+        except ValueError as e:
+            if "not found" in str(e):
+                raise FileNotFoundError(str(e)) from e
+            raise
 
     def _step_stt(self, audio_path: str, audio_key: AudioKey) -> str:
         cached = self.processing_cache.get_stt(audio_key)

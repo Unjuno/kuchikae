@@ -852,7 +852,6 @@ source = { virtual = "." }
 dependencies = [
     { name = "gradio", marker = "sys_platform == 'darwin'" },
     { name = "numpy", marker = "sys_platform == 'darwin'" },
-    { name = "pytest", marker = "sys_platform == 'darwin'" },
     { name = "pyyaml", marker = "sys_platform == 'darwin'" },
     { name = "soundfile", marker = "sys_platform == 'darwin'" },
 ]
@@ -868,6 +867,9 @@ real = [
 stt = [
     { name = "faster-whisper", marker = "sys_platform == 'darwin'" },
 ]
+test = [
+    { name = "pytest", marker = "sys_platform == 'darwin'" },
+]
 tts = [
     { name = "irodori-tts", marker = "sys_platform == 'darwin'" },
     { name = "silentcipher", marker = "sys_platform == 'darwin'" },
@@ -878,6 +880,7 @@ tts = [
 [package.dev-dependencies]
 dev = [
     { name = "playwright", marker = "sys_platform == 'darwin'" },
+    { name = "pytest", marker = "sys_platform == 'darwin'" },
     { name = "pytest-playwright", marker = "sys_platform == 'darwin'" },
 ]
 
@@ -888,18 +891,19 @@ requires-dist = [
     { name = "irodori-tts", marker = "extra == 'tts'", git = "https://github.com/Aratako/Irodori-TTS.git" },
     { name = "kuchikae", extras = ["stt", "tts"], marker = "extra == 'real'", virtual = "." },
     { name = "numpy" },
-    { name = "pytest" },
+    { name = "pytest", marker = "extra == 'test'" },
     { name = "pyyaml" },
     { name = "silentcipher", marker = "extra == 'tts'", git = "https://github.com/SesameAILabs/silentcipher.git?rev=d46d7d0893a583d8968ab3a6626e2289faec9152" },
     { name = "soundfile" },
     { name = "torch", marker = "extra == 'tts'", specifier = ">=2.12.0" },
     { name = "torchaudio", marker = "extra == 'tts'", specifier = ">=2.11.0" },
 ]
-provides-extras = ["stt", "tts", "real"]
+provides-extras = ["test", "stt", "tts", "real"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "playwright" },
+    { name = "pytest" },
     { name = "pytest-playwright" },
 ]
 
