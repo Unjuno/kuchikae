@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from importlib.resources import files
 from functools import lru_cache
 
-from kuchikae.domain.types import TextTransformPrompt, TransformState, TransformUpdate
+from kuchikae.domain.types import TextTransformPrompt, TransformUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -247,14 +247,16 @@ class IncrementalTextTransformBackend(ABC):
 
     Transforms only new (committed) portions of source text while
     preserving previously transformed output.
+
+    Subclasses maintain internal per-session state.
     """
 
     @abstractmethod
     def transform_committed(
         self,
         committed_source_text: str,
-        previous_state: TransformState,
         prompt: TextTransformPrompt,
+        session_id: str = "",
     ) -> TransformUpdate:
         ...
 
@@ -263,32 +265,45 @@ class DummyIncrementalTextTransformBackend(IncrementalTextTransformBackend):
     """Dummy incremental transform for testing.
 
     Applies a simple prefix to each new segment.
+    Per-session state is tracked internally.
     """
+
+    def __init__(self) -> None:
+        # per-session state: last transformed length so far
+        self._transformed_up_to: dict[str, int] = {}
+        self._accumulated: dict[str, str] = {}
 
     def transform_committed(
         self,
         committed_source_text: str,
-        previous_state: TransformState,
         prompt: TextTransformPrompt,
+        session_id: str = "",
     ) -> TransformUpdate:
-        new_text = committed_source_text[previous_state.transformed_up_to:]
+        prev = self._transformed_up_to.get(session_id, 0)
+        accumulated = self._accumulated.get(session_id, "")
+        new_text = committed_source_text[prev:]
         if not new_text:
             return TransformUpdate(
-                new_output_segment="",
-                updated_state=previous_state,
+                session_id=session_id,
+                source_committed_text=committed_source_text,
+                transformed_committed_text=accumulated,
+                newly_transformed_text="",
+                is_final=False,
             )
 
         instruction = prompt.instruction.strip()
         prefix = "[transformed] " if not instruction else "[transformed according to prompt] "
-        new_output_segment = prefix + new_text
+        newly_transformed = prefix + new_text
+        accumulated += newly_transformed
+        self._transformed_up_to[session_id] = len(committed_source_text)
+        self._accumulated[session_id] = accumulated
 
-        updated_state = TransformState(
-            transformed_up_to=len(committed_source_text),
-            accumulated_output=previous_state.accumulated_output + new_output_segment,
-        )
         return TransformUpdate(
-            new_output_segment=new_output_segment,
-            updated_state=updated_state,
+            session_id=session_id,
+            source_committed_text=committed_source_text,
+            transformed_committed_text=accumulated,
+            newly_transformed_text=newly_transformed,
+            is_final=False,
         )
 
 

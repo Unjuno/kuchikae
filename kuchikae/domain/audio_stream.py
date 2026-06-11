@@ -77,13 +77,31 @@ class EnergyVAD:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True)
 class AudioChunk:
-    samples: np.ndarray
-    sample_rate: int
-    start_sec: float
-    end_sec: float
+    session_id: str
+    chunk_index: int = 0
+    samples: np.ndarray = field(default_factory=lambda: np.array([], dtype=np.float32))
+    sample_rate: int = 16000
+    start_sec: float = 0.0
+    end_sec: float = 0.0
     has_speech: bool = True
+    is_final: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.session_id:
+            raise ValueError("session_id must be non-empty")
+        if self.chunk_index < 0:
+            raise ValueError(f"chunk_index must be >= 0, got {self.chunk_index}")
+        if self.sample_rate <= 0:
+            raise ValueError(f"sample_rate must be > 0, got {self.sample_rate}")
+        if self.start_sec < 0:
+            raise ValueError(f"start_sec must be >= 0, got {self.start_sec}")
+        if self.end_sec < self.start_sec:
+            raise ValueError(
+                f"end_sec ({self.end_sec}) must be >= start_sec ({self.start_sec})"
+            )
+        object.__setattr__(self, "duration_sec", self.end_sec - self.start_sec)
 
 
 # ---------------------------------------------------------------------------
@@ -103,12 +121,15 @@ class AudioChunker:
         sample_rate: int = 16000,
         chunk_sec: float = 2.0,
         hop_sec: float = 0.5,
+        session_id: str = "default_session",
     ) -> None:
         self.sample_rate = sample_rate
         self.chunk_samples = int(chunk_sec * sample_rate)
         self.hop_samples = int(hop_sec * sample_rate)
+        self.session_id = session_id
         self._buffer: np.ndarray = np.array([], dtype=np.float32)
         self._total_samples = 0
+        self._chunk_index = 0
 
     @property
     def buffered_sec(self) -> float:
@@ -132,12 +153,15 @@ class AudioChunker:
 
             rms_val = _rms(chunk_data)
             yield AudioChunk(
+                session_id=self.session_id,
+                chunk_index=self._chunk_index,
                 samples=chunk_data,
                 sample_rate=self.sample_rate,
                 start_sec=start_sec,
                 end_sec=end_sec,
                 has_speech=rms_val > 0.01,
             )
+            self._chunk_index += 1
             start_pos += self.hop_samples
 
         self._total_samples = start_pos
@@ -147,17 +171,22 @@ class AudioChunker:
         if remaining > 0:
             total_sec = self._total_samples / self.sample_rate
             yield AudioChunk(
+                session_id=self.session_id,
+                chunk_index=self._chunk_index,
                 samples=self._buffer,
                 sample_rate=self.sample_rate,
                 start_sec=total_sec,
                 end_sec=total_sec + remaining / self.sample_rate,
                 has_speech=_rms(self._buffer) > 0.01,
+                is_final=True,
             )
+            self._chunk_index += 1
             self._buffer = np.array([], dtype=np.float32)
 
     def reset(self) -> None:
         self._buffer = np.array([], dtype=np.float32)
         self._total_samples = 0
+        self._chunk_index = 0
 
 
 # ---------------------------------------------------------------------------

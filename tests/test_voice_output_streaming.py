@@ -139,11 +139,11 @@ class TestDummyStreamingVoiceOutputBackend:
     def test_prepare_voice(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
         vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=True)
-        backend.prepare_voice(vc)
+        backend.prepare_voice(vc, session_id="test")
 
     def test_synthesize_segment_returns_audio(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
-        samples, sr = backend.synthesize_segment("テスト")
+        samples, sr = backend.synthesize_segment("テスト", session_id="test")
         assert isinstance(samples, np.ndarray)
         assert sr > 0
         assert len(samples) > 0
@@ -151,18 +151,18 @@ class TestDummyStreamingVoiceOutputBackend:
     def test_finalize_returns_path(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
         vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=True)
-        backend.prepare_voice(vc)
-        backend.synthesize_segment("最初の文。")
-        backend.synthesize_segment("次の文。")
-        path = backend.finalize()
+        backend.prepare_voice(vc, session_id="test")
+        backend.synthesize_segment("最初の文。", session_id="test")
+        backend.synthesize_segment("次の文。", session_id="test")
+        path = backend.finalize(session_id="test")
         assert isinstance(path, str)
         assert os.path.isfile(path)
 
     def test_finalize_empty_returns_path(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
         vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=True)
-        backend.prepare_voice(vc)
-        path = backend.finalize()
+        backend.prepare_voice(vc, session_id="test2")
+        path = backend.finalize(session_id="test2")
         assert isinstance(path, str)
 
     def test_is_abstract(self) -> None:
@@ -172,17 +172,17 @@ class TestDummyStreamingVoiceOutputBackend:
 
     def test_different_segments_produce_different_audio(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
-        s1, _ = backend.synthesize_segment("短い")
-        s2, _ = backend.synthesize_segment("これは長めのテスト文です")
+        s1, _ = backend.synthesize_segment("短い", session_id="test")
+        s2, _ = backend.synthesize_segment("これは長めのテスト文です", session_id="test")
         # Longer text should produce more samples
         assert len(s2) >= len(s1)
 
     def test_multiple_segments_with_pause(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
         vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=True)
-        backend.prepare_voice(vc)
-        backend.synthesize_segment("一つ目。")
-        backend.synthesize_segment("二つ目。")
-        backend.synthesize_segment("三つ目。")
-        path = backend.finalize()
+        backend.prepare_voice(vc, session_id="test")
+        backend.synthesize_segment("一つ目。", session_id="test")
+        backend.synthesize_segment("二つ目。", session_id="test")
+        backend.synthesize_segment("三つ目。", session_id="test")
+        path = backend.finalize(session_id="test")
         assert os.path.getsize(path) > 0

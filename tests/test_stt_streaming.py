@@ -11,11 +11,11 @@ from kuchikae.domain.stt import (
     DummyStreamingSTTBackend,
     StreamingSTTBackend,
 )
-from kuchikae.domain.types import STTFinal, STTPartial
+from kuchikae.domain.types import STTCommit, STTFinal, STTPartial
 
 
 # ---------------------------------------------------------------------------
-# STTPartial / STTFinal dataclasses
+# STTPartial / STTFinal / STTCommit dataclasses
 # ---------------------------------------------------------------------------
 
 
@@ -44,12 +44,52 @@ class TestSTTPartial:
         )
         assert p.confidence is None
 
+    def test_session_id(self) -> None:
+        p = STTPartial(session_id="sess_001")
+        assert p.session_id == "sess_001"
+
+    def test_defaults(self) -> None:
+        p = STTPartial()
+        assert p.session_id == ""
+        assert p.text == ""
+        assert p.start_sec == 0.0
+
+    def test_frozen(self) -> None:
+        p = STTPartial()
+        with pytest.raises(AttributeError):
+            p.text = "other"  # type: ignore[misc]
+
 
 class TestSTTFinal:
     def test_fields(self) -> None:
         f = STTFinal(text="hello world", start_sec=0.0, end_sec=2.0, confidence=0.98)
         assert f.text == "hello world"
         assert f.confidence == 0.98
+
+
+class TestSTTCommit:
+    def test_fields(self) -> None:
+        c = STTCommit(
+            session_id="sess_001",
+            text="hello world",
+            start_sec=0.0,
+            end_sec=2.0,
+            confidence=0.98,
+        )
+        assert c.session_id == "sess_001"
+        assert c.text == "hello world"
+        assert c.confidence == 0.98
+
+    def test_defaults(self) -> None:
+        c = STTCommit()
+        assert c.session_id == ""
+        assert c.text == ""
+        assert c.confidence is None
+
+    def test_frozen(self) -> None:
+        c = STTCommit(text="hello")
+        with pytest.raises(AttributeError):
+            c.text = "world"  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +101,7 @@ class TestDummyStreamingSTTBackend:
     def test_push_audio_returns_partial(self) -> None:
         backend = DummyStreamingSTTBackend()
         chunk = AudioChunk(
+            session_id="test",
             samples=np.zeros(1600),
             sample_rate=16000,
             start_sec=0.0,
@@ -70,28 +111,30 @@ class TestDummyStreamingSTTBackend:
         assert isinstance(result, STTPartial)
         assert result.text != ""
 
-    def test_flush_returns_final(self) -> None:
+    def test_flush_returns_partial(self) -> None:
         backend = DummyStreamingSTTBackend()
         chunk = AudioChunk(
+            session_id="test",
             samples=np.zeros(1600),
             sample_rate=16000,
             start_sec=0.0,
             end_sec=0.1,
         )
         backend.push_audio(chunk)
-        result = backend.flush()
-        assert isinstance(result, STTFinal)
+        result = backend.flush("test")
+        assert isinstance(result, STTPartial)
         assert result.text == "明日までに資料を送ってください"
 
     def test_flush_returns_none_if_no_chunks(self) -> None:
         backend = DummyStreamingSTTBackend()
-        result = backend.flush()
+        result = backend.flush("test")
         assert result is None
 
     def test_multiple_pushes_accumulate(self) -> None:
         backend = DummyStreamingSTTBackend()
         for i in range(3):
             chunk = AudioChunk(
+                session_id="test",
                 samples=np.zeros(1600),
                 sample_rate=16000,
                 start_sec=float(i),
@@ -126,6 +169,7 @@ class TestChunkedStreamingSTTBackend:
         inner = CountingSTTForStreaming()
         backend = ChunkedStreamingSTTBackend(inner=inner)  # type: ignore[arg-type]
         chunk = AudioChunk(
+            session_id="test",
             samples=np.ones(16000, dtype=np.float32) * 0.1,
             sample_rate=16000,
             start_sec=0.0,
@@ -135,23 +179,24 @@ class TestChunkedStreamingSTTBackend:
         assert isinstance(result, STTPartial)
         assert "chunk" in result.text
 
-    def test_flush_returns_final(self) -> None:
+    def test_flush_returns_partial(self) -> None:
         inner = CountingSTTForStreaming()
         backend = ChunkedStreamingSTTBackend(inner=inner)  # type: ignore[arg-type]
         chunk = AudioChunk(
+            session_id="test",
             samples=np.ones(16000, dtype=np.float32) * 0.1,
             sample_rate=16000,
             start_sec=0.0,
             end_sec=1.0,
         )
         backend.push_audio(chunk)
-        result = backend.flush()
-        assert isinstance(result, STTFinal)
+        result = backend.flush("test")
+        assert isinstance(result, STTPartial)
 
     def test_flush_returns_none_if_empty(self) -> None:
         inner = CountingSTTForStreaming()
         backend = ChunkedStreamingSTTBackend(inner=inner)  # type: ignore[arg-type]
-        assert backend.flush() is None
+        assert backend.flush("test") is None
 
     def test_stable_prefix_emerges_after_window(self) -> None:
         inner = CountingSTTForStreaming()
@@ -159,6 +204,7 @@ class TestChunkedStreamingSTTBackend:
 
         for i in range(4):
             chunk = AudioChunk(
+                session_id="test",
                 samples=np.ones(16000, dtype=np.float32) * 0.1,
                 sample_rate=16000,
                 start_sec=float(i),

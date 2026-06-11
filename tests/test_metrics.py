@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-import time
 
 import pytest
 
-from kuchikae.domain.metrics import LatencyLogger
+from kuchikae.domain.metrics import LatencyLogger, StreamingMetricsRecorder
 from kuchikae.domain.types import (
     PipelineResult,
     StreamChunk,
@@ -17,52 +16,58 @@ from kuchikae.domain.types import (
 
 
 class TestStreamingLatencyReport:
-    """StreamingLatencyReport dataclass."""
+    """StreamingLatencyReport dataclass with timestamp-based fields."""
 
     def test_default_construction(self) -> None:
         report = StreamingLatencyReport(session_id="sess_001")
         assert report.session_id == "sess_001"
-        assert report.time_to_first_partial_transcript == 0.0
-        assert report.time_to_first_committed_transcript == 0.0
-        assert report.time_to_first_transformed_text == 0.0
-        assert report.time_to_first_audio == 0.0
-        assert report.total_recording_sec == 0.0
-        assert report.total_processing_sec == 0.0
-        assert report.realtime_factor == 0.0
-        assert report.timestamp == 0.0
-        assert report.stages is None
+        assert report.recording_started_at is None
+        assert report.first_partial_transcript_at is None
 
-    def test_realtime_factor_computed(self) -> None:
+    def test_computed_properties(self) -> None:
         report = StreamingLatencyReport(
             session_id="sess_002",
-            total_recording_sec=10.0,
-            total_processing_sec=5.0,
+            recording_started_at=0.0,
+            first_partial_transcript_at=0.8,
+            first_committed_transcript_at=1.5,
+            first_transformed_text_at=2.0,
+            first_audio_at=2.8,
+            recording_finished_at=8.0,
+            processing_finished_at=11.0,
         )
-        assert report.realtime_factor == 0.5
+        assert report.time_to_first_partial_transcript == 0.8
+        assert report.time_to_first_committed_transcript == 1.5
+        assert report.time_to_first_transformed_text == 2.0
+        assert report.time_to_first_audio == 2.8
+        assert report.recording_duration == 8.0
+        assert report.processing_tail_latency == 3.0
+        assert report.realtime_factor == pytest.approx(11.0 / 8.0)
 
-    def test_realtime_factor_zero_recording(self) -> None:
-        report = StreamingLatencyReport(
-            session_id="sess_003",
-            total_recording_sec=0.0,
-            total_processing_sec=5.0,
-        )
-        assert report.realtime_factor == 0.0
+    def test_computed_properties_return_none_when_missing(self) -> None:
+        report = StreamingLatencyReport(session_id="sess_003")
+        assert report.time_to_first_partial_transcript is None
+        assert report.recording_duration is None
+        assert report.realtime_factor is None
 
-    def test_with_stages(self) -> None:
+    def test_realtime_factor_none_when_recording_duration_zero(self) -> None:
         report = StreamingLatencyReport(
             session_id="sess_004",
-            time_to_first_partial_transcript=0.8,
-            time_to_first_committed_transcript=1.5,
-            time_to_first_transformed_text=2.0,
-            time_to_first_audio=2.8,
-            total_recording_sec=8.0,
-            total_processing_sec=3.0,
-            stages={"vad": 0.2, "stt": 0.5, "llm": 0.3, "tts": 0.8},
+            recording_started_at=0.0,
+            recording_finished_at=0.0,
+            processing_finished_at=5.0,
         )
-        assert report.time_to_first_audio == 2.8
-        assert report.realtime_factor == 0.375
-        assert report.stages is not None
-        assert report.stages["vad"] == 0.2
+        assert report.recording_duration == 0.0
+        assert report.realtime_factor is None
+
+    def test_partial_markers(self) -> None:
+        """Only some timestamps set; other properties return None."""
+        report = StreamingLatencyReport(
+            session_id="sess_005",
+            recording_started_at=10.0,
+            first_partial_transcript_at=10.5,
+        )
+        assert report.time_to_first_partial_transcript == 0.5
+        assert report.time_to_first_audio is None
 
 
 class TestStreamChunk:
@@ -105,12 +110,10 @@ class TestLatencyLogger:
         logger = LatencyLogger(log_dir=str(tmp_path))
         report = StreamingLatencyReport(
             session_id="sess_log_001",
-            time_to_first_partial_transcript=0.5,
-            time_to_first_committed_transcript=1.2,
-            time_to_first_transformed_text=1.8,
-            time_to_first_audio=2.5,
-            total_recording_sec=6.0,
-            total_processing_sec=2.0,
+            recording_started_at=0.0,
+            first_partial_transcript_at=0.5,
+            recording_finished_at=6.0,
+            processing_finished_at=8.0,
         )
         logger.log_report(report)
         assert logger.report_count == 1
@@ -118,15 +121,15 @@ class TestLatencyLogger:
         reports = logger.read_reports()
         assert len(reports) == 1
         assert reports[0].session_id == "sess_log_001"
-        assert reports[0].realtime_factor == pytest.approx(2.0 / 6.0)
 
     def test_multiple_reports(self, tmp_path) -> None:
         logger = LatencyLogger(log_dir=str(tmp_path))
         for i in range(3):
             report = StreamingLatencyReport(
                 session_id=f"sess_{i:03d}",
-                total_recording_sec=5.0,
-                total_processing_sec=1.0 + i,
+                recording_started_at=0.0,
+                recording_finished_at=5.0,
+                processing_finished_at=6.0 + i,
             )
             logger.log_report(report)
         assert logger.report_count == 3
@@ -134,6 +137,10 @@ class TestLatencyLogger:
         reports = logger.read_reports()
         assert len(reports) == 3
         assert [r.session_id for r in reports] == ["sess_000", "sess_001", "sess_002"]
+
+        # Check that realtime_factor round-trips correctly
+        assert reports[0].processing_finished_at == 6.0
+        assert reports[0].recording_duration == 5.0
 
     def test_read_empty(self, tmp_path) -> None:
         logger = LatencyLogger(log_dir=str(tmp_path))
@@ -148,22 +155,14 @@ class TestLatencyLogger:
         logger.clear()
         assert logger.report_count == 0
 
-    def test_timestamp_auto_set(self, tmp_path) -> None:
-        logger = LatencyLogger(log_dir=str(tmp_path))
-        before = time.time()
-        report = StreamingLatencyReport(session_id="sess_ts")
-        logger.log_report(report)
-        after = time.time()
-        reports = logger.read_reports()
-        assert before <= reports[0].timestamp <= after
-
     def test_jsonl_format(self, tmp_path) -> None:
         logger = LatencyLogger(log_dir=str(tmp_path))
         report = StreamingLatencyReport(
             session_id="sess_json",
-            time_to_first_audio=1.5,
-            total_recording_sec=10.0,
-            total_processing_sec=3.0,
+            recording_started_at=0.0,
+            first_audio_at=1.5,
+            recording_finished_at=10.0,
+            processing_finished_at=13.0,
         )
         logger.log_report(report)
 
@@ -172,8 +171,64 @@ class TestLatencyLogger:
         with open(log_path) as f:
             line = json.loads(f.readline())
         assert line["session_id"] == "sess_json"
-        assert line["time_to_first_audio"] == 1.5
-        assert line["realtime_factor"] == 0.3
+        assert line["first_audio_at"] == 1.5
+        assert line["recording_started_at"] == 0.0
+
+
+class TestStreamingMetricsRecorder:
+    """StreamingMetricsRecorder — mark_* methods."""
+
+    def test_mark_and_report(self) -> None:
+        rec = StreamingMetricsRecorder(session_id="sess_mr_001")
+        rec.mark_recording_started(timestamp=0.0)
+        rec.mark_first_partial_transcript(timestamp=0.8)
+        rec.mark_first_committed_transcript(timestamp=1.5)
+        report = rec.report()
+        assert report.session_id == "sess_mr_001"
+        assert report.time_to_first_partial_transcript == 0.8
+        assert report.time_to_first_committed_transcript == 1.5
+
+    def test_first_event_wins(self) -> None:
+        rec = StreamingMetricsRecorder()
+        rec.mark_recording_started(timestamp=0.0)
+        rec.mark_first_partial_transcript(timestamp=0.8)
+        rec.mark_first_partial_transcript(timestamp=0.9)
+        report = rec.report()
+        assert report.time_to_first_partial_transcript == 0.8
+
+    def test_report_all_none_when_nothing_marked(self) -> None:
+        rec = StreamingMetricsRecorder(session_id="sess_mr_002")
+        report = rec.report()
+        assert report.time_to_first_partial_transcript is None
+        assert report.time_to_first_audio is None
+
+    def test_full_lifecycle(self) -> None:
+        rec = StreamingMetricsRecorder(session_id="sess_mr_003")
+        rec.mark_recording_started(timestamp=0.0)
+        rec.mark_first_partial_transcript(timestamp=0.5)
+        rec.mark_first_committed_transcript(timestamp=1.0)
+        rec.mark_first_transformed_text(timestamp=1.5)
+        rec.mark_first_audio(timestamp=2.0)
+        rec.mark_recording_finished(timestamp=8.0)
+        rec.mark_processing_finished(timestamp=10.0)
+        report = rec.report()
+        assert report.time_to_first_partial_transcript == 0.5
+        assert report.time_to_first_audio == 2.0
+        assert report.recording_duration == 8.0
+        assert report.realtime_factor == pytest.approx(10.0 / 8.0)
+
+    def test_real_time(self) -> None:
+        """Without explicit timestamps, uses perf_counter and produces
+        non-negative wall-clock durations."""
+        rec = StreamingMetricsRecorder(session_id="sess_mr_real")
+        rec.mark_recording_started()
+        rec.mark_first_partial_transcript()
+        rec.mark_recording_finished()
+        report = rec.report()
+        assert report.time_to_first_partial_transcript is not None
+        assert report.time_to_first_partial_transcript >= 0
+        assert report.recording_duration is not None
+        assert report.recording_duration >= 0
 
 
 class TestPipelineResultLatency:

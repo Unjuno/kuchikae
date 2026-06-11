@@ -316,15 +316,15 @@ class StreamingVoiceOutputBackend(ABC):
     """
 
     @abstractmethod
-    def prepare_voice(self, voice_context: VoiceContext) -> None:
+    def prepare_voice(self, voice_context: VoiceContext, session_id: str = "") -> None:
         ...
 
     @abstractmethod
-    def synthesize_segment(self, text_segment: str) -> tuple[np.ndarray, int]:
+    def synthesize_segment(self, text_segment: str, session_id: str = "", segment_index: int = 0) -> tuple[np.ndarray, int]:
         ...
 
     @abstractmethod
-    def finalize(self) -> str:
+    def finalize(self, session_id: str = "") -> str:
         ...
 
 
@@ -332,28 +332,38 @@ class DummyStreamingVoiceOutputBackend(StreamingVoiceOutputBackend):
     """Dummy streaming voice output for testing.
 
     Generates a short sine tone for each segment.
+    Per-session state is maintained internally.
     """
 
     def __init__(self) -> None:
-        self._queue = AudioSegmentQueue()
-        self._segment_index = 0
+        self._queues: dict[str, AudioSegmentQueue] = {}
+        self._segment_indices: dict[str, int] = {}
 
-    def prepare_voice(self, voice_context: VoiceContext) -> None:
-        self._queue.clear()
-        self._segment_index = 0
+    def _queue(self, session_id: str) -> AudioSegmentQueue:
+        if session_id not in self._queues:
+            self._queues[session_id] = AudioSegmentQueue()
+            self._segment_indices[session_id] = 0
+        return self._queues[session_id]
 
-    def synthesize_segment(self, text_segment: str) -> tuple[np.ndarray, int]:
+    def prepare_voice(self, voice_context: VoiceContext, session_id: str = "") -> None:
+        q = self._queue(session_id)
+        q.clear()
+        self._segment_indices[session_id] = 0
+
+    def synthesize_segment(self, text_segment: str, session_id: str = "", segment_index: int = 0) -> tuple[np.ndarray, int]:
         sr = 16000
         duration = max(0.3, len(text_segment) * 0.05)
         t = np.linspace(0, duration, int(sr * duration), endpoint=False)
         samples = (0.1 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
-        self._queue.enqueue(samples, sr)
-        self._segment_index += 1
+        q = self._queue(session_id)
+        q.enqueue(samples, sr)
+        self._segment_indices[session_id] += 1
         return samples, sr
 
-    def finalize(self) -> str:
+    def finalize(self, session_id: str = "") -> str:
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         path = os.path.join(OUTPUT_DIR, f"streaming_output_{int(time.time())}.wav")
-        merged = self._queue.merge()
+        q = self._queue(session_id)
+        merged = q.merge()
         sf.write(path, merged, 16000)
         return path

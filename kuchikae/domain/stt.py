@@ -144,7 +144,7 @@ class StreamingSTTBackend(ABC):
         ...
 
     @abstractmethod
-    def flush(self) -> STTFinal | None:
+    def flush(self, session_id: str) -> STTPartial | None:
         ...
 
 
@@ -152,15 +152,18 @@ class DummyStreamingSTTBackend(StreamingSTTBackend):
     """Dummy streaming STT for testing."""
 
     def __init__(self) -> None:
-        self._pushed = 0
+        self._pushed: dict[str, int] = {}
         self._final_text = "明日までに資料を送ってください"
         self._chunks = self._final_text.split("、")
 
     def push_audio(self, chunk: AudioChunk) -> STTPartial:
-        frag = "".join(self._chunks[:self._pushed + 1])
-        stable_prefix = "".join(self._chunks[:self._pushed])
-        self._pushed += 1
+        sid = chunk.session_id
+        pushed = self._pushed.get(sid, 0)
+        frag = "".join(self._chunks[:pushed + 1])
+        stable_prefix = "".join(self._chunks[:pushed])
+        self._pushed[sid] = pushed + 1
         return STTPartial(
+            session_id=sid,
             text=frag,
             stable_prefix=stable_prefix,
             unstable_suffix=frag[len(stable_prefix):],
@@ -169,13 +172,19 @@ class DummyStreamingSTTBackend(StreamingSTTBackend):
             confidence=0.95,
         )
 
-    def flush(self) -> STTFinal | None:
-        if self._pushed == 0:
+    def flush(self, session_id: str) -> STTPartial | None:
+        if self._pushed.get(session_id, 0) == 0:
             return None
-        return STTFinal(
-            text=self._final_text,
+        pushed = self._pushed[session_id]
+        frag = "".join(self._chunks[:pushed])
+        stable_prefix = "".join(self._chunks[:pushed - 1]) if pushed > 1 else ""
+        return STTPartial(
+            session_id=session_id,
+            text=frag,
+            stable_prefix=stable_prefix,
+            unstable_suffix=frag[len(stable_prefix):],
             start_sec=0.0,
-            end_sec=len(self._final_text) * 0.1,
+            end_sec=len(frag) * 0.1,
             confidence=0.95,
         )
 
@@ -228,11 +237,18 @@ class ChunkedStreamingSTTBackend(StreamingSTTBackend):
             end_sec=chunk.end_sec,
         )
 
-    def flush(self) -> STTFinal | None:
+    def flush(self, session_id: str) -> STTPartial | None:
         if not self._chunk_texts:
             return None
         full = " ".join(self._chunk_texts)
-        return STTFinal(text=full, start_sec=0.0, end_sec=0.0)
+        return STTPartial(
+            session_id=session_id,
+            text=full,
+            stable_prefix=full,
+            unstable_suffix="",
+            start_sec=0.0,
+            end_sec=0.0,
+        )
 
     @staticmethod
     def _longest_common_prefix(a: str, b: str) -> str:

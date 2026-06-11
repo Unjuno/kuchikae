@@ -136,8 +136,8 @@ def test_pipeline_latency_with_dummy_voice_logs_reports(tmp_path) -> None:
 
     reports = logger.read_reports()
     assert len(reports) == 1
-    assert "stt" in (reports[0].stages or {})
-    assert "voice_output" in (reports[0].stages or {})
+    assert reports[0].processing_finished_at is not None
+    assert reports[0].processing_finished_at > 0
 
     assert result.stt_latency >= 0
     assert result.voice_output_latency >= 0

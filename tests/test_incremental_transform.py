@@ -1,4 +1,4 @@
-"""Tests for incremental text transform — TransformState, TransformUpdate, IncrementalTextTransformBackend."""
+"""Tests for incremental text transform — TransformUpdate, IncrementalTextTransformBackend."""
 
 from __future__ import annotations
 
@@ -8,24 +8,11 @@ from kuchikae.domain.text_transform import (
     DummyIncrementalTextTransformBackend,
     IncrementalTextTransformBackend,
 )
-from kuchikae.domain.types import TextTransformPrompt, TransformState, TransformUpdate
-
-
-# ---------------------------------------------------------------------------
-# TransformState
-# ---------------------------------------------------------------------------
-
-
-class TestTransformState:
-    def test_default_construction(self) -> None:
-        s = TransformState()
-        assert s.transformed_up_to == 0
-        assert s.accumulated_output == ""
-
-    def test_custom_state(self) -> None:
-        s = TransformState(transformed_up_to=10, accumulated_output="hello world")
-        assert s.transformed_up_to == 10
-        assert s.accumulated_output == "hello world"
+from kuchikae.domain.types import (
+    StreamingAudioSegment,
+    TextTransformPrompt,
+    TransformUpdate,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -35,10 +22,24 @@ class TestTransformState:
 
 class TestTransformUpdate:
     def test_fields(self) -> None:
-        state = TransformState(transformed_up_to=5, accumulated_output="hello")
-        update = TransformUpdate(new_output_segment=" world", updated_state=state)
-        assert update.new_output_segment == " world"
-        assert update.updated_state.transformed_up_to == 5
+        update = TransformUpdate(
+            session_id="test",
+            source_committed_text="hello world",
+            transformed_committed_text="[transformed] hello world",
+            newly_transformed_text="[transformed] hello world",
+            is_final=False,
+        )
+        assert update.source_committed_text == "hello world"
+        assert update.transformed_committed_text == "[transformed] hello world"
+        assert update.newly_transformed_text == "[transformed] hello world"
+        assert not update.is_final
+
+    def test_defaults(self) -> None:
+        update = TransformUpdate()
+        assert update.session_id == ""
+        assert update.source_committed_text == ""
+        assert update.transformed_committed_text == ""
+        assert update.newly_transformed_text == ""
 
 
 # ---------------------------------------------------------------------------
@@ -51,29 +52,29 @@ class TestDummyIncrementalTextTransformBackend:
         backend = DummyIncrementalTextTransformBackend()
         prompt = TextTransformPrompt(instruction="")
         result = backend.transform_committed(
-            "hello", TransformState(), prompt,
+            "hello", prompt, session_id="test",
         )
         assert isinstance(result, TransformUpdate)
-        assert "hello" in result.new_output_segment
-        assert result.updated_state.transformed_up_to == 5
+        assert "hello" in result.newly_transformed_text
+        assert result.transformed_committed_text == "[transformed] hello"
 
     def test_transform_second_segment(self) -> None:
         backend = DummyIncrementalTextTransformBackend()
         prompt = TextTransformPrompt(instruction="polite")
-        prev = TransformState(transformed_up_to=5, accumulated_output="[transformed] hello")
+        backend.transform_committed("hello", TextTransformPrompt(instruction=""), session_id="test")
         result = backend.transform_committed(
-            "hello world", prev, prompt,
+            "hello world", prompt, session_id="test",
         )
-        assert "world" in result.new_output_segment
-        assert result.updated_state.transformed_up_to == 11
+        assert "world" in result.newly_transformed_text
+        assert "world" in result.transformed_committed_text
 
     def test_no_new_text_returns_empty(self) -> None:
         backend = DummyIncrementalTextTransformBackend()
         prompt = TextTransformPrompt(instruction="")
-        prev = TransformState(transformed_up_to=5, accumulated_output="hello")
-        result = backend.transform_committed("hello", prev, prompt)
-        assert result.new_output_segment == ""
-        assert result.updated_state is prev
+        backend.transform_committed("hello", prompt, session_id="test")
+        result = backend.transform_committed("hello", prompt, session_id="test")
+        assert result.newly_transformed_text == ""
+        assert result.transformed_committed_text == "[transformed] hello"
 
     def test_is_abstract(self) -> None:
         assert "transform_committed" in IncrementalTextTransformBackend.__abstractmethods__
@@ -81,24 +82,62 @@ class TestDummyIncrementalTextTransformBackend:
     def test_accumulated_output_grows(self) -> None:
         backend = DummyIncrementalTextTransformBackend()
         prompt = TextTransformPrompt(instruction="polite")
-        state = TransformState()
 
-        state = backend.transform_committed("hello", state, prompt).updated_state
-        assert state.transformed_up_to == 5
-        assert len(state.accumulated_output) > 0
+        r1 = backend.transform_committed("hello", prompt, session_id="test")
+        assert "hello" in r1.transformed_committed_text
 
-        state = backend.transform_committed("hello world", state, prompt).updated_state
-        assert state.transformed_up_to == 11
-        assert "world" in state.accumulated_output
+        r2 = backend.transform_committed("hello world", prompt, session_id="test")
+        assert "world" in r2.transformed_committed_text
 
     def test_with_instruction_prefix(self) -> None:
         backend = DummyIncrementalTextTransformBackend()
         prompt = TextTransformPrompt(instruction="丁寧に")
-        result = backend.transform_committed("テスト", TransformState(), prompt)
-        assert "[transformed according to prompt]" in result.new_output_segment
+        result = backend.transform_committed("テスト", prompt, session_id="test")
+        assert "[transformed according to prompt]" in result.newly_transformed_text
 
     def test_without_instruction_prefix(self) -> None:
         backend = DummyIncrementalTextTransformBackend()
         prompt = TextTransformPrompt(instruction="")
-        result = backend.transform_committed("テスト", TransformState(), prompt)
-        assert "[transformed]" in result.new_output_segment
+        result = backend.transform_committed("テスト", prompt, session_id="test")
+        assert "[transformed]" in result.newly_transformed_text
+
+
+# ---------------------------------------------------------------------------
+# StreamingAudioSegment
+# ---------------------------------------------------------------------------
+
+
+class TestStreamingAudioSegment:
+    def test_fields(self) -> None:
+        seg = StreamingAudioSegment(
+            session_id="sess_001",
+            segment_index=2,
+            text="hello",
+            audio_path="/tmp/out.wav",
+            start_sec=0.0,
+            end_sec=2.0,
+            is_final=True,
+        )
+        assert seg.session_id == "sess_001"
+        assert seg.segment_index == 2
+        assert seg.text == "hello"
+        assert seg.audio_path == "/tmp/out.wav"
+        assert seg.is_final
+
+    def test_defaults(self) -> None:
+        seg = StreamingAudioSegment()
+        assert seg.session_id == ""
+        assert seg.segment_index == 0
+        assert seg.text == ""
+        assert seg.audio_path is None
+        assert not seg.is_final
+
+    def test_frozen(self) -> None:
+        seg = StreamingAudioSegment(text="hello")
+        with pytest.raises(AttributeError):
+            seg.text = "world"  # type: ignore[misc]
+
+    def test_optional_timestamps(self) -> None:
+        seg = StreamingAudioSegment(text="test")
+        assert seg.start_sec is None
+        assert seg.end_sec is None

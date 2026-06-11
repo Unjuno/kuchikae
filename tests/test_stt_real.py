@@ -83,7 +83,6 @@ class TestFasterWhisperSTTBackend:
 
         reports = logger.read_reports()
         assert len(reports) == 1
-        assert reports[0].stages is not None
-        assert reports[0].stages["stt"] > 0
-        assert reports[0].total_processing_sec > 0
+        assert reports[0].processing_finished_at is not None
+        assert reports[0].processing_finished_at > 0
         assert result.output_audio_path != ""

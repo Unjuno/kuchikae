@@ -71,6 +71,7 @@ class TestEnergyVAD:
 class TestAudioChunk:
     def test_fields(self) -> None:
         chunk = AudioChunk(
+            session_id="test",
             samples=np.zeros(1600),
             sample_rate=16000,
             start_sec=0.0,
@@ -81,6 +82,37 @@ class TestAudioChunk:
         assert chunk.start_sec == 0.0
         assert chunk.end_sec == 0.1
         assert chunk.has_speech
+
+    def test_defaults(self) -> None:
+        chunk = AudioChunk(session_id="test")
+        assert chunk.session_id == "test"
+        assert chunk.chunk_index == 0
+        assert not chunk.is_final
+        assert chunk.duration_sec == 0.0
+
+    def test_session_id_and_index(self) -> None:
+        chunk = AudioChunk(
+            session_id="sess_001",
+            chunk_index=3,
+            samples=np.zeros(1600),
+            sample_rate=16000,
+            start_sec=0.0,
+            end_sec=2.0,
+            is_final=True,
+        )
+        assert chunk.session_id == "sess_001"
+        assert chunk.chunk_index == 3
+        assert chunk.is_final
+        assert chunk.duration_sec == 2.0
+
+    def test_frozen(self) -> None:
+        chunk = AudioChunk(session_id="test")
+        with pytest.raises(AttributeError):
+            chunk.session_id = "other"  # type: ignore[misc]
+
+    def test_duration_sec_computed(self) -> None:
+        chunk = AudioChunk(session_id="test", start_sec=1.0, end_sec=3.5)
+        assert chunk.duration_sec == 2.5
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +195,7 @@ class TestAudioStreamBuffer:
     def test_accumulates_audio(self) -> None:
         buf = AudioStreamBuffer(session_id="sess_001", sample_rate=16000)
         chunk = AudioChunk(
+            session_id="sess_001",
             samples=np.ones(16000, dtype=np.float32),
             sample_rate=16000,
             start_sec=0.0,
@@ -177,6 +210,7 @@ class TestAudioStreamBuffer:
         buf.finalize()
         assert buf.is_finalized
         chunk = AudioChunk(
+            session_id="sess_002",
             samples=np.zeros(1600),
             sample_rate=16000,
             start_sec=0.0,
@@ -189,6 +223,7 @@ class TestAudioStreamBuffer:
         buf = AudioStreamBuffer(session_id="sess_003", sample_rate=16000)
         for i in range(3):
             chunk = AudioChunk(
+                session_id="sess_003",
                 samples=np.ones(16000, dtype=np.float32) * i,
                 sample_rate=16000,
                 start_sec=float(i),

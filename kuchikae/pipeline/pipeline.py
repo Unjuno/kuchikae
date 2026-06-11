@@ -236,22 +236,10 @@ class KuchikaePipeline:
         )
 
         if self.latency_logger is not None:
-            try:
-                import soundfile as sf
-                info = sf.info(audio_path)
-                recording_duration = info.duration
-            except Exception:
-                recording_duration = 0.0
-
             report = StreamingLatencyReport(
                 session_id=cache_key.path,
-                total_recording_sec=recording_duration,
-                total_processing_sec=total,
-                stages={
-                    "stt": stt_latency,
-                    "text_transform": text_latency,
-                    "voice_output": voice_latency,
-                },
+                recording_started_at=None,
+                processing_finished_at=time.time(),
             )
             self.latency_logger.log_report(report)
 

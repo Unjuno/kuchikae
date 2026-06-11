@@ -4,7 +4,7 @@ from kuchikae.domain.audio import AudioSegmenter, FixedWindowSegmenter, Transcri
 from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor
 from kuchikae.domain.audio_stream import AudioChunk, AudioChunker, AudioStreamBuffer, EnergyVAD
 from kuchikae.domain.audio_key import AudioKey, AudioKeyFromCacheKey, AudioKeyFromPath
-from kuchikae.domain.metrics import LatencyLogger
+from kuchikae.domain.metrics import LatencyLogger, StreamingMetricsRecorder
 from kuchikae.domain.processing_cache import ProcessingCache
 from kuchikae.domain.stt import (
     ChunkedStreamingSTTBackend,
@@ -27,14 +27,20 @@ from kuchikae.domain.text_transform import (
     TemplateTextTransformBackend,
     TextTransformBackend,
 )
-from kuchikae.domain.timing import Timer, now_ms
+from kuchikae.domain.timing import PerfTimer, Timer, now_ms
 from kuchikae.domain.types import (
     AudioCacheKey,
     AudioSegment,
     PipelineResult,
+    STTCommit,
+    STTFinal,
+    STTPartial,
     StreamChunk,
+    StreamingAudioSegment,
     StreamingLatencyReport,
     TextTransformPrompt,
+    TransformState,
+    TransformUpdate,
     VoiceContext,
     VoiceOutputPrompt,
 )
@@ -78,6 +84,7 @@ __all__ = [
     "LatencyLogger",
     "OllamaTextTransformBackend",
     "OpenVoiceOutputBackend",
+    "PerfTimer",
     "PipelineResult",
     "ProcessingCache",
     "PromptedRuleTextTransformBackend",
@@ -86,10 +93,13 @@ __all__ = [
     "segment_sentences",
     "SegmentedSTTBackend",
     "STTBackend",
+    "STTCommit",
     "STTFinal",
     "STTPartial",
     "StreamChunk",
+    "StreamingAudioSegment",
     "StreamingFasterWhisperSTTBackend",
+    "StreamingMetricsRecorder",
     "StreamingSTTBackend",
     "StreamingVoiceOutputBackend",
     "StreamingLatencyReport",
