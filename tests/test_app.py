@@ -18,7 +18,7 @@ def test_str_existing_file(tmp_path: str) -> None:
 
 
 def test_str_nonexistent_file(tmp_path: str) -> None:
-    assert normalize_audio_path(str(tmp_path / "missing.wav")) is None
+    assert normalize_audio_path(str(tmp_path / "missing.wav")) == str(tmp_path / "missing.wav")
 
 
 def test_none() -> None:

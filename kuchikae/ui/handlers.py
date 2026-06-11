@@ -33,32 +33,41 @@ def normalize_audio_path(audio_input) -> str | None:
         return None
 
     if isinstance(audio_input, tuple):
-        sr, data = audio_input
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            sf.write(tmp.name, data, sr)
-            logger.info("[normalize] tuple -> %s", tmp.name)
-            return tmp.name
+        if len(audio_input) == 2 and isinstance(audio_input[0], (int, float)) and hasattr(audio_input[1], "__array__"):
+            sr, data = audio_input
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                sf.write(tmp.name, data, sr)
+                logger.info("[normalize] tuple(sr,data) -> %s", tmp.name)
+                return tmp.name
+        if len(audio_input) >= 1 and isinstance(audio_input[0], str) and audio_input[0]:
+            logger.info("[normalize] tuple[0] -> %s", audio_input[0])
+            return str(audio_input[0])
+        if len(audio_input) == 2:
+            sr, data = audio_input
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                sf.write(tmp.name, data, sr)
+                logger.info("[normalize] tuple -> %s", tmp.name)
+                return tmp.name
+        logger.warning("[normalize] tuple but unsupported shape=%s", len(audio_input))
+        return None
 
     if isinstance(audio_input, dict):
-        for key in ("path", "name", "orig_name"):
+        for key in ("path", "name", "orig_name", "value", "file", "url", "filepath"):
             candidate = audio_input.get(key)
-            if candidate and os.path.isfile(str(candidate)):
+            if candidate:
                 logger.info("[normalize] dict.%s -> %s", key, candidate)
                 return str(candidate)
         logger.warning("[normalize] dict but no valid file. keys=%s", list(audio_input.keys()))
         return None
 
-    path = getattr(audio_input, "path", None)
-    if path and os.path.isfile(path):
-        logger.info("[normalize] obj.path -> %s", path)
-        return str(path)
-    orig_name = getattr(audio_input, "orig_name", None)
-    if orig_name and os.path.isfile(orig_name):
-        logger.info("[normalize] obj.orig_name -> %s", orig_name)
-        return str(orig_name)
+    for attr in ("path", "name", "orig_name", "value", "file", "url", "filepath"):
+        candidate = getattr(audio_input, attr, None)
+        if candidate:
+            logger.info("[normalize] obj.%s -> %s", attr, candidate)
+            return str(candidate)
 
     result = str(audio_input)
-    if os.path.isfile(result):
+    if result and result != "None":
         logger.info("[normalize] str -> %s", result)
         return result
 

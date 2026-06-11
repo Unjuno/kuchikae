@@ -31,6 +31,15 @@ def test_run_simple_none_input_yields_empty():
     assert "アップロード" not in sts
 
 
+def test_run_simple_string_path_is_not_dropped(tmp_path):
+    wav = tmp_path / "candidate.wav"
+    sf.write(str(wav), np.zeros(44100, dtype=np.float32), 44100)
+    pipeline = KuchikaePipeline()
+    gen = run_simple(pipeline, str(wav))
+    results = list(gen)
+    assert results[-1][3] == "言い直しました"
+
+
 def test_run_simple_with_dummy_wav_yields_done(tmp_path):
     pipeline = KuchikaePipeline()
     wav = tmp_path / "test.wav"

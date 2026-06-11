@@ -46,16 +46,13 @@ def _normalize_audio_path(audio_input: Any) -> str:
     
     path = str(path)
     
-    if not os.path.isfile(path):
-        raise ValueError("Unsupported audio.")
-    
     if os.path.splitext(path)[1].lower() not in {'.wav', '.mp3', '.m4a', '.flac'}:
         raise ValueError("Unsupported audio.")
     
     try:
         validate_audio(path)
-    except ValueError:
-        raise ValueError("Unsupported audio.")
+    except ValueError as e:
+        raise ValueError(str(e))
     
     return path
 

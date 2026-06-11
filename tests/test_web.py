@@ -35,7 +35,7 @@ def test_normalize_audio_path_str_valid_mp3(tmp_path: str) -> None:
 
 
 def test_normalize_audio_path_str_nonexistent_raises() -> None:
-    with pytest.raises(ValueError, match="Unsupported audio"):
+    with pytest.raises(ValueError, match="Audio file not found"):
         _normalize_audio_path("/nonexistent/path.wav")
 
 
@@ -70,7 +70,7 @@ def test_normalize_audio_path_empty_dict_raises() -> None:
 def test_normalize_audio_path_too_long_raises(tmp_path: str) -> None:
     wav = tmp_path / "long.wav"
     _write_wav(str(wav))
-    with pytest.raises(ValueError, match="Unsupported audio"):
+    with pytest.raises(ValueError, match="Audio too long"):
         with patch("kuchikae.pipeline.audio_validation.sf.info") as mock_info:
             mock_info.return_value.duration = 30.0
             _normalize_audio_path(str(wav))
