@@ -17,6 +17,16 @@ PTT_HTML = """
 let pttState = 0;
 let pttTimer = null;
 
+function findBtn(wrap, selector) {
+  if (!wrap) return null;
+  let b = wrap.querySelector(selector);
+  if (b) return b;
+  b = wrap.querySelector('button');
+  if (b) return b;
+  const all = document.querySelectorAll('#simple-audio-wrap button, [id*="simple-audio"] button');
+  return all.length > 0 ? all[0] : null;
+}
+
 function pttStart(e) {
   if (e) e.preventDefault();
   if (pttState === 1) return;
@@ -28,10 +38,11 @@ function pttStart(e) {
   document.getElementById('ptt-hint').textContent = '録音中…';
 
   const wrap = document.getElementById('simple-audio-wrap');
-  if (!wrap) return;
-  const btns = wrap.querySelectorAll('button');
+  const recBtn = findBtn(wrap, '.record-button');
+  if (recBtn) { recBtn.click(); return; }
+  const btns = wrap ? wrap.querySelectorAll('button') : [];
   for (const b of btns) {
-    if (b.textContent.trim() === 'Record') { b.click(); break; }
+    b.click(); break;
   }
 }
 
@@ -45,10 +56,11 @@ function pttStop() {
   document.getElementById('ptt-hint').textContent = '変換中…';
 
   const wrap = document.getElementById('simple-audio-wrap');
-  if (!wrap) return;
-  const btns = wrap.querySelectorAll('button');
+  const stopBtn = findBtn(wrap, '.stop-button');
+  if (stopBtn) { stopBtn.click(); return; }
+  const btns = wrap ? wrap.querySelectorAll('button') : [];
   for (const b of btns) {
-    if (b.textContent.trim() === 'Stop') { b.click(); break; }
+    b.click(); break;
   }
 
   if (pttTimer) clearTimeout(pttTimer);

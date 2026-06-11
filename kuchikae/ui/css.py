@@ -44,29 +44,16 @@ gradio-app, .gradio-app { background: transparent !important; }
 #prompt-box textarea { border-radius: 8px; border: 1px solid #3F3F46; padding: 8px 12px; font-size: 13px; color: #E4E4E7; background: #27272A; }
 #prompt-box textarea:focus { border-color: #7C3AED; background: #27272A; }
 
-#simple-audio-wrap .block { background: transparent !important; box-shadow: none !important; }
-#simple-audio-wrap label { display: none !important; }
-#simple-audio-wrap select,
-#simple-audio-wrap .block select { display: none !important; }
-#simple-audio-wrap { position: absolute !important; top: -9999px !important; left: -9999px !important; opacity: 0 !important; pointer-events: none !important; border: none !important; padding: 0 !important; margin: 0 !important; background: transparent !important; }
-#simple-audio-wrap button { pointer-events: auto !important; }
-
+#simple-audio { background: #27272A; border-radius: 12px; padding: 12px; margin-bottom: 8px; border: 1px solid #3F3F46; }
+#simple-audio .block { background: transparent !important; box-shadow: none !important; }
+#simple-audio label { color: #A1A1AA !important; }
+#simple-audio .record-button { background: #2D1B4E !important; color: #C4B5FD !important; border: 1px solid #3F3F46 !important; border-radius: 8px !important; }
 #simple-src > .block, #simple-trf > .block { background: transparent !important; box-shadow: none !important; border: none !important; }
 #simple-src textarea { background: #27272A; border: 1px solid #3F3F46; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #E4E4E7; line-height: 1.6; resize: none; }
 #simple-trf textarea { background: #1F1135; border: 1px solid #3F3F46; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #E4E4E7; line-height: 1.6; resize: none; }
 #simple-output-audio > .block { background: transparent !important; box-shadow: none !important; border: none !important; }
 #simple-output-audio { margin-top: 4px; border: 1px solid #3F3F46; border-radius: 12px; padding: 12px; background: #27272A; }
 #simple-output-audio audio { height: 44px !important; margin: 0 auto; background: #27272A; border-radius: 8px; }
-
-#ptt-container { text-align: center; padding: 32px 16px; margin-bottom: 8px; }
-#ptt-btn { width: 140px; height: 140px; border-radius: 50%; border: none; cursor: pointer; transition: all .15s ease; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; line-height: 1.3; margin: 0 auto; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
-#ptt-btn.ptt-idle { background: #7C3AED; color: white; box-shadow: 0 4px 20px rgba(124,58,237,.4); }
-#ptt-btn.ptt-idle:hover { transform: scale(1.05); background: #6D28D9; }
-#ptt-btn.ptt-idle:active { transform: scale(0.95); }
-#ptt-btn.ptt-recording { background: #DC2626; color: white; box-shadow: 0 0 0 8px rgba(220,38,38,.25); animation: ptt-pulse 1s ease-in-out infinite; transform: scale(0.95); }
-@keyframes ptt-pulse { 0%,100% { box-shadow: 0 0 0 8px rgba(220,38,38,.25); } 50% { box-shadow: 0 0 0 16px rgba(220,38,38,.15); } }
-#ptt-btn.ptt-recording:hover { background: #B91C1C; }
-#ptt-hint { margin-top: 12px; color: #A1A1AA; font-size: 13px; transition: color .15s ease; }
 
 @media (max-width: 640px) {
   .gradio-container { padding: 16px 10px !important; }
