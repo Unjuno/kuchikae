@@ -29,5 +29,11 @@ silentcipher = { git = "https://github.com/SesameAILabs/silentcipher.git", rev =
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[dependency-groups]
+dev = [
+    "playwright",
+    "pytest-playwright",
+]
+
 [project.urls]
 Homepage = "https://github.com/Unjuno/kuchikae"
