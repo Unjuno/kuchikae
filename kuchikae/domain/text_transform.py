@@ -39,8 +39,9 @@ class DummyTextTransformBackend(TextTransformBackend):
 
 class OllamaTextTransformBackend(TextTransformBackend):
 
-    def __init__(self, model: str = "qwen3:8b") -> None:
+    def __init__(self, model: str = "qwen3:8b", strict: bool = False) -> None:
         self.model = model
+        self.strict = strict
         self._base_url = "http://localhost:11434"
 
     def transform(self, text: str, prompt: TextTransformPrompt) -> str:
@@ -95,18 +96,28 @@ class OllamaTextTransformBackend(TextTransformBackend):
                 logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
             return result
         except Exception as e:
+            if self.strict:
+                raise RuntimeError(
+                    "Ollama text transform is unavailable. "
+                    "Start the Ollama server and make sure the requested model is pulled."
+                ) from e
             logger.warning("ollama failed (%s), falling back to dummy", e)
             return DummyTextTransformBackend().transform(text, prompt)
 
 
 class GPTTextTransformBackend(TextTransformBackend):
 
-    def __init__(self, model: str = "gpt-oss") -> None:
+    def __init__(self, model: str = "gpt-oss", strict: bool = False) -> None:
         self.model = model
+        self.strict = strict
 
     def transform(self, text: str, prompt: TextTransformPrompt) -> str:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
+            if self.strict:
+                raise RuntimeError(
+                    "OPENAI_API_KEY is required for GPT text transform."
+                )
             return DummyTextTransformBackend().transform(text, prompt)
 
         import httpx
@@ -133,10 +144,16 @@ class GPTTextTransformBackend(TextTransformBackend):
             },
             timeout=30,
         )
-        resp.raise_for_status()
-        result = resp.json()["choices"][0]["message"]["content"].strip()
-        logger.info("gpt: %.2fs → %s", time.time() - t0, result[:60])
-        return result
+        try:
+            resp.raise_for_status()
+            result = resp.json()["choices"][0]["message"]["content"].strip()
+            logger.info("gpt: %.2fs → %s", time.time() - t0, result[:60])
+            return result
+        except Exception as e:
+            if self.strict:
+                raise RuntimeError("GPT text transform failed.") from e
+            logger.warning("gpt failed (%s), falling back to dummy", e)
+            return DummyTextTransformBackend().transform(text, prompt)
 
 
 class RuleTextTransformBackend(TextTransformBackend):

@@ -45,6 +45,7 @@ logger = setup_logger("kuchikae.pipeline")
 
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     config = backend_config or {}
+    allow_dummy_backends = config.get("allow_dummy_backends", True)
 
     stt_type = config.get("stt_backend", "faster_whisper")
     use_segmented = config.get("segmented_stt", False)
@@ -57,6 +58,12 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     if stt_type == "faster_whisper" and has_faster_whisper:
         from kuchikae.backends.stt import FasterWhisperSTTBackend
         inner = FasterWhisperSTTBackend()
+    elif stt_type == "faster_whisper" and not allow_dummy_backends:
+        raise RuntimeError(
+            "faster-whisper is required for the selected STT backend, but it is not "
+            "importable in the current uv environment. Run `uv sync --extra real` or "
+            "set `allow_dummy_backends=true` for development-only fallback."
+        )
     else:
         inner = DummySTTBackend()
 
@@ -82,11 +89,19 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     tt_kwargs = {}
     if text_model:
         tt_kwargs["model"] = text_model
-    if tt_class == GPTTextTransformBackend and not os.environ.get("OPENAI_API_KEY"):
-        tt_class = DummyTextTransformBackend
+    text_strict = not allow_dummy_backends
+    if tt_class == GPTTextTransformBackend:
+        if not os.environ.get("OPENAI_API_KEY") and text_strict:
+            raise RuntimeError(
+                "GPT text transform was requested, but OPENAI_API_KEY is not set. "
+                "Either set the key or use a non-GPT text backend."
+            )
+        tt_kwargs["strict"] = text_strict
+    elif tt_class == OllamaTextTransformBackend:
+        tt_kwargs["strict"] = text_strict
 
     voice_output_type = config.get("voice_output_backend", "irodori")
-    _ow_path = "/Users/taka/repos/OpenVoice"
+    _ow_path = os.environ.get("KUCHIKAE_OPENVOICE_PATH", "/Users/taka/repos/OpenVoice")
     _irodori_ready = False
     try:
         from irodori_tts.inference_runtime import InferenceRuntime  # noqa: F401
@@ -97,14 +112,30 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     if voice_output_type == "irodori" and _irodori_ready:
         from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
         vo = IrodoriTTSVoiceOutputBackend()
+    elif voice_output_type == "irodori" and not allow_dummy_backends:
+        raise RuntimeError(
+            "Irodori-TTS backend was requested, but `irodori_tts` is not importable "
+            "in the current uv environment. Run `uv sync --extra real` or install the "
+            "voice backend dependencies."
+        )
     elif voice_output_type == "openvoice" or (config.get("auto_openvoice") and os.environ.get("OPENVOICE_READY")):
         from kuchikae.backends.voice_output import OpenVoiceOutputBackend
         vo = OpenVoiceOutputBackend()
+    elif voice_output_type == "openvoice" and not allow_dummy_backends:
+        raise RuntimeError(
+            "OpenVoice backend was requested, but the OpenVoice checkout is not "
+            "available or OPENVOICE_READY is not set."
+        )
     else:
         _ow_ready = os.path.isdir(_ow_path) and os.environ.get("OPENVOICE_READY")
         if _ow_ready:
             from kuchikae.backends.voice_output import OpenVoiceOutputBackend
             vo = OpenVoiceOutputBackend()
+        elif not allow_dummy_backends:
+            raise RuntimeError(
+                "No real voice backend is available. Set OPENVOICE_READY or install "
+                "irodori_tts / OpenVoice, or enable allow_dummy_backends for tests."
+            )
         else:
             vo = DummyVoiceOutputBackend()
 

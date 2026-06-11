@@ -73,11 +73,20 @@ def serve() -> None:
     # Check for streaming STT config via env var
     import os
     streaming_stt = os.environ.get("KUCHIKAE_STREAMING_STT", "").lower() in ("1", "true", "yes")
-    
-    pipeline = create_pipeline({"streaming_stt": streaming_stt} if streaming_stt else None)
+    pipeline = create_pipeline(
+        {
+            "stt_backend": os.environ.get("KUCHIKAE_STT_BACKEND", "faster_whisper"),
+            "text_transform_backend": os.environ.get("KUCHIKAE_TEXT_BACKEND", "ollama"),
+            "text_transform_model": os.environ.get("KUCHIKAE_TEXT_MODEL"),
+            "voice_output_backend": os.environ.get("KUCHIKAE_VOICE_BACKEND", "irodori"),
+            "streaming_stt": streaming_stt,
+            "segmented_stt": os.environ.get("KUCHIKAE_SEGMENTED_STT", "").lower() in ("1", "true", "yes"),
+            "allow_dummy_backends": os.environ.get("KUCHIKAE_ALLOW_DUMMY_BACKENDS", "").lower() in ("1", "true", "yes"),
+        }
+    )
     pipeline.warmup()
     demo = create_app(pipeline, default_prompt, live_streaming=streaming_stt)
-    demo.launch(css=CSS)
+    demo.launch(css=CSS, server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")))
 
 
 if __name__ == "__main__":
