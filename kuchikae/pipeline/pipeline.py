@@ -84,11 +84,28 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     if tt_class == GPTTextTransformBackend and not os.environ.get("OPENAI_API_KEY"):
         tt_class = DummyTextTransformBackend
 
-    voice_output_type = config.get("voice_output_backend", "dummy")
-    if voice_output_type == "dummy":
-        vo = DummyVoiceOutputBackend()
+    voice_output_type = config.get("voice_output_backend", "irodori")
+    _ow_path = "/Users/taka/repos/OpenVoice"
+    _irodori_ready = False
+    try:
+        from irodori_tts.inference_runtime import InferenceRuntime  # noqa: F401
+        _irodori_ready = True
+    except ImportError:
+        pass
+
+    if voice_output_type == "irodori" and _irodori_ready:
+        from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
+        vo = IrodoriTTSVoiceOutputBackend()
+    elif voice_output_type == "openvoice" or (config.get("auto_openvoice") and os.environ.get("OPENVOICE_READY")):
+        from kuchikae.backends.voice_output import OpenVoiceOutputBackend
+        vo = OpenVoiceOutputBackend()
     else:
-        vo = DummyVoiceOutputBackend()
+        _ow_ready = os.path.isdir(_ow_path) and os.environ.get("OPENVOICE_READY")
+        if _ow_ready:
+            from kuchikae.backends.voice_output import OpenVoiceOutputBackend
+            vo = OpenVoiceOutputBackend()
+        else:
+            vo = DummyVoiceOutputBackend()
 
     logger.info("pipeline: stt=%s text=%s(%s) voice=%s",
                 type(stt).__name__, type(tt_class()).__name__,

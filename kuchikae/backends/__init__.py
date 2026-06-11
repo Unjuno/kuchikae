@@ -8,9 +8,15 @@ from kuchikae.backends.stt import (
     FasterWhisperSTTBackend,
     StreamingFasterWhisperSTTBackend,
 )
+from kuchikae.backends.voice_output import (
+    IrodoriTTSVoiceOutputBackend,
+    OpenVoiceOutputBackend,
+)
 
 __all__ = [
     "ChunkedStreamingSTTBackend",
     "FasterWhisperSTTBackend",
+    "IrodoriTTSVoiceOutputBackend",
+    "OpenVoiceOutputBackend",
     "StreamingFasterWhisperSTTBackend",
 ]
