@@ -57,11 +57,11 @@ gradio-app, .gradio-app { background: transparent !important; }
 #prompt-box textarea:focus { border-color: #7C3AED; background: #27272A; }
 
 #simple-audio-wrap .block { background: transparent !important; box-shadow: none !important; }
-#simple-audio-wrap label { background: transparent !important; color: #A1A1AA !important; font-size: 14px !important; font-weight: 600 !important; }
-#simple-audio-wrap button:not([style*="display:none"]),
-#simple-audio-wrap select { display: none !important; }
-#simple-audio-wrap { border: none !important; padding: 0 !important; margin: 0 !important; background: transparent !important; height: 0 !important; overflow: visible !important; }
+#simple-audio-wrap label { display: none !important; }
+#simple-audio-wrap select,
 #simple-audio-wrap .block select { display: none !important; }
+#simple-audio-wrap { position: absolute !important; top: -9999px !important; left: -9999px !important; opacity: 0 !important; pointer-events: none !important; border: none !important; padding: 0 !important; margin: 0 !important; background: transparent !important; }
+#simple-audio-wrap button { pointer-events: auto !important; }
 
 #simple-src > .block, #simple-trf > .block { background: transparent !important; box-shadow: none !important; border: none !important; }
 #simple-src textarea { background: #27272A; border: 1px solid #3F3F46; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #E4E4E7; line-height: 1.6; resize: none; }
