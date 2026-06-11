@@ -8,6 +8,7 @@ import numpy as np
 import soundfile as sf
 
 from kuchikae.ui import normalize_audio_path
+from kuchikae.ui.js import PTT_HTML
 
 
 def test_str_existing_file(tmp_path: str) -> None:
@@ -51,3 +52,19 @@ def test_dict_fallback_to_name_and_path(tmp_path: str) -> None:
 
 def test_dict_with_empty_keys_raises() -> None:
     assert normalize_audio_path({"orig_name": "", "name": None, "path": ""}) is None
+
+
+def test_dict_prefers_path_over_orig_name(tmp_path: str) -> None:
+    path_wav = tmp_path / "path.wav"
+    orig_wav = tmp_path / "orig.wav"
+    sf.write(str(path_wav), np.zeros(44_100, dtype=np.float32), 44_100)
+    sf.write(str(orig_wav), np.ones(44_100, dtype=np.float32), 44_100)
+
+    value = normalize_audio_path({"path": str(path_wav), "orig_name": str(orig_wav)})
+    assert value == str(path_wav)
+
+
+def test_ptt_html_uses_find_audio_button_and_no_raw_button_fallback() -> None:
+    assert "findAudioButton" in PTT_HTML
+    assert "querySelector('button')" not in PTT_HTML
+    assert 'querySelectorAll(\'#simple-audio-wrap button' not in PTT_HTML

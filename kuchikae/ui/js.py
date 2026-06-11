@@ -21,10 +21,21 @@ function findBtn(wrap, selector) {
   if (!wrap) return null;
   let b = wrap.querySelector(selector);
   if (b) return b;
-  b = wrap.querySelector('button');
-  if (b) return b;
-  const all = document.querySelectorAll('#simple-audio-wrap button, [id*="simple-audio"] button');
-  return all.length > 0 ? all[0] : null;
+  return null;
+}
+
+function findAudioButton(wrap, candidates) {
+  if (!wrap) return null;
+  const buttons = Array.from(wrap.querySelectorAll("button"));
+  return buttons.find((b) => {
+    const haystack = [
+      b.textContent || "",
+      b.getAttribute("aria-label") || "",
+      b.getAttribute("title") || "",
+      b.className || "",
+    ].join(" ").toLowerCase();
+    return candidates.some((c) => haystack.includes(c));
+  }) || null;
 }
 
 function pttStart(e) {
@@ -38,12 +49,16 @@ function pttStart(e) {
   document.getElementById('ptt-hint').textContent = '録音中…';
 
   const wrap = document.getElementById('simple-audio-wrap');
-  const recBtn = findBtn(wrap, '.record-button');
-  if (recBtn) { recBtn.click(); return; }
-  const btns = wrap ? wrap.querySelectorAll('button') : [];
-  for (const b of btns) {
-    b.click(); break;
+  const recBtn = findAudioButton(wrap, ["record", "録音", "start", "microphone", "mic"]);
+  if (recBtn) {
+    recBtn.click();
+    return;
   }
+  const hint = document.getElementById('ptt-hint');
+  if (hint) hint.textContent = '録音ボタンが見つかりません。通常モードで録音してください。';
+  pttState = 0;
+  btn.className = 'ptt-idle';
+  label.textContent = '押して話す';
 }
 
 function pttStop() {
@@ -56,12 +71,13 @@ function pttStop() {
   document.getElementById('ptt-hint').textContent = '変換中…';
 
   const wrap = document.getElementById('simple-audio-wrap');
-  const stopBtn = findBtn(wrap, '.stop-button');
-  if (stopBtn) { stopBtn.click(); return; }
-  const btns = wrap ? wrap.querySelectorAll('button') : [];
-  for (const b of btns) {
-    b.click(); break;
+  const stopBtn = findAudioButton(wrap, ["stop", "停止", "done", "完了"]);
+  if (stopBtn) {
+    stopBtn.click();
+    return;
   }
+  const hint = document.getElementById('ptt-hint');
+  if (hint) hint.textContent = '停止ボタンが見つかりません。通常モードで録音してください。';
 
   if (pttTimer) clearTimeout(pttTimer);
   pttTimer = setTimeout(() => {

@@ -19,7 +19,8 @@ def test_run_simple_none_input_yields_empty():
     aud, src, trf, sts = results[0]
     assert src == ""
     assert trf == ""
-    assert sts == ""
+    assert "録音ファイルを取得できませんでした" in sts
+    assert "アップロード" not in sts
 
 
 def test_run_simple_with_dummy_wav_yields_done(tmp_path):

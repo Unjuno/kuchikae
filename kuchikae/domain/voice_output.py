@@ -6,8 +6,10 @@ import logging
 import os
 import re
 import time
+import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
@@ -15,7 +17,7 @@ import soundfile as sf
 from kuchikae.domain.types import VoiceContext, VoiceOutputPrompt
 
 logger = logging.getLogger(__name__)
-OUTPUT_DIR = "outputs"
+OUTPUT_DIR = Path(tempfile.gettempdir()) / "kuchikae-outputs"
 
 
 class VoiceOutputBackend(ABC):
@@ -38,13 +40,13 @@ class DummyVoiceOutputBackend(VoiceOutputBackend):
         voice_context: VoiceContext,
         prompt: VoiceOutputPrompt | None = None,
     ) -> str:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        output_path = os.path.join(OUTPUT_DIR, "dummy.wav")
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        output_path = OUTPUT_DIR / "dummy.wav"
         duration_seconds = 1.0
         sample_rate = 44_100
         samples = np.zeros(int(duration_seconds * sample_rate), dtype=np.float32)
-        sf.write(output_path, samples, sample_rate)
-        return output_path
+        sf.write(str(output_path), samples, sample_rate)
+        return str(output_path)
 
 
 # ---------------------------------------------------------------------------
@@ -194,9 +196,9 @@ class DummyStreamingVoiceOutputBackend(StreamingVoiceOutputBackend):
         return samples, sr
 
     def finalize(self, session_id: str = "") -> str:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        path = os.path.join(OUTPUT_DIR, f"streaming_output_{int(time.time())}.wav")
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        path = OUTPUT_DIR / f"streaming_output_{int(time.time())}.wav"
         q = self._queue(session_id)
         merged = q.merge()
-        sf.write(path, merged, 16000)
-        return path
+        sf.write(str(path), merged, 16000)
+        return str(path)

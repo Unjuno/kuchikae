@@ -40,18 +40,11 @@ def normalize_audio_path(audio_input) -> str | None:
             return tmp.name
 
     if isinstance(audio_input, dict):
-        orig_name = audio_input.get("orig_name")
-        if orig_name and os.path.isfile(orig_name):
-            logger.info("[normalize] dict.orig_name -> %s", orig_name)
-            return str(orig_name)
-        path = audio_input.get("path")
-        if path and os.path.isfile(path):
-            logger.info("[normalize] dict.path -> %s", path)
-            return str(path)
-        name = audio_input.get("name")
-        if name and os.path.isfile(name):
-            logger.info("[normalize] dict.name -> %s", name)
-            return str(name)
+        for key in ("path", "name", "orig_name"):
+            candidate = audio_input.get(key)
+            if candidate and os.path.isfile(str(candidate)):
+                logger.info("[normalize] dict.%s -> %s", key, candidate)
+                return str(candidate)
         logger.warning("[normalize] dict but no valid file. keys=%s", list(audio_input.keys()))
         return None
 
@@ -100,7 +93,12 @@ def run_simple(
     path = normalize_audio_path(audio_input)
     if path is None:
         logger.warning("[run_simple] no path, aborting")
-        yield gr.update(), "", "", ""
+        yield (
+            gr.update(value=None),
+            "",
+            "",
+            "録音ファイルを取得できませんでした。マイク権限を許可し、もう一度押して話してください。",
+        )
         return
 
     prompt = TextTransformPrompt(instruction=TEMPLATES["自然に"])
@@ -163,7 +161,7 @@ def run(
     path = normalize_audio_path(audio_input)
     if path is None:
         logger.error("[run] no path! audio_input type=%s", type(audio_input).__name__)
-        raise gr.Error("音声を録音またはアップロードしてください")
+        raise gr.Error("音声を録音してください。必要なら通常モードで録音し直してください。")
 
     if template_name == "カスタム" and custom_prompt.strip():
         prompt_text = custom_prompt
