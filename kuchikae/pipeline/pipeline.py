@@ -213,24 +213,69 @@ class KuchikaePipeline:
         voice_output_prompt: VoiceOutputPrompt | None = None,
     ) -> PipelineResult:
         t0 = time.time()
+        logger.info(
+            "process:start audio_path=%s text_prompt_len=%d voice_prompt=%s stt=%s text=%s voice=%s",
+            audio_path,
+            len(text_transform_prompt.instruction),
+            "set" if voice_output_prompt is not None else "none",
+            type(self.stt_backend).__name__,
+            type(self.text_transform_backend).__name__,
+            type(self.voice_output_backend).__name__,
+        )
 
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
+        logger.info(
+            "process:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
+            cache_key.path,
+            cache_key.size,
+            cache_key.mtime,
+            audio_key,
+        )
 
         t1 = time.time()
+        logger.info("process:stt:start")
         source_text = self._step_stt(audio_path, audio_key)
         stt_latency = time.time() - t1
-        logger.info("STT: %.2fs → %s", stt_latency, source_text[:60])
+        logger.info(
+            "process:stt:done latency=%.2fs source_len=%d source_preview=%r",
+            stt_latency,
+            len(source_text),
+            source_text[:120],
+        )
 
         t2 = time.time()
+        logger.info(
+            "process:text:start text_prompt_preview=%r",
+            text_transform_prompt.instruction[:160],
+        )
         transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
         text_latency = time.time() - t2
-        logger.info("TEXT: %.2fs → %s", text_latency, transformed_text[:60])
+        logger.info(
+            "process:text:done latency=%.2fs transformed_len=%d transformed_preview=%r",
+            text_latency,
+            len(transformed_text),
+            transformed_text[:120],
+        )
 
         t3 = time.time()
+        logger.info("process:voice_context:start")
         voice_context = self._voice_context_extractor.extract(audio_path)
+        logger.info(
+            "process:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
+            voice_context.reference_audio_path,
+            voice_context.ready,
+            voice_context.speaker_embedding is not None,
+            voice_context.prosody_profile is not None,
+        )
         text_for_voice = transformed_text.strip() or source_text
+        logger.info(
+            "process:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
+            len(text_for_voice),
+            text_for_voice[:120],
+            "set" if voice_output_prompt is not None else "none",
+        )
         output_audio_path = self._step_voice(
             text_for_voice,
             audio_path,
@@ -239,11 +284,20 @@ class KuchikaePipeline:
             voice_output_prompt,
         )
         voice_latency = time.time() - t3
-        logger.info("VOICE: %.2fs → %s", voice_latency, output_audio_path)
+        logger.info(
+            "process:voice:done latency=%.2fs output_audio_path=%s",
+            voice_latency,
+            output_audio_path,
+        )
 
         total = time.time() - t0
-        logger.info("TOTAL: %.2fs (STT %.2f + TEXT %.2f + VOICE %.2f)",
-                    total, stt_latency, text_latency, voice_latency)
+        logger.info(
+            "process:done total=%.2fs stt=%.2fs text=%.2fs voice=%.2fs",
+            total,
+            stt_latency,
+            text_latency,
+            voice_latency,
+        )
 
         result = PipelineResult(
             output_audio_path=output_audio_path,
@@ -272,21 +326,68 @@ class KuchikaePipeline:
         voice_output_prompt: VoiceOutputPrompt | None = None,
     ) -> Generator[tuple[str, str | None, str | None, str | None], None, None]:
         t0 = time.time()
+        logger.info(
+            "process_stream:start audio_path=%s text_prompt_len=%d voice_prompt=%s stt=%s text=%s voice=%s",
+            audio_path,
+            len(text_transform_prompt.instruction),
+            "set" if voice_output_prompt is not None else "none",
+            type(self.stt_backend).__name__,
+            type(self.text_transform_backend).__name__,
+            type(self.voice_output_backend).__name__,
+        )
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
+        logger.info(
+            "process_stream:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
+            cache_key.path,
+            cache_key.size,
+            cache_key.mtime,
+            audio_key,
+        )
 
+        logger.info("process_stream:yield STT")
         yield "STT", None, None, None
         source_text = self._step_stt(audio_path, audio_key)
-        logger.info("STT: %.2fs %s", time.time() - t0, source_text[:60])
+        logger.info(
+            "process_stream:stt:done elapsed=%.2fs source_len=%d source_preview=%r",
+            time.time() - t0,
+            len(source_text),
+            source_text[:120],
+        )
 
+        logger.info("process_stream:yield TXT")
         yield "TXT", source_text, None, None
+        logger.info(
+            "process_stream:text:start text_prompt_preview=%r",
+            text_transform_prompt.instruction[:160],
+        )
         transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-        logger.info("TXT: %.2fs %s", time.time() - t0, transformed_text[:60])
+        logger.info(
+            "process_stream:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
+            time.time() - t0,
+            len(transformed_text),
+            transformed_text[:120],
+        )
 
+        logger.info("process_stream:yield VOX")
         yield "VOX", source_text, transformed_text, None
+        logger.info("process_stream:voice_context:start")
         voice_context = self._voice_context_extractor.extract(audio_path)
+        logger.info(
+            "process_stream:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
+            voice_context.reference_audio_path,
+            voice_context.ready,
+            voice_context.speaker_embedding is not None,
+            voice_context.prosody_profile is not None,
+        )
         text_for_voice = transformed_text.strip() or source_text
+        logger.info(
+            "process_stream:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
+            len(text_for_voice),
+            text_for_voice[:120],
+            "set" if voice_output_prompt is not None else "none",
+        )
         output_audio_path = self._step_voice(
             text_for_voice,
             audio_path,
@@ -294,8 +395,13 @@ class KuchikaePipeline:
             voice_context,
             voice_output_prompt,
         )
-        logger.info("VOX: %.2fs %s", time.time() - t0, output_audio_path)
+        logger.info(
+            "process_stream:voice:done elapsed=%.2fs output_audio_path=%s",
+            time.time() - t0,
+            output_audio_path,
+        )
 
+        logger.info("process_stream:yield DONE")
         yield "DONE", source_text, transformed_text, output_audio_path
 
     def process_stream_live(
@@ -310,41 +416,105 @@ class KuchikaePipeline:
         Status: "STT_PARTIAL" | "STT" | "TXT" | "VOX" | "DONE"
         """
         t0 = time.time()
+        logger.info(
+            "process_stream_live:start audio_path=%s text_prompt_len=%d voice_prompt=%s stt=%s text=%s voice=%s",
+            audio_path,
+            len(text_transform_prompt.instruction),
+            "set" if voice_output_prompt is not None else "none",
+            type(self.stt_backend).__name__,
+            type(self.text_transform_backend).__name__,
+            type(self.voice_output_backend).__name__,
+        )
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
+        logger.info(
+            "process_stream_live:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
+            cache_key.path,
+            cache_key.size,
+            cache_key.mtime,
+            audio_key,
+        )
 
         # Check cache first
         cached_stt = self.processing_cache.get_stt(audio_key)
         if cached_stt is not None:
+            logger.info(
+                "process_stream_live:stt_cache_hit source_len=%d source_preview=%r",
+                len(cached_stt),
+                cached_stt[:120],
+            )
             source_text = cached_stt
+            logger.info("process_stream_live:yield STT")
             yield "STT", source_text, None, None
-            logger.info("STT (cached): %s", source_text[:60])
         else:
             # Stream STT
             if hasattr(self.stt_backend, "transcribe_stream"):
+                logger.info("process_stream_live:stt_stream:start backend=%s", type(self.stt_backend).__name__)
                 accumulated = ""
-                for partial in self.stt_backend.transcribe_stream(audio_path):
+                for idx, partial in enumerate(self.stt_backend.transcribe_stream(audio_path), start=1):
                     accumulated = partial
+                    logger.info(
+                        "process_stream_live:stt_partial idx=%d partial_len=%d partial_preview=%r",
+                        idx,
+                        len(partial),
+                        partial[:120],
+                    )
                     yield "STT_PARTIAL", partial, None, None
                 source_text = accumulated
                 self.processing_cache.set_stt(audio_key, source_text)
+                logger.info(
+                    "process_stream_live:stt_stream:done source_len=%d source_preview=%r",
+                    len(source_text),
+                    source_text[:120],
+                )
+                logger.info("process_stream_live:yield STT")
                 yield "STT", source_text, None, None
-                logger.info("STT: %.2fs %s", time.time() - t0, source_text[:60])
             else:
+                logger.info("process_stream_live:stt_fallback:start backend=%s", type(self.stt_backend).__name__)
                 source_text = self._step_stt(audio_path, audio_key)
+                logger.info(
+                    "process_stream_live:stt_fallback:done source_len=%d source_preview=%r",
+                    len(source_text),
+                    source_text[:120],
+                )
+                logger.info("process_stream_live:yield STT")
                 yield "STT", source_text, None, None
-                logger.info("STT: %.2fs %s", time.time() - t0, source_text[:60])
 
         # Text transform
+        logger.info("process_stream_live:yield TXT")
         yield "TXT", source_text, None, None
+        logger.info(
+            "process_stream_live:text:start text_prompt_preview=%r",
+            text_transform_prompt.instruction[:160],
+        )
         transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-        logger.info("TXT: %.2fs %s", time.time() - t0, transformed_text[:60])
+        logger.info(
+            "process_stream_live:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
+            time.time() - t0,
+            len(transformed_text),
+            transformed_text[:120],
+        )
 
         # Voice output
+        logger.info("process_stream_live:yield VOX")
         yield "VOX", source_text, transformed_text, None
+        logger.info("process_stream_live:voice_context:start")
         voice_context = self._voice_context_extractor.extract(audio_path)
+        logger.info(
+            "process_stream_live:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
+            voice_context.reference_audio_path,
+            voice_context.ready,
+            voice_context.speaker_embedding is not None,
+            voice_context.prosody_profile is not None,
+        )
         text_for_voice = transformed_text.strip() or source_text
+        logger.info(
+            "process_stream_live:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
+            len(text_for_voice),
+            text_for_voice[:120],
+            "set" if voice_output_prompt is not None else "none",
+        )
         output_audio_path = self._step_voice(
             text_for_voice,
             audio_path,
@@ -352,6 +522,11 @@ class KuchikaePipeline:
             voice_context,
             voice_output_prompt,
         )
-        logger.info("VOX: %.2fs %s", time.time() - t0, output_audio_path)
+        logger.info(
+            "process_stream_live:voice:done elapsed=%.2fs output_audio_path=%s",
+            time.time() - t0,
+            output_audio_path,
+        )
 
+        logger.info("process_stream_live:yield DONE")
         yield "DONE", source_text, transformed_text, output_audio_path

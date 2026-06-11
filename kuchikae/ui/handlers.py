@@ -77,8 +77,15 @@ def run_simple(
     pipeline: KuchikaePipeline,
     audio_input,
     live_streaming: bool = False,
+    voice_output_prompt=None,
 ) -> Generator:
-    logger.info("[run_simple] called")
+    logger.info(
+        "[run_simple] called live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s",
+        live_streaming,
+        type(audio_input).__name__,
+        repr(audio_input)[:400],
+        "set" if voice_output_prompt is not None else "none",
+    )
     path = normalize_audio_path(audio_input)
     if path is None:
         logger.warning("[run_simple] no path, aborting")
@@ -87,19 +94,42 @@ def run_simple(
 
     prompt = TextTransformPrompt(instruction=TEMPLATES["自然に"])
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
+    logger.info(
+        "[run_simple] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
+        getattr(stream_fn, "__name__", repr(stream_fn)),
+        path,
+        prompt.instruction[:160],
+        "set" if voice_output_prompt is not None else "none",
+    )
 
-    for status, src, txt, aud in stream_fn(path, prompt):
-        logger.info("[run_simple] status=%s", status)
-        if status == "DONE":
-            yield aud, src, txt, "言い直しました"
-        elif status == "VOX":
-            yield gr.update(value=None), src, txt, "変換中..."
-        elif status == "TXT":
-            yield gr.update(value=None), src, txt, "変換中..."
-        elif status == "STT_PARTIAL":
-            yield gr.update(value=None), src, "", "文字起こし中..."
-        else:
-            yield gr.update(value=None), "", "", "音声認識中..."
+    try:
+        for idx, (status, src, txt, aud) in enumerate(
+            stream_fn(path, prompt, voice_output_prompt),
+            start=1,
+        ):
+            logger.info(
+                "[run_simple] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
+                idx,
+                status,
+                len(src) if isinstance(src, str) else None,
+                len(txt) if isinstance(txt, str) else None,
+                aud,
+                src[:120] if isinstance(src, str) else src,
+                txt[:120] if isinstance(txt, str) else txt,
+            )
+            if status == "DONE":
+                yield aud, src, txt, "言い直しました"
+            elif status == "VOX":
+                yield gr.update(value=None), src, txt, "変換中..."
+            elif status == "TXT":
+                yield gr.update(value=None), src, txt, "変換中..."
+            elif status == "STT_PARTIAL":
+                yield gr.update(value=None), src, "", "文字起こし中..."
+            else:
+                yield gr.update(value=None), "", "", "音声認識中..."
+    except Exception:
+        logger.exception("[run_simple] inference failed")
+        raise
 
 
 def run(
@@ -108,8 +138,16 @@ def run(
     custom_prompt: str,
     pipeline: KuchikaePipeline,
     live_streaming: bool = False,
+    voice_output_prompt=None,
 ) -> Generator:
-    logger.info("[run] called template=%s", template_name)
+    logger.info(
+        "[run] called template=%s live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s",
+        template_name,
+        live_streaming,
+        type(audio_input).__name__,
+        repr(audio_input)[:400],
+        "set" if voice_output_prompt is not None else "none",
+    )
     path = normalize_audio_path(audio_input)
     if path is None:
         logger.error("[run] no path! audio_input type=%s", type(audio_input).__name__)
@@ -124,19 +162,42 @@ def run(
 
     prompt = TextTransformPrompt(instruction=prompt_text)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
+    logger.info(
+        "[run] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
+        getattr(stream_fn, "__name__", repr(stream_fn)),
+        path,
+        prompt.instruction[:160],
+        "set" if voice_output_prompt is not None else "none",
+    )
 
-    for status, src, txt, aud in stream_fn(path, prompt):
-        logger.info("[run] status=%s", status)
-        if status == "DONE":
-            yield aud, src, txt, "言い直しました"
-        elif status == "VOX":
-            yield gr.update(value=None), src, txt, "変換中..."
-        elif status == "TXT":
-            yield gr.update(value=None), src, txt, "変換中..."
-        elif status == "STT_PARTIAL":
-            yield gr.update(value=None), src, "", "文字起こし中..."
-        else:
-            yield gr.update(value=None), "", "", "音声認識中..."
+    try:
+        for idx, (status, src, txt, aud) in enumerate(
+            stream_fn(path, prompt, voice_output_prompt),
+            start=1,
+        ):
+            logger.info(
+                "[run] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
+                idx,
+                status,
+                len(src) if isinstance(src, str) else None,
+                len(txt) if isinstance(txt, str) else None,
+                aud,
+                src[:120] if isinstance(src, str) else src,
+                txt[:120] if isinstance(txt, str) else txt,
+            )
+            if status == "DONE":
+                yield aud, src, txt, "言い直しました"
+            elif status == "VOX":
+                yield gr.update(value=None), src, txt, "変換中..."
+            elif status == "TXT":
+                yield gr.update(value=None), src, txt, "変換中..."
+            elif status == "STT_PARTIAL":
+                yield gr.update(value=None), src, "", "文字起こし中..."
+            else:
+                yield gr.update(value=None), "", "", "音声認識中..."
+    except Exception:
+        logger.exception("[run] inference failed")
+        raise
 
 
 def on_template_change(template_name: str):
