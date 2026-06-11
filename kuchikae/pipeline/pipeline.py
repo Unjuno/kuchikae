@@ -6,25 +6,25 @@ import os
 import time
 from typing import Generator
 
-from kuchikae.audio import AudioSegmenter, FixedWindowSegmenter
-from kuchikae.audio_cache import AudioCache, VoiceContextExtractor
-from kuchikae.audio_key import AudioKey, AudioKeyFromCacheKey
+from kuchikae.domain.audio import AudioSegmenter, FixedWindowSegmenter
+from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor, DummyVoiceContextExtractor
+from kuchikae.domain.audio_key import AudioKey, AudioKeyFromCacheKey
+from kuchikae.domain.metrics import LatencyLogger
 from kuchikae.counting_backends import (
     CountingSTTBackend,
     CountingTextTransformBackend,
     CountingVoiceContextExtractor,
     CountingVoiceOutputBackend,
 )
-from kuchikae.logging import setup_logger
-from kuchikae.processing_cache import ProcessingCache
-from kuchikae.stt import (
+from kuchikae.domain.processing_cache import ProcessingCache
+from kuchikae.domain.stt import (
     DummySTTBackend,
     FasterWhisperSTTBackend,
     SegmentedSTTBackend,
     StreamingFasterWhisperSTTBackend,
     STTBackend,
 )
-from kuchikae.text_transform import (
+from kuchikae.domain.text_transform import (
     DummyTextTransformBackend,
     GPTTextTransformBackend,
     OllamaTextTransformBackend,
@@ -32,24 +32,22 @@ from kuchikae.text_transform import (
     RuleTextTransformBackend,
     TextTransformBackend,
 )
-from kuchikae.types import (
+from kuchikae.domain.types import (
     AudioCacheKey,
     PipelineResult,
+    StreamingLatencyReport,
     TextTransformPrompt,
 )
-from kuchikae.voice_context import DummyVoiceContextExtractor
-from kuchikae.voice_output import (
+from kuchikae.domain.voice_output import (
     DummyVoiceOutputBackend,
     IrodoriTTSVoiceOutputBackend,
     OpenVoiceOutputBackend,
     VoiceOutputBackend,
 )
+from kuchikae.logging import setup_logger
+from kuchikae.pipeline.audio_validation import validate_audio
 
 logger = setup_logger("kuchikae.pipeline")
-
-MAX_AUDIO_DURATION = 30.0
-MAX_FILE_SIZE = 25 * 1024 * 1024
-ALLOWED_EXTENSIONS = {".wav"}
 
 
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
@@ -128,11 +126,13 @@ class KuchikaePipeline:
         text_transform_backend: TextTransformBackend | None = None,
         voice_output_backend: VoiceOutputBackend | None = None,
         processing_cache: ProcessingCache | None = None,
+        latency_logger: LatencyLogger | None = None,
     ) -> None:
         self.stt_backend = stt_backend or DummySTTBackend()
         self.text_transform_backend = text_transform_backend or DummyTextTransformBackend()
         self.voice_output_backend = voice_output_backend or DummyVoiceOutputBackend()
         self.processing_cache = processing_cache or ProcessingCache()
+        self.latency_logger = latency_logger
         self._audio_cache = AudioCache()
         self._voice_context_extractor = VoiceContextExtractor()
 
@@ -173,16 +173,7 @@ class KuchikaePipeline:
         logger.info("warmup done")
 
     def check_audio(self, audio_path: str) -> None:
-        ext = os.path.splitext(audio_path)[1].lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            raise ValueError(f"Unsupported format ({ext})")
-        size = os.path.getsize(audio_path)
-        if size > MAX_FILE_SIZE:
-            raise ValueError(f"File too large ({size / 1e6:.1f}MB > {MAX_FILE_SIZE / 1e6:.0f}MB)")
-        import soundfile as sf
-        info = sf.info(audio_path)
-        if info.duration > MAX_AUDIO_DURATION:
-            raise ValueError(f"Audio too long ({info.duration:.0f}s > {MAX_AUDIO_DURATION:.0f}s)")
+        validate_audio(audio_path)
 
     def _step_stt(self, audio_path: str, audio_key: AudioKey) -> str:
         cached = self.processing_cache.get_stt(audio_key)
@@ -198,10 +189,6 @@ class KuchikaePipeline:
             voice_context = cached_context
         else:
             self.processing_cache.set_voice_context(audio_key, voice_context)
-        
-        cached = self.processing_cache.get_stt(audio_key)
-        if cached is not None:
-            text = cached
         
         out = self.voice_output_backend.synthesize(text, voice_context)
         return out
@@ -219,27 +206,56 @@ class KuchikaePipeline:
 
         t1 = time.time()
         source_text = self._step_stt(audio_path, audio_key)
-        logger.info("STT: %.2fs → %s", time.time() - t1, source_text[:60])
+        stt_latency = time.time() - t1
+        logger.info("STT: %.2fs → %s", stt_latency, source_text[:60])
 
         t2 = time.time()
         transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-        logger.info("TEXT: %.2fs → %s", time.time() - t2, transformed_text[:60])
+        text_latency = time.time() - t2
+        logger.info("TEXT: %.2fs → %s", text_latency, transformed_text[:60])
 
         t3 = time.time()
         voice_context = self._voice_context_extractor.extract(audio_path)
         text_for_voice = transformed_text.strip() or source_text
         output_audio_path = self._step_voice(text_for_voice, audio_path, audio_key, voice_context)
-        logger.info("VOICE: %.2fs → %s", time.time() - t3, output_audio_path)
+        voice_latency = time.time() - t3
+        logger.info("VOICE: %.2fs → %s", voice_latency, output_audio_path)
 
         total = time.time() - t0
         logger.info("TOTAL: %.2fs (STT %.2f + TEXT %.2f + VOICE %.2f)",
-                    total, t2 - t1, t3 - t2, time.time() - t3)
+                    total, stt_latency, text_latency, voice_latency)
 
-        return PipelineResult(
+        result = PipelineResult(
             output_audio_path=output_audio_path,
             source_text=source_text,
             transformed_text=transformed_text,
+            stt_latency=stt_latency,
+            text_transform_latency=text_latency,
+            voice_output_latency=voice_latency,
+            total_latency=total,
         )
+
+        if self.latency_logger is not None:
+            try:
+                import soundfile as sf
+                info = sf.info(audio_path)
+                recording_duration = info.duration
+            except Exception:
+                recording_duration = 0.0
+
+            report = StreamingLatencyReport(
+                session_id=cache_key.path,
+                total_recording_sec=recording_duration,
+                total_processing_sec=total,
+                stages={
+                    "stt": stt_latency,
+                    "text_transform": text_latency,
+                    "voice_output": voice_latency,
+                },
+            )
+            self.latency_logger.log_report(report)
+
+        return result
 
     def process_stream(
         self,

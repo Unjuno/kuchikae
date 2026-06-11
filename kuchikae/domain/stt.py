@@ -6,11 +6,14 @@ import logging
 import os
 import tempfile
 import time
+from abc import ABC, abstractmethod
 from typing import Generator, List
 
 import soundfile as sf
 
-from kuchikae.audio import AudioSegmenter, TranscriptJoiner
+from kuchikae.domain.audio import AudioSegmenter, TranscriptJoiner
+from kuchikae.domain.audio_stream import AudioChunk
+from kuchikae.domain.types import STTFinal, STTPartial
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +131,115 @@ class StreamingFasterWhisperSTTBackend(FasterWhisperSTTBackend):
             if end >= total:
                 break
             start += stride
+
+
+class StreamingSTTBackend(ABC):
+    """Streaming STT backend interface.
+
+    Push audio chunks incrementally; call ``flush()`` at the end.
+    """
+
+    @abstractmethod
+    def push_audio(self, chunk: AudioChunk) -> STTPartial:
+        ...
+
+    @abstractmethod
+    def flush(self) -> STTFinal | None:
+        ...
+
+
+class DummyStreamingSTTBackend(StreamingSTTBackend):
+    """Dummy streaming STT for testing."""
+
+    def __init__(self) -> None:
+        self._pushed = 0
+        self._final_text = "明日までに資料を送ってください"
+        self._chunks = self._final_text.split("、")
+
+    def push_audio(self, chunk: AudioChunk) -> STTPartial:
+        frag = "".join(self._chunks[:self._pushed + 1])
+        stable_prefix = "".join(self._chunks[:self._pushed])
+        self._pushed += 1
+        return STTPartial(
+            text=frag,
+            stable_prefix=stable_prefix,
+            unstable_suffix=frag[len(stable_prefix):],
+            start_sec=chunk.start_sec,
+            end_sec=chunk.end_sec,
+            confidence=0.95,
+        )
+
+    def flush(self) -> STTFinal | None:
+        if self._pushed == 0:
+            return None
+        return STTFinal(
+            text=self._final_text,
+            start_sec=0.0,
+            end_sec=len(self._final_text) * 0.1,
+            confidence=0.95,
+        )
+
+
+class ChunkedStreamingSTTBackend(StreamingSTTBackend):
+    """Real streaming STT that uses AudioChunker + FasterWhisperSTTBackend.
+
+    Accumulates chunks and transcribes on each push.
+    Uses simple stable-prefix heuristic: the text that hasn't changed
+    across the last N iterations is considered stable.
+    """
+
+    def __init__(
+        self,
+        inner: FasterWhisperSTTBackend | None = None,
+        stable_window: int = 2,
+    ) -> None:
+        self._inner = inner or FasterWhisperSTTBackend(model_size="tiny")
+        self._stable_window = stable_window
+        self._chunk_texts: list[str] = []
+
+    def push_audio(self, chunk: AudioChunk) -> STTPartial:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            sf.write(tmp.name, chunk.samples, chunk.sample_rate)
+            text = self._inner.transcribe(tmp.name)
+            os.unlink(tmp.name)
+
+        self._chunk_texts.append(text)
+        full_text = " ".join(self._chunk_texts)
+
+        stable_prefix = ""
+        last_n = self._chunk_texts[-self._stable_window:]
+        if len(last_n) >= 2:
+            if len(set(last_n)) == 1:
+                stable_prefix = last_n[0]
+            else:
+                common = self._longest_common_prefix(last_n[0], last_n[-1])
+                if len(common) > 2:
+                    stable_prefix = common
+
+        unstable_suffix = full_text[len(stable_prefix):] if stable_prefix else full_text
+
+        return STTPartial(
+            text=full_text,
+            stable_prefix=stable_prefix,
+            unstable_suffix=unstable_suffix,
+            start_sec=chunk.start_sec,
+            end_sec=chunk.end_sec,
+        )
+
+    def flush(self) -> STTFinal | None:
+        if not self._chunk_texts:
+            return None
+        full = " ".join(self._chunk_texts)
+        return STTFinal(text=full, start_sec=0.0, end_sec=0.0)
+
+    @staticmethod
+    def _longest_common_prefix(a: str, b: str) -> str:
+        i = 0
+        while i < len(a) and i < len(b) and a[i] == b[i]:
+            i += 1
+        return a[:i]
 
 
 class SegmentedSTTBackend(STTBackend):

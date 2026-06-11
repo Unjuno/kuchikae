@@ -8,7 +8,7 @@ import tempfile
 import numpy as np
 import soundfile as sf
 
-from kuchikae.voice_output import DummyVoiceOutputBackend
+from kuchikae.domain.voice_output import DummyVoiceOutputBackend
 
 
 def _write_dummy_wav(path: str) -> None:

@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from importlib.resources import files
 from functools import lru_cache
 
-from kuchikae.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt, TransformState, TransformUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +235,61 @@ class PromptedRuleTextTransformBackend(TextTransformBackend):
         except Exception as e:
             logger.warning("Failed to load prompt template %s: %s", filename, e)
             return ""
+
+
+# ---------------------------------------------------------------------------
+# Incremental text transform interface
+# ---------------------------------------------------------------------------
+
+
+class IncrementalTextTransformBackend(ABC):
+    """Incremental text transform interface.
+
+    Transforms only new (committed) portions of source text while
+    preserving previously transformed output.
+    """
+
+    @abstractmethod
+    def transform_committed(
+        self,
+        committed_source_text: str,
+        previous_state: TransformState,
+        prompt: TextTransformPrompt,
+    ) -> TransformUpdate:
+        ...
+
+
+class DummyIncrementalTextTransformBackend(IncrementalTextTransformBackend):
+    """Dummy incremental transform for testing.
+
+    Applies a simple prefix to each new segment.
+    """
+
+    def transform_committed(
+        self,
+        committed_source_text: str,
+        previous_state: TransformState,
+        prompt: TextTransformPrompt,
+    ) -> TransformUpdate:
+        new_text = committed_source_text[previous_state.transformed_up_to:]
+        if not new_text:
+            return TransformUpdate(
+                new_output_segment="",
+                updated_state=previous_state,
+            )
+
+        instruction = prompt.instruction.strip()
+        prefix = "[transformed] " if not instruction else "[transformed according to prompt] "
+        new_output_segment = prefix + new_text
+
+        updated_state = TransformState(
+            transformed_up_to=len(committed_source_text),
+            accumulated_output=previous_state.accumulated_output + new_output_segment,
+        )
+        return TransformUpdate(
+            new_output_segment=new_output_segment,
+            updated_state=updated_state,
+        )
 
 
 class TemplateTextTransformBackend(TextTransformBackend):

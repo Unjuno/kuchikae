@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 import sys
 
+from kuchikae.domain.types import TextTransformPrompt
 from kuchikae.pipeline import create_pipeline
-from kuchikae.types import TextTransformPrompt
 from kuchikae.ui import CSS, create_app
 
 

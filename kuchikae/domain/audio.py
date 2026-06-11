@@ -9,7 +9,7 @@ from typing import List
 import numpy as np
 import soundfile as sf
 
-from kuchikae.types import AudioSegment
+from kuchikae.domain.types import AudioSegment
 
 
 class AudioSegmenter(ABC):

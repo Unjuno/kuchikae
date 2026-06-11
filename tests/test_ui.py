@@ -5,7 +5,7 @@ from __future__ import annotations
 import gradio as gr
 
 from kuchikae.pipeline import KuchikaePipeline
-from kuchikae.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt
 from kuchikae.ui import CSS, TEMPLATES, create_app
 
 

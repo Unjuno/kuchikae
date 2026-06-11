@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
-from kuchikae.types import AudioSegment, VoiceContext
+from kuchikae.domain.types import AudioSegment, VoiceContext
 
 logger = logging.getLogger(__name__)
 
@@ -48,3 +48,8 @@ class VoiceContextExtractor:
             return VoiceContext(reference_audio_path="", ready=False)
 
         return VoiceContext(reference_audio_path=reference_audio_path, ready=True)
+
+
+class DummyVoiceContextExtractor(VoiceContextExtractor):
+    """Alias for VoiceContextExtractor — identical behavior."""
+    pass

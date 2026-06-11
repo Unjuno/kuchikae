@@ -9,7 +9,7 @@ import numpy as np
 import soundfile as sf
 
 from kuchikae.pipeline import KuchikaePipeline
-from kuchikae.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt
 
 
 def _write_dummy_wav(path: str) -> None:

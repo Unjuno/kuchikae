@@ -5,19 +5,12 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import tempfile
 from typing import Any
 
-import numpy as np
-import soundfile as sf
-
+from kuchikae.domain.types import TextTransformPrompt
+from kuchikae.pipeline.audio_validation import validate_audio
 from kuchikae.pipeline import create_pipeline
-from kuchikae.types import TextTransformPrompt
 from kuchikae.ui import CSS, create_app
-
-ALLOWED_EXTENSIONS = {'.wav', '.mp3', '.m4a', '.flac'}
-MAX_FILE_SIZE = 25 * 1024 * 1024
-MAX_AUDIO_DURATION = 20.0
 
 
 def _normalize_audio_path(audio_input: Any) -> str:
@@ -33,7 +26,6 @@ def _normalize_audio_path(audio_input: Any) -> str:
     if audio_input is None:
         raise ValueError("Audio required.")
     
-    # Extract path from various input types
     if isinstance(audio_input, str):
         path = audio_input
     elif isinstance(audio_input, dict):
@@ -54,29 +46,15 @@ def _normalize_audio_path(audio_input: Any) -> str:
     
     path = str(path)
     
-    # Check if file exists
     if not os.path.isfile(path):
         raise ValueError("Unsupported audio.")
     
-    # Validate extension
-    ext = os.path.splitext(path)[1].lower()
-    if ext not in ALLOWED_EXTENSIONS:
+    if os.path.splitext(path)[1].lower() not in {'.wav', '.mp3', '.m4a', '.flac'}:
         raise ValueError("Unsupported audio.")
     
-    # Validate file size
     try:
-        size = os.path.getsize(path)
-        if size > MAX_FILE_SIZE:
-            raise ValueError("File too large.")
-    except OSError:
-        raise ValueError("Unsupported audio.")
-    
-    # Validate duration
-    try:
-        info = sf.info(path)
-        if info.duration > MAX_AUDIO_DURATION:
-            raise ValueError("Max 20s.")
-    except Exception:
+        validate_audio(path)
+    except ValueError:
         raise ValueError("Unsupported audio.")
     
     return path

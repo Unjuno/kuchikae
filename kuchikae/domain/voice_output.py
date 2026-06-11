@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import soundfile as sf
+
+from kuchikae.domain.types import VoiceContext
 
 logger = logging.getLogger(__name__)
 OUTPUT_DIR = "outputs"
@@ -174,6 +178,10 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         if not voice_context.ready or not voice_context.reference_audio_path:
             return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
 
+        stripped = text.strip()
+        if not stripped:
+            return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
+
         import torch  # noqa: F811
 
         t0 = time.time()
@@ -189,7 +197,7 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         t1 = time.time()
         result = runtime.synthesize(
             SamplingRequest(
-                text=text,
+                text=stripped,
                 ref_wav=voice_context.reference_audio_path,
                 num_steps=self._num_steps,
                 t_schedule_mode="linear",
@@ -204,3 +212,148 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         saved = save_wav(output_path, result.audio, result.sample_rate)
         self._log(f"saved: {os.path.getsize(output_path)/1e6:.1f}MB")
         return str(saved)
+
+
+# ---------------------------------------------------------------------------
+# Sentence / clause segmenter
+# ---------------------------------------------------------------------------
+
+
+def segment_sentences(text: str) -> list[str]:
+    """Split text into sentences or clause-like units.
+
+    Uses Japanese sentence-ending punctuation (。！？) and
+    English sentence-ending punctuation (.!?) as delimiters.
+    """
+    parts = re.split(r"(?<=[。！？．.!?])\s*", text)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def segment_clauses(text: str) -> list[str]:
+    """Split text into shorter clause-like units.
+
+    In addition to sentence boundaries, splits on 読点 (、)
+    and commas to produce shorter segments for faster TTS output.
+    """
+    parts = re.split(r"(?<=[。！？．.!?、，])\s*", text)
+    return [p.strip() for p in parts if p.strip()]
+
+
+# ---------------------------------------------------------------------------
+# Audio segment queue — ordered merging of incremental TTS outputs
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class QueuedAudioSegment:
+    samples: np.ndarray
+    sample_rate: int
+    index: int
+
+
+class AudioSegmentQueue:
+    """Ordered queue for incremental TTS audio segments.
+
+    Collects segments produced in any order and merges them
+    in correct sequence with an optional pause between segments.
+    """
+
+    def __init__(self, pause_sec: float = 0.15) -> None:
+        self._segments: list[QueuedAudioSegment] = []
+        self._next_index = 0
+        self._pause_samples = 0
+
+    @property
+    def total_duration_sec(self) -> float:
+        total = 0.0
+        for seg in self._segments:
+            total += len(seg.samples) / seg.sample_rate
+        return total
+
+    def enqueue(self, samples: np.ndarray, sample_rate: int) -> int:
+        idx = self._next_index
+        self._segments.append(QueuedAudioSegment(
+            samples=samples, sample_rate=sample_rate, index=idx,
+        ))
+        self._next_index += 1
+        return idx
+
+    def merge(self, pause_sec: float = 0.15) -> np.ndarray:
+        if not self._segments:
+            return np.array([], dtype=np.float32)
+
+        self._segments.sort(key=lambda s: s.index)
+        sr = self._segments[0].sample_rate
+        pause = np.zeros(int(pause_sec * sr), dtype=np.float32)
+
+        parts: list[np.ndarray] = []
+        for i, seg in enumerate(self._segments):
+            if i > 0:
+                parts.append(pause)
+            parts.append(seg.samples)
+
+        return np.concatenate(parts)
+
+    def clear(self) -> None:
+        self._segments.clear()
+        self._next_index = 0
+
+    @property
+    def count(self) -> int:
+        return len(self._segments)
+
+
+# ---------------------------------------------------------------------------
+# Streaming voice output backend interface
+# ---------------------------------------------------------------------------
+
+
+class StreamingVoiceOutputBackend(ABC):
+    """Incremental / streaming voice output backend.
+
+    Prepare voice context once, then synthesize segments as they become
+    available, and finalize to produce the complete output file.
+    """
+
+    @abstractmethod
+    def prepare_voice(self, voice_context: VoiceContext) -> None:
+        ...
+
+    @abstractmethod
+    def synthesize_segment(self, text_segment: str) -> tuple[np.ndarray, int]:
+        ...
+
+    @abstractmethod
+    def finalize(self) -> str:
+        ...
+
+
+class DummyStreamingVoiceOutputBackend(StreamingVoiceOutputBackend):
+    """Dummy streaming voice output for testing.
+
+    Generates a short sine tone for each segment.
+    """
+
+    def __init__(self) -> None:
+        self._queue = AudioSegmentQueue()
+        self._segment_index = 0
+
+    def prepare_voice(self, voice_context: VoiceContext) -> None:
+        self._queue.clear()
+        self._segment_index = 0
+
+    def synthesize_segment(self, text_segment: str) -> tuple[np.ndarray, int]:
+        sr = 16000
+        duration = max(0.3, len(text_segment) * 0.05)
+        t = np.linspace(0, duration, int(sr * duration), endpoint=False)
+        samples = (0.1 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+        self._queue.enqueue(samples, sr)
+        self._segment_index += 1
+        return samples, sr
+
+    def finalize(self) -> str:
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        path = os.path.join(OUTPUT_DIR, f"streaming_output_{int(time.time())}.wav")
+        merged = self._queue.merge()
+        sf.write(path, merged, 16000)
+        return path

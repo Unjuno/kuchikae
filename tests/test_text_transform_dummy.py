@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from kuchikae.text_transform import DummyTextTransformBackend
-from kuchikae.types import TextTransformPrompt
+from kuchikae.domain.text_transform import DummyTextTransformBackend
+from kuchikae.domain.types import TextTransformPrompt
 
 
 def test_dummy_transformer_returns_non_empty():

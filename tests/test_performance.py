@@ -6,7 +6,7 @@ import numpy as np
 import soundfile as sf
 from tempfile import NamedTemporaryFile
 
-from kuchikae.audio_key import AudioKey
+from kuchikae.domain.audio_key import AudioKey
 from kuchikae.counting_backends import (
     CountingSTTBackend,
     CountingTextTransformBackend,
@@ -14,7 +14,7 @@ from kuchikae.counting_backends import (
     CountingVoiceOutputBackend,
 )
 from kuchikae.pipeline import KuchikaePipeline
-from kuchikae.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt
 
 
 def test_same_audio_different_prompts_calls_stt_once() -> None:
@@ -81,8 +81,8 @@ def test_same_audio_different_prompts_calls_stt_once() -> None:
 
 def test_processing_cache_functionality() -> None:
     """Test ProcessingCache functionality."""
-    from kuchikae.processing_cache import ProcessingCache
-    from kuchikae.types import VoiceContext
+    from kuchikae.domain.processing_cache import ProcessingCache
+    from kuchikae.domain.types import VoiceContext
 
     # Create a test audio key
     with NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
@@ -120,7 +120,7 @@ def test_processing_cache_functionality() -> None:
 
 def test_audio_key_equality() -> None:
     """Test AudioKey equality."""
-    from kuchikae.audio_key import AudioKey
+    from kuchikae.domain.audio_key import AudioKey
 
     key1 = AudioKey("/path/to/file.wav", 1000, 1234567890.0)
     key2 = AudioKey("/path/to/file.wav", 1000, 1234567890.0)
@@ -139,7 +139,7 @@ def test_audio_key_equality() -> None:
 
 def test_repeated_run_with_cache() -> None:
     """Test that repeated runs with same audio use cache."""
-    from kuchikae.processing_cache import ProcessingCache
+    from kuchikae.domain.processing_cache import ProcessingCache
 
     # Create a test audio file
     with NamedTemporaryFile(suffix=".wav", delete=False) as tmp:

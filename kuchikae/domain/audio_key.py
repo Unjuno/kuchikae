@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from kuchikae.types import AudioCacheKey
+from kuchikae.domain.types import AudioCacheKey
 
 
 class AudioKey:

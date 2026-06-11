@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
-from kuchikae.audio_key import AudioKey
-from kuchikae.types import TextTransformPrompt, VoiceContext
+from kuchikae.domain.audio_key import AudioKey
+from kuchikae.domain.types import TextTransformPrompt, VoiceContext
 
 logger = logging.getLogger(__name__)
 
