@@ -101,8 +101,9 @@ class OllamaTextTransformBackend(TextTransformBackend):
                     "Ollama text transform is unavailable. "
                     "Start the Ollama server and make sure the requested model is pulled."
                 ) from e
-            logger.warning("ollama failed (%s), falling back to dummy", e)
-            return DummyTextTransformBackend().transform(text, prompt)
+            raise RuntimeError(
+                "Ollama text transform failed. Start the Ollama server and make sure the requested model is pulled."
+            ) from e
 
 
 class GPTTextTransformBackend(TextTransformBackend):
@@ -152,8 +153,7 @@ class GPTTextTransformBackend(TextTransformBackend):
         except Exception as e:
             if self.strict:
                 raise RuntimeError("GPT text transform failed.") from e
-            logger.warning("gpt failed (%s), falling back to dummy", e)
-            return DummyTextTransformBackend().transform(text, prompt)
+            raise RuntimeError("GPT text transform failed.") from e
 
 
 class RuleTextTransformBackend(TextTransformBackend):

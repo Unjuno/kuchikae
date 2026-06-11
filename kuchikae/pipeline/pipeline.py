@@ -45,7 +45,7 @@ logger = setup_logger("kuchikae.pipeline")
 
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     config = backend_config or {}
-    allow_dummy_backends = config.get("allow_dummy_backends", True)
+    allow_dummy_backends = config.get("allow_dummy_backends", False)
 
     stt_type = config.get("stt_backend", "faster_whisper")
     use_segmented = config.get("segmented_stt", False)

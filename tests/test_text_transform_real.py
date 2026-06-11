@@ -110,9 +110,8 @@ class TestOllamaTextTransformBackend:
     def test_transform_fallback_on_error(self) -> None:
         backend = OllamaTextTransformBackend(model="nonexistent-model")
         prompt = TextTransformPrompt(instruction="polite")
-        # Should fall back to dummy transform, not raise
-        result = backend.transform("テスト", prompt)
-        assert isinstance(result, str)
+        with pytest.raises(RuntimeError, match="Ollama text transform failed"):
+            backend.transform("テスト", prompt)
 
     def test_uses_custom_base_url(self) -> None:
         backend = OllamaTextTransformBackend(model="qwen3:8b")
@@ -140,12 +139,12 @@ class TestGPTTextTransformBackend:
         with patch.dict(os.environ, clear=True):
             backend = GPTTextTransformBackend()
             prompt = TextTransformPrompt(instruction="polite")
-            result = backend.transform("テスト", prompt)
-            assert isinstance(result, str)
+            with pytest.raises(RuntimeError, match="OPENAI_API_KEY is required"):
+                backend.transform("テスト", prompt)
 
 
 @pytest.mark.slow
 def test_pipeline_uses_prompted_rule_by_default() -> None:
     from kuchikae.pipeline import create_pipeline
-    pipeline = create_pipeline()
+    pipeline = create_pipeline({"allow_dummy_backends": True})
     assert isinstance(pipeline.text_transform_backend, PromptedRuleTextTransformBackend)

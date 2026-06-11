@@ -79,7 +79,7 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         prompt: VoiceOutputPrompt | None = None,
     ) -> str:
         if not voice_context.ready or not voice_context.reference_audio_path:
-            return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
+            raise RuntimeError("OpenVoice requires a ready reference audio path.")
 
         t0 = time.time()
         base_tts, converter = self._ensure_models_loaded()
@@ -162,11 +162,11 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         prompt: VoiceOutputPrompt | None = None,
     ) -> str:
         if not voice_context.ready or not voice_context.reference_audio_path:
-            return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
+            raise RuntimeError("Irodori-TTS requires a ready reference audio path.")
 
         stripped = text.strip()
         if not stripped:
-            return DummyVoiceOutputBackend().synthesize(text, VoiceContext("", False))
+            raise RuntimeError("Irodori-TTS requires non-empty text.")
 
         import torch  # noqa: F811
 

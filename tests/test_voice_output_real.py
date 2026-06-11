@@ -54,24 +54,24 @@ class TestIrodoriTTSVoiceOutputBackend:
         assert os.path.isfile(result)
 
     @pytest.mark.slow
-    def test_synthesize_fallback_on_no_reference(self) -> None:
+    def test_synthesize_errors_on_no_reference(self) -> None:
         from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
 
         vc = VoiceContext(reference_audio_path="", ready=False)
         backend = IrodoriTTSVoiceOutputBackend()
-        result = backend.synthesize("テスト", vc)
-        assert isinstance(result, str)
+        with pytest.raises(RuntimeError, match="requires a ready reference audio path"):
+            backend.synthesize("テスト", vc)
 
     @pytest.mark.slow
-    def test_synthesize_empty_text_fallback(self, tmp_path) -> None:
+    def test_synthesize_empty_text_errors(self, tmp_path) -> None:
         from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
 
         ref = tmp_path / "ref.wav"
         _write_reference_wav(str(ref), sr=24000)
         vc = VoiceContext(reference_audio_path=str(ref), ready=True)
         backend = IrodoriTTSVoiceOutputBackend(num_steps=4)
-        result = backend.synthesize("", vc)
-        assert isinstance(result, str)
+        with pytest.raises(RuntimeError, match="requires non-empty text"):
+            backend.synthesize("", vc)
 
 
 # ---------------------------------------------------------------------------
@@ -97,21 +97,21 @@ class TestOpenVoiceOutputBackend:
         assert isinstance(result, str)
         assert os.path.isfile(result)
 
-    def test_fallback_on_no_reference(self) -> None:
+    def test_errors_on_no_reference(self) -> None:
         from kuchikae.backends.voice_output import OpenVoiceOutputBackend
 
         vc = VoiceContext(reference_audio_path="", ready=False)
         backend = OpenVoiceOutputBackend()
-        result = backend.synthesize("test", vc)
-        assert isinstance(result, str)
+        with pytest.raises(RuntimeError, match="requires a ready reference audio path"):
+            backend.synthesize("test", vc)
 
-    def test_fallback_on_non_ready(self) -> None:
+    def test_errors_on_non_ready(self) -> None:
         from kuchikae.backends.voice_output import OpenVoiceOutputBackend
 
         vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=False)
         backend = OpenVoiceOutputBackend()
-        result = backend.synthesize("test", vc)
-        assert isinstance(result, str)
+        with pytest.raises(RuntimeError, match="requires a ready reference audio path"):
+            backend.synthesize("test", vc)
 
 
 # ---------------------------------------------------------------------------
