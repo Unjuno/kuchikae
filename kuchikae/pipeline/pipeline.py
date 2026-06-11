@@ -210,6 +210,7 @@ class KuchikaePipeline:
         self,
         audio_path: str,
         text_transform_prompt: TextTransformPrompt,
+        voice_output_prompt: VoiceOutputPrompt | None = None,
     ) -> PipelineResult:
         t0 = time.time()
 
@@ -230,7 +231,13 @@ class KuchikaePipeline:
         t3 = time.time()
         voice_context = self._voice_context_extractor.extract(audio_path)
         text_for_voice = transformed_text.strip() or source_text
-        output_audio_path = self._step_voice(text_for_voice, audio_path, audio_key, voice_context)
+        output_audio_path = self._step_voice(
+            text_for_voice,
+            audio_path,
+            audio_key,
+            voice_context,
+            voice_output_prompt,
+        )
         voice_latency = time.time() - t3
         logger.info("VOICE: %.2fs → %s", voice_latency, output_audio_path)
 
@@ -262,6 +269,7 @@ class KuchikaePipeline:
         self,
         audio_path: str,
         text_transform_prompt: TextTransformPrompt,
+        voice_output_prompt: VoiceOutputPrompt | None = None,
     ) -> Generator[tuple[str, str | None, str | None, str | None], None, None]:
         t0 = time.time()
         self.check_audio(audio_path)
@@ -279,7 +287,13 @@ class KuchikaePipeline:
         yield "VOX", source_text, transformed_text, None
         voice_context = self._voice_context_extractor.extract(audio_path)
         text_for_voice = transformed_text.strip() or source_text
-        output_audio_path = self._step_voice(text_for_voice, audio_path, audio_key, voice_context)
+        output_audio_path = self._step_voice(
+            text_for_voice,
+            audio_path,
+            audio_key,
+            voice_context,
+            voice_output_prompt,
+        )
         logger.info("VOX: %.2fs %s", time.time() - t0, output_audio_path)
 
         yield "DONE", source_text, transformed_text, output_audio_path
@@ -288,6 +302,7 @@ class KuchikaePipeline:
         self,
         audio_path: str,
         text_transform_prompt: TextTransformPrompt,
+        voice_output_prompt: VoiceOutputPrompt | None = None,
     ) -> Generator[tuple[str, str | None, str | None, str | None], None, None]:
         """Live streaming pipeline with partial STT results.
         
@@ -330,7 +345,13 @@ class KuchikaePipeline:
         yield "VOX", source_text, transformed_text, None
         voice_context = self._voice_context_extractor.extract(audio_path)
         text_for_voice = transformed_text.strip() or source_text
-        output_audio_path = self._step_voice(text_for_voice, audio_path, audio_key, voice_context)
+        output_audio_path = self._step_voice(
+            text_for_voice,
+            audio_path,
+            audio_key,
+            voice_context,
+            voice_output_prompt,
+        )
         logger.info("VOX: %.2fs %s", time.time() - t0, output_audio_path)
 
         yield "DONE", source_text, transformed_text, output_audio_path

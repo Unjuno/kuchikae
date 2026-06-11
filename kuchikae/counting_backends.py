@@ -64,6 +64,7 @@ class CountingVoiceOutputBackend(VoiceOutputBackend):
         self.call_count = 0
         self.last_text: str | None = None
         self.last_voice_context: VoiceContext | None = None
+        self.last_prompt: VoiceOutputPrompt | None = None
 
     def synthesize(
         self,
@@ -74,9 +75,11 @@ class CountingVoiceOutputBackend(VoiceOutputBackend):
         self.call_count += 1
         self.last_text = text
         self.last_voice_context = voice_context
+        self.last_prompt = prompt
         return self.inner.synthesize(text, voice_context, prompt)
 
     def reset(self) -> None:
         self.call_count = 0
         self.last_text = None
         self.last_voice_context = None
+        self.last_prompt = None
