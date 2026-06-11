@@ -7,12 +7,23 @@ dependencies = [
     "numpy",
     "soundfile",
     "pyyaml",
+]
+
+[project.optional-dependencies]
+test = [
     "pytest",
+]
+stt = [
+    "faster-whisper",
+]
+tts = [
     "torch>=2.12.0",
     "torchaudio>=2.11.0",
-    "faster-whisper",
     "irodori-tts",
     "silentcipher",
+]
+real = [
+    "kuchikae[stt,tts]",
 ]
 
 [project.scripts]
@@ -29,6 +40,10 @@ silentcipher = { git = "https://github.com/SesameAILabs/silentcipher.git", rev =
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
+    "unit: fast pure tests",
+    "contract: backend contract tests",
+    "golden: text quality golden tests",
+    "e2e: browser and UI tests",
     "slow: tests that load real models (e.g. Whisper, TTS)",
 ]
 
@@ -36,6 +51,7 @@ markers = [
 dev = [
     "playwright",
     "pytest-playwright",
+    "pytest",
 ]
 
 [project.urls]

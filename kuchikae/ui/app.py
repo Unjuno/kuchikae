@@ -7,6 +7,7 @@ CSS, JS, and handlers live in sibling modules.
 from __future__ import annotations
 
 import functools
+import logging
 
 import gradio as gr
 
@@ -20,6 +21,8 @@ from kuchikae.ui.handlers import (
     run_simple,
 )
 from kuchikae.ui.js import PTT_HTML
+
+logger = logging.getLogger("kuchikae.ui.app")
 
 
 def create_app(
@@ -97,7 +100,6 @@ def create_app(
                         label="",
                         sources=["microphone"],
                         type="filepath",
-                        visible=True,
                     )
 
                     gr.HTML(PTT_HTML)
@@ -125,8 +127,8 @@ def create_app(
 
                     simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
 
-                    simple_audio.change(
-                        lambda a: run_simple(pipeline, a, live_streaming),
+                    simple_audio.stop(
+                        functools.partial(run_simple, pipeline=pipeline, live_streaming=live_streaming),
                         inputs=[simple_audio],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],
                     )

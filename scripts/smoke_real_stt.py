@@ -14,7 +14,8 @@ import tempfile
 import numpy as np
 import soundfile as sf
 
-from kuchikae.stt import DummySTTBackend, FasterWhisperSTTBackend
+from kuchikae.domain.stt import DummySTTBackend
+from kuchikae.backends.stt import FasterWhisperSTTBackend
 
 
 def create_test_audio(path: str) -> None:

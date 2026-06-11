@@ -101,7 +101,10 @@ class AudioChunk:
             raise ValueError(
                 f"end_sec ({self.end_sec}) must be >= start_sec ({self.start_sec})"
             )
-        object.__setattr__(self, "duration_sec", self.end_sec - self.start_sec)
+
+    @property
+    def duration_sec(self) -> float:
+        return self.end_sec - self.start_sec
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +131,7 @@ class AudioChunker:
         self.hop_samples = int(hop_sec * sample_rate)
         self.session_id = session_id
         self._buffer: np.ndarray = np.array([], dtype=np.float32)
-        self._total_samples = 0
+        self._emitted_samples = 0
         self._chunk_index = 0
 
     @property
@@ -142,14 +145,13 @@ class AudioChunker:
             samples = samples.mean(axis=1)
 
         self._buffer = np.concatenate([self._buffer, samples])
-        start_pos = 0
 
         while len(self._buffer) >= self.chunk_samples:
             chunk_data = self._buffer[: self.chunk_samples]
             self._buffer = self._buffer[self.hop_samples :]
 
-            start_sec = start_pos / self.sample_rate
-            end_sec = (start_pos + self.chunk_samples) / self.sample_rate
+            start_sec = self._emitted_samples / self.sample_rate
+            end_sec = (self._emitted_samples + self.chunk_samples) / self.sample_rate
 
             rms_val = _rms(chunk_data)
             yield AudioChunk(
@@ -162,14 +164,12 @@ class AudioChunker:
                 has_speech=rms_val > 0.01,
             )
             self._chunk_index += 1
-            start_pos += self.hop_samples
-
-        self._total_samples = start_pos
+            self._emitted_samples += self.hop_samples
 
     def flush(self) -> Generator[AudioChunk, None, None]:
         remaining = len(self._buffer)
         if remaining > 0:
-            total_sec = self._total_samples / self.sample_rate
+            total_sec = self._emitted_samples / self.sample_rate
             yield AudioChunk(
                 session_id=self.session_id,
                 chunk_index=self._chunk_index,
@@ -185,7 +185,7 @@ class AudioChunker:
 
     def reset(self) -> None:
         self._buffer = np.array([], dtype=np.float32)
-        self._total_samples = 0
+        self._emitted_samples = 0
         self._chunk_index = 0
 
 

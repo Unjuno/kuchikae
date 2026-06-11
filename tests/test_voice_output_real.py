@@ -40,7 +40,7 @@ def _write_reference_wav(path: str, sr: int = 24000, duration_sec: float = 2.0) 
 class TestIrodoriTTSVoiceOutputBackend:
     @pytest.mark.slow
     def test_synthesize_returns_path(self, tmp_path) -> None:
-        from kuchikae.domain.voice_output import IrodoriTTSVoiceOutputBackend
+        from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
 
         ref = tmp_path / "ref.wav"
         _write_reference_wav(str(ref), sr=24000)
@@ -55,7 +55,7 @@ class TestIrodoriTTSVoiceOutputBackend:
 
     @pytest.mark.slow
     def test_synthesize_fallback_on_no_reference(self) -> None:
-        from kuchikae.domain.voice_output import IrodoriTTSVoiceOutputBackend
+        from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
 
         vc = VoiceContext(reference_audio_path="", ready=False)
         backend = IrodoriTTSVoiceOutputBackend()
@@ -64,7 +64,7 @@ class TestIrodoriTTSVoiceOutputBackend:
 
     @pytest.mark.slow
     def test_synthesize_empty_text_fallback(self, tmp_path) -> None:
-        from kuchikae.domain.voice_output import IrodoriTTSVoiceOutputBackend
+        from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
 
         ref = tmp_path / "ref.wav"
         _write_reference_wav(str(ref), sr=24000)
@@ -86,7 +86,7 @@ class TestIrodoriTTSVoiceOutputBackend:
 class TestOpenVoiceOutputBackend:
     @pytest.mark.slow
     def test_synthesize_returns_path(self, tmp_path) -> None:
-        from kuchikae.domain.voice_output import OpenVoiceOutputBackend
+        from kuchikae.backends.voice_output import OpenVoiceOutputBackend
 
         ref = tmp_path / "ref.wav"
         _write_reference_wav(str(ref))
@@ -98,7 +98,7 @@ class TestOpenVoiceOutputBackend:
         assert os.path.isfile(result)
 
     def test_fallback_on_no_reference(self) -> None:
-        from kuchikae.domain.voice_output import OpenVoiceOutputBackend
+        from kuchikae.backends.voice_output import OpenVoiceOutputBackend
 
         vc = VoiceContext(reference_audio_path="", ready=False)
         backend = OpenVoiceOutputBackend()
@@ -106,7 +106,7 @@ class TestOpenVoiceOutputBackend:
         assert isinstance(result, str)
 
     def test_fallback_on_non_ready(self) -> None:
-        from kuchikae.domain.voice_output import OpenVoiceOutputBackend
+        from kuchikae.backends.voice_output import OpenVoiceOutputBackend
 
         vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=False)
         backend = OpenVoiceOutputBackend()

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from kuchikae.domain.stt import FasterWhisperSTTBackend
+from kuchikae.backends.stt import FasterWhisperSTTBackend
 
 
 @pytest.fixture

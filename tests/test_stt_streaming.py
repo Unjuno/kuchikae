@@ -7,10 +7,10 @@ import pytest
 
 from kuchikae.domain.audio_stream import AudioChunk
 from kuchikae.domain.stt import (
-    ChunkedStreamingSTTBackend,
     DummyStreamingSTTBackend,
     StreamingSTTBackend,
 )
+from kuchikae.backends.stt import ChunkedStreamingSTTBackend
 from kuchikae.domain.types import STTCommit, STTFinal, STTPartial
 
 

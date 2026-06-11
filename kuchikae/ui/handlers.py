@@ -5,6 +5,7 @@ All module-level functions for testability (View Isolation).
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 from typing import Generator
@@ -15,6 +16,8 @@ import soundfile as sf
 from kuchikae.domain.types import TextTransformPrompt
 from kuchikae.pipeline import KuchikaePipeline
 
+logger = logging.getLogger("kuchikae.ui.handlers")
+
 TEMPLATES = {
     "自然に": "内容、数字、日時、固有名詞、否定条件は保ちつつ、言い回しを自然な日本語に変換してください。",
     "丁寧に": "次のテキストを「です・ます」調の丁寧な言葉遣いに変換してください。",
@@ -24,22 +27,50 @@ TEMPLATES = {
 }
 
 
-def normalize_audio_path(audio_input):
+def normalize_audio_path(audio_input) -> str | None:
     if audio_input is None:
+        logger.warning("[normalize] input is None")
         return None
+
     if isinstance(audio_input, tuple):
         sr, data = audio_input
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             sf.write(tmp.name, data, sr)
+            logger.info("[normalize] tuple -> %s", tmp.name)
             return tmp.name
+
     if isinstance(audio_input, dict):
-        path = audio_input.get("orig_name") or audio_input.get("name") or audio_input.get("path")
-        return str(path) if path else None
-    path = getattr(audio_input, "path", None) or getattr(audio_input, "orig_name", None) or getattr(audio_input, "name", None)
-    if path:
+        orig_name = audio_input.get("orig_name")
+        if orig_name and os.path.isfile(orig_name):
+            logger.info("[normalize] dict.orig_name -> %s", orig_name)
+            return str(orig_name)
+        path = audio_input.get("path")
+        if path and os.path.isfile(path):
+            logger.info("[normalize] dict.path -> %s", path)
+            return str(path)
+        name = audio_input.get("name")
+        if name and os.path.isfile(name):
+            logger.info("[normalize] dict.name -> %s", name)
+            return str(name)
+        logger.warning("[normalize] dict but no valid file. keys=%s", list(audio_input.keys()))
+        return None
+
+    path = getattr(audio_input, "path", None)
+    if path and os.path.isfile(path):
+        logger.info("[normalize] obj.path -> %s", path)
         return str(path)
+    orig_name = getattr(audio_input, "orig_name", None)
+    if orig_name and os.path.isfile(orig_name):
+        logger.info("[normalize] obj.orig_name -> %s", orig_name)
+        return str(orig_name)
+
     result = str(audio_input)
-    return result if os.path.isfile(result) else None
+    if os.path.isfile(result):
+        logger.info("[normalize] str -> %s", result)
+        return result
+
+    logger.warning("[normalize] unresolvable: type=%s repr=%s", type(audio_input).__name__, repr(audio_input)[:200])
+    return None
 
 
 def run_simple(
@@ -47,8 +78,10 @@ def run_simple(
     audio_input,
     live_streaming: bool = False,
 ) -> Generator:
+    logger.info("[run_simple] called")
     path = normalize_audio_path(audio_input)
     if path is None:
+        logger.warning("[run_simple] no path, aborting")
         yield gr.update(), "", "", ""
         return
 
@@ -56,6 +89,7 @@ def run_simple(
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
 
     for status, src, txt, aud in stream_fn(path, prompt):
+        logger.info("[run_simple] status=%s", status)
         if status == "DONE":
             yield aud, src, txt, "言い直しました"
         elif status == "VOX":
@@ -75,8 +109,10 @@ def run(
     pipeline: KuchikaePipeline,
     live_streaming: bool = False,
 ) -> Generator:
+    logger.info("[run] called template=%s", template_name)
     path = normalize_audio_path(audio_input)
     if path is None:
+        logger.error("[run] no path! audio_input type=%s", type(audio_input).__name__)
         raise gr.Error("音声を録音またはアップロードしてください")
 
     if template_name == "カスタム" and custom_prompt.strip():
@@ -90,6 +126,7 @@ def run(
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
 
     for status, src, txt, aud in stream_fn(path, prompt):
+        logger.info("[run] status=%s", status)
         if status == "DONE":
             yield aud, src, txt, "言い直しました"
         elif status == "VOX":

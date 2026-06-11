@@ -18,10 +18,9 @@ import tempfile
 import numpy as np
 import soundfile as sf
 
-from kuchikae.voice_output import (
-    DummyVoiceOutputBackend,
-    OpenVoiceOutputBackend,
-)
+from kuchikae.domain.voice_output import DummyVoiceOutputBackend
+from kuchikae.backends.voice_output import OpenVoiceOutputBackend
+from kuchikae.domain.types import VoiceContext
 
 
 def create_test_audio(path: str) -> None:
@@ -42,7 +41,8 @@ def main() -> int:
     # Test dummy backend.
     print("\n--- DummyVoiceOutputBackend ---")
     dummy_backend = DummyVoiceOutputBackend()
-    dummy_path = dummy_backend.synthesize("テスト", ref_audio)
+    voice_context_dummy = VoiceContext(reference_audio_path=ref_audio, ready=True)
+    dummy_path = dummy_backend.synthesize("テスト", voice_context_dummy)
     assert os.path.isfile(dummy_path), f"Dummy output missing: {dummy_path}"
     data, sr = sf.read(dummy_path)
     print(f"  Output: {dummy_path}")
@@ -52,7 +52,8 @@ def main() -> int:
     print("\n--- OpenVoiceOutputBackend ---")
     try:
         ow_backend = OpenVoiceOutputBackend()
-        ow_path = ow_backend.synthesize("テスト", ref_audio)
+        voice_context = VoiceContext(reference_audio_path=ref_audio, ready=True)
+        ow_path = ow_backend.synthesize("テスト", voice_context)
         assert os.path.isfile(ow_path), f"OpenVoice output missing: {ow_path}"
         data2, sr2 = sf.read(ow_path)
         print(f"  Output: {ow_path}")

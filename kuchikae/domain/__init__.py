@@ -1,27 +1,26 @@
-"""Kuchikae domain — backend logic (monolith core)."""
+"""Kuchikae domain package.
+
+This package exposes the lightweight domain model only. Heavy runtime backends
+live under :mod:`kuchikae.backends`.
+"""
 
 from kuchikae.domain.audio import AudioSegmenter, FixedWindowSegmenter, TranscriptJoiner
 from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor
-from kuchikae.domain.audio_stream import AudioChunk, AudioChunker, AudioStreamBuffer, EnergyVAD
 from kuchikae.domain.audio_key import AudioKey, AudioKeyFromCacheKey, AudioKeyFromPath
+from kuchikae.domain.audio_stream import AudioChunk, AudioChunker, AudioStreamBuffer, EnergyVAD
 from kuchikae.domain.metrics import LatencyLogger, StreamingMetricsRecorder
 from kuchikae.domain.processing_cache import ProcessingCache
 from kuchikae.domain.stt import (
-    ChunkedStreamingSTTBackend,
     DummySTTBackend,
     DummyStreamingSTTBackend,
-    FasterWhisperSTTBackend,
     SegmentedSTTBackend,
     STTBackend,
-    StreamingFasterWhisperSTTBackend,
     StreamingSTTBackend,
 )
 from kuchikae.domain.text_transform import (
     DummyIncrementalTextTransformBackend,
     DummyTextTransformBackend,
-    GPTTextTransformBackend,
     IncrementalTextTransformBackend,
-    OllamaTextTransformBackend,
     PromptedRuleTextTransformBackend,
     RuleTextTransformBackend,
     TemplateTextTransformBackend,
@@ -48,8 +47,6 @@ from kuchikae.domain.voice_output import (
     AudioSegmentQueue,
     DummyStreamingVoiceOutputBackend,
     DummyVoiceOutputBackend,
-    IrodoriTTSVoiceOutputBackend,
-    OpenVoiceOutputBackend,
     StreamingVoiceOutputBackend,
     VoiceOutputBackend,
     segment_clauses,
@@ -68,29 +65,21 @@ __all__ = [
     "AudioSegmenter",
     "AudioSegmentQueue",
     "AudioStreamBuffer",
-    "ChunkedStreamingSTTBackend",
     "DummyIncrementalTextTransformBackend",
-    "DummyStreamingVoiceOutputBackend",
     "DummyStreamingSTTBackend",
+    "DummyStreamingVoiceOutputBackend",
     "DummySTTBackend",
-    "EnergyVAD",
     "DummyTextTransformBackend",
     "DummyVoiceOutputBackend",
-    "FasterWhisperSTTBackend",
+    "EnergyVAD",
     "FixedWindowSegmenter",
-    "GPTTextTransformBackend",
     "IncrementalTextTransformBackend",
-    "IrodoriTTSVoiceOutputBackend",
     "LatencyLogger",
-    "OllamaTextTransformBackend",
-    "OpenVoiceOutputBackend",
     "PerfTimer",
     "PipelineResult",
     "ProcessingCache",
     "PromptedRuleTextTransformBackend",
     "RuleTextTransformBackend",
-    "segment_clauses",
-    "segment_sentences",
     "SegmentedSTTBackend",
     "STTBackend",
     "STTCommit",
@@ -98,11 +87,10 @@ __all__ = [
     "STTPartial",
     "StreamChunk",
     "StreamingAudioSegment",
-    "StreamingFasterWhisperSTTBackend",
+    "StreamingLatencyReport",
     "StreamingMetricsRecorder",
     "StreamingSTTBackend",
     "StreamingVoiceOutputBackend",
-    "StreamingLatencyReport",
     "TemplateTextTransformBackend",
     "TextTransformBackend",
     "TextTransformPrompt",
@@ -115,4 +103,6 @@ __all__ = [
     "VoiceOutputBackend",
     "VoiceOutputPrompt",
     "now_ms",
+    "segment_clauses",
+    "segment_sentences",
 ]

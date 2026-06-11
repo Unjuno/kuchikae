@@ -17,13 +17,7 @@ from kuchikae.counting_backends import (
     CountingVoiceOutputBackend,
 )
 from kuchikae.domain.processing_cache import ProcessingCache
-from kuchikae.domain.stt import (
-    DummySTTBackend,
-    FasterWhisperSTTBackend,
-    SegmentedSTTBackend,
-    StreamingFasterWhisperSTTBackend,
-    STTBackend,
-)
+from kuchikae.domain.stt import DummySTTBackend, SegmentedSTTBackend, STTBackend
 from kuchikae.domain.text_transform import (
     DummyTextTransformBackend,
     GPTTextTransformBackend,
@@ -37,11 +31,10 @@ from kuchikae.domain.types import (
     PipelineResult,
     StreamingLatencyReport,
     TextTransformPrompt,
+    VoiceOutputPrompt,
 )
 from kuchikae.domain.voice_output import (
     DummyVoiceOutputBackend,
-    IrodoriTTSVoiceOutputBackend,
-    OpenVoiceOutputBackend,
     VoiceOutputBackend,
 )
 from kuchikae.logging import setup_logger
@@ -62,6 +55,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         has_faster_whisper = False
 
     if stt_type == "faster_whisper" and has_faster_whisper:
+        from kuchikae.backends.stt import FasterWhisperSTTBackend
         inner = FasterWhisperSTTBackend()
     else:
         inner = DummySTTBackend()
@@ -71,6 +65,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         segmenter: AudioSegmenter = FixedWindowSegmenter(chunk_sec=30.0, overlap_sec=2.0)
         stt = SegmentedSTTBackend(inner=inner, segmenter=segmenter)
     elif config.get("streaming_stt", False):
+        from kuchikae.backends.stt import StreamingFasterWhisperSTTBackend
         stt = StreamingFasterWhisperSTTBackend(chunk_sec=5.0, overlap_sec=1.0)
     else:
         stt = inner
@@ -100,12 +95,18 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         pass
 
     if voice_output_type == "irodori" and _irodori_ready:
+        from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
         vo = IrodoriTTSVoiceOutputBackend()
     elif voice_output_type == "openvoice" or (config.get("auto_openvoice") and os.environ.get("OPENVOICE_READY")):
+        from kuchikae.backends.voice_output import OpenVoiceOutputBackend
         vo = OpenVoiceOutputBackend()
     else:
         _ow_ready = os.path.isdir(_ow_path) and os.environ.get("OPENVOICE_READY")
-        vo = OpenVoiceOutputBackend() if _ow_ready else DummyVoiceOutputBackend()
+        if _ow_ready:
+            from kuchikae.backends.voice_output import OpenVoiceOutputBackend
+            vo = OpenVoiceOutputBackend()
+        else:
+            vo = DummyVoiceOutputBackend()
 
     logger.info("pipeline: stt=%s text=%s(%s) voice=%s",
                 type(stt).__name__, type(tt_class()).__name__,
@@ -139,10 +140,10 @@ class KuchikaePipeline:
     def warmup(self) -> None:
         logger.info("warming up...")
 
-        if isinstance(self.stt_backend, FasterWhisperSTTBackend):
+        if hasattr(self.stt_backend, "_load_model"):
             try:
                 logger.info("warming up STT...")
-                self.stt_backend.transcribe.__self__.transcribe("")  # noqa: SLF001
+                self.stt_backend._load_model()  # noqa: SLF001
             except Exception as e:
                 logger.debug("STT warmup skipped: %s", e)
 
@@ -173,7 +174,12 @@ class KuchikaePipeline:
         logger.info("warmup done")
 
     def check_audio(self, audio_path: str) -> None:
-        validate_audio(audio_path)
+        try:
+            validate_audio(audio_path)
+        except ValueError as e:
+            if "not found" in str(e):
+                raise FileNotFoundError(str(e)) from e
+            raise
 
     def _step_stt(self, audio_path: str, audio_key: AudioKey) -> str:
         cached = self.processing_cache.get_stt(audio_key)
@@ -183,14 +189,21 @@ class KuchikaePipeline:
         self.processing_cache.set_stt(audio_key, text)
         return text
 
-    def _step_voice(self, text: str, audio_path: str, audio_key: AudioKey, voice_context: VoiceContext) -> str:
+    def _step_voice(
+        self,
+        text: str,
+        audio_path: str,
+        audio_key: AudioKey,
+        voice_context,
+        voice_output_prompt: VoiceOutputPrompt | None = None,
+    ) -> str:
         cached_context = self.processing_cache.get_voice_context(audio_key)
         if cached_context is not None:
             voice_context = cached_context
         else:
             self.processing_cache.set_voice_context(audio_key, voice_context)
         
-        out = self.voice_output_backend.synthesize(text, voice_context)
+        out = self.voice_output_backend.synthesize(text, voice_context, voice_output_prompt)
         return out
 
     def process(

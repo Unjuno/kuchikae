@@ -850,14 +850,29 @@ name = "kuchikae"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "faster-whisper", marker = "sys_platform == 'darwin'" },
     { name = "gradio", marker = "sys_platform == 'darwin'" },
-    { name = "irodori-tts", marker = "sys_platform == 'darwin'" },
     { name = "numpy", marker = "sys_platform == 'darwin'" },
-    { name = "pytest", marker = "sys_platform == 'darwin'" },
     { name = "pyyaml", marker = "sys_platform == 'darwin'" },
-    { name = "silentcipher", marker = "sys_platform == 'darwin'" },
     { name = "soundfile", marker = "sys_platform == 'darwin'" },
+]
+
+[package.optional-dependencies]
+real = [
+    { name = "faster-whisper", marker = "sys_platform == 'darwin'" },
+    { name = "irodori-tts", marker = "sys_platform == 'darwin'" },
+    { name = "silentcipher", marker = "sys_platform == 'darwin'" },
+    { name = "torch", marker = "sys_platform == 'darwin'" },
+    { name = "torchaudio", marker = "sys_platform == 'darwin'" },
+]
+stt = [
+    { name = "faster-whisper", marker = "sys_platform == 'darwin'" },
+]
+test = [
+    { name = "pytest", marker = "sys_platform == 'darwin'" },
+]
+tts = [
+    { name = "irodori-tts", marker = "sys_platform == 'darwin'" },
+    { name = "silentcipher", marker = "sys_platform == 'darwin'" },
     { name = "torch", marker = "sys_platform == 'darwin'" },
     { name = "torchaudio", marker = "sys_platform == 'darwin'" },
 ]
@@ -865,26 +880,30 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "playwright", marker = "sys_platform == 'darwin'" },
+    { name = "pytest", marker = "sys_platform == 'darwin'" },
     { name = "pytest-playwright", marker = "sys_platform == 'darwin'" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "faster-whisper" },
+    { name = "faster-whisper", marker = "extra == 'stt'" },
     { name = "gradio" },
-    { name = "irodori-tts", git = "https://github.com/Aratako/Irodori-TTS.git" },
+    { name = "irodori-tts", marker = "extra == 'tts'", git = "https://github.com/Aratako/Irodori-TTS.git" },
+    { name = "kuchikae", extras = ["stt", "tts"], marker = "extra == 'real'", virtual = "." },
     { name = "numpy" },
-    { name = "pytest" },
+    { name = "pytest", marker = "extra == 'test'" },
     { name = "pyyaml" },
-    { name = "silentcipher", git = "https://github.com/SesameAILabs/silentcipher.git?rev=d46d7d0893a583d8968ab3a6626e2289faec9152" },
+    { name = "silentcipher", marker = "extra == 'tts'", git = "https://github.com/SesameAILabs/silentcipher.git?rev=d46d7d0893a583d8968ab3a6626e2289faec9152" },
     { name = "soundfile" },
-    { name = "torch", specifier = ">=2.12.0" },
-    { name = "torchaudio", specifier = ">=2.11.0" },
+    { name = "torch", marker = "extra == 'tts'", specifier = ">=2.12.0" },
+    { name = "torchaudio", marker = "extra == 'tts'", specifier = ">=2.11.0" },
 ]
+provides-extras = ["test", "stt", "tts", "real"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "playwright" },
+    { name = "pytest" },
     { name = "pytest-playwright" },
 ]
 
@@ -1028,12 +1047,12 @@ wheels = [
 
 [[package]]
 name = "msgpack"
-version = "1.1.2"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/4d/f2/bfb55a6236ed8725a96b0aa3acbd0ec17588e6a2c3b62a93eb513ed8783f/msgpack-1.1.2.tar.gz", hash = "sha256:3b60763c1373dd60f398488069bcdc703cd08a711477b5d480eecc9f9626f47e", size = 173581, upload-time = "2025-10-08T09:15:56.596Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/23/6139781ca7aadf656fa8e384fa84693ffb13f299e6931b6526427fe5e297/msgpack-1.2.0.tar.gz", hash = "sha256:8e17af38197bf58e7e819041678f6178f4491493f5b8c8580414f40f7c2c3c41", size = 183017, upload-time = "2026-06-11T04:16:10.775Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/97/560d11202bcd537abca693fd85d81cebe2107ba17301de42b01ac1677b69/msgpack-1.1.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:2e86a607e558d22985d856948c12a3fa7b42efad264dca8a3ebbcfa2735d786c", size = 82271, upload-time = "2025-10-08T09:14:49.967Z" },
-    { url = "https://files.pythonhosted.org/packages/83/04/28a41024ccbd67467380b6fb440ae916c1e4f25e2cd4c63abe6835ac566e/msgpack-1.1.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:283ae72fc89da59aa004ba147e8fc2f766647b1251500182fac0350d8af299c0", size = 84914, upload-time = "2025-10-08T09:14:50.958Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/23/35de3182a647fcc84ab304160169edfa5dac7bbd8913fbed0a505ddc0d55/msgpack-1.2.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:ec35cd3f127f50806aa10c3f74bf27b749f13ddf1d2217964ada8f38042d1653", size = 82368, upload-time = "2026-06-11T04:14:53.57Z" },
+    { url = "https://files.pythonhosted.org/packages/aa/79/8d9bfdab933b1c7a02aba9518605a81aa30d38e9efd4915ec1a6b2d55778/msgpack-1.2.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:317eb298297121bfad9173d748124a04a36af27b6ac39c2bbc1db1ce57608dcf", size = 82095, upload-time = "2026-06-11T04:14:54.784Z" },
 ]
 
 [[package]]
