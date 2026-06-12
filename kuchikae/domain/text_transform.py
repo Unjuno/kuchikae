@@ -117,8 +117,8 @@ class OllamaTextTransformBackend(TextTransformBackend):
                 if self._on_cot_stripped:
                     self._on_cot_stripped(self.model)
             if not result:
-                logger.warning("ollama returned empty response, using original text")
-                result = text
+                logger.warning("ollama returned empty response")
+                return result
             if not validate_transform(text, result):
                 logger.warning("text_transform.validation_failed model=%s", self.model)
                 return result
