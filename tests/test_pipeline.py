@@ -10,6 +10,8 @@ import pytest
 import soundfile as sf
 
 from kuchikae.domain.audio_key import AudioKey
+from kuchikae.domain.diagnostics import DiagnosticRecorder
+from kuchikae.domain.audio_emotion import AudioEmotion
 from kuchikae.counting_backends import (
     CountingSTTBackend,
     CountingTextTransformBackend,
@@ -318,6 +320,13 @@ def test_resolve_stt_presets_cover_fast_balanced_accurate() -> None:
     assert accurate.vad_filter is True
 
 
+def test_resolve_stt_preset_rejects_unknown_name() -> None:
+    from kuchikae.domain.stt import resolve_stt_preset
+
+    with pytest.raises(ValueError, match="Available presets"):
+        resolve_stt_preset("balnced")
+
+
 def test_create_pipeline_passes_preset_to_faster_whisper_backend(monkeypatch) -> None:
     from kuchikae.pipeline import create_pipeline
     from kuchikae.backends import stt as stt_module
@@ -351,6 +360,89 @@ def test_disable_processing_cache_via_env(monkeypatch) -> None:
     assert getattr(pipeline, "disable_processing_cache", False) is True
 
 
+class SpyProcessingCache:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def get_stt(self, *args, **kwargs):
+        self.calls.append("get_stt")
+        raise AssertionError("get_stt should not be called when cache is disabled")
+
+    def set_stt(self, *args, **kwargs):
+        self.calls.append("set_stt")
+        raise AssertionError("set_stt should not be called when cache is disabled")
+
+    def get_text(self, *args, **kwargs):
+        self.calls.append("get_text")
+        raise AssertionError("get_text should not be called when cache is disabled")
+
+    def set_text(self, *args, **kwargs):
+        self.calls.append("set_text")
+        raise AssertionError("set_text should not be called when cache is disabled")
+
+    def get_voice_context(self, *args, **kwargs):
+        self.calls.append("get_voice_context")
+        raise AssertionError("get_voice_context should not be called when cache is disabled")
+
+    def set_voice_context(self, *args, **kwargs):
+        self.calls.append("set_voice_context")
+        raise AssertionError("set_voice_context should not be called when cache is disabled")
+
+    def get_voice_output(self, *args, **kwargs):
+        self.calls.append("get_voice_output")
+        raise AssertionError("get_voice_output should not be called when cache is disabled")
+
+    def set_voice_output(self, *args, **kwargs):
+        self.calls.append("set_voice_output")
+        raise AssertionError("set_voice_output should not be called when cache is disabled")
+
+    def get_result(self, *args, **kwargs):
+        self.calls.append("get_result")
+        raise AssertionError("get_result should not be called when cache is disabled")
+
+    def set_result(self, *args, **kwargs):
+        self.calls.append("set_result")
+        raise AssertionError("set_result should not be called when cache is disabled")
+
+
+def test_disable_processing_cache_bypasses_all_cache_operations(tmp_path) -> None:
+    wav = tmp_path / "nocache_all.wav"
+    _write_wav(str(wav))
+    spy_cache = SpyProcessingCache()
+    counting_stt = CountingSTTBackend()
+    counting_text = CountingTextTransformBackend()
+    counting_vo = CountingVoiceOutputBackend()
+    pipeline = KuchikaePipeline(
+        stt_backend=counting_stt,
+        text_transform_backend=counting_text,
+        voice_output_backend=counting_vo,
+        processing_cache=spy_cache,  # type: ignore[arg-type]
+        disable_processing_cache=True,
+    )
+    prompt = TextTransformPrompt(instruction="テスト")
+
+    list(pipeline.process_stream(str(wav), prompt))
+    list(pipeline.process_stream_live(str(wav), prompt))
+    pipeline.process(str(wav), prompt)
+
+    assert spy_cache.calls == []
+    assert counting_stt.call_count >= 3
+    assert counting_text.call_count >= 3
+    assert counting_vo.call_count >= 3
+
+
+def test_set_stt_preset_rejects_unknown_without_mutating_state() -> None:
+    pipeline = KuchikaePipeline(stt_preset="balanced", stt_config=None)
+    original_preset = pipeline.stt_preset
+    original_backend = pipeline.stt_backend
+
+    with pytest.raises(ValueError):
+        pipeline.set_stt_preset("balnced")
+
+    assert pipeline.stt_preset == original_preset
+    assert pipeline.stt_backend is original_backend
+
+
 def test_processing_cache_can_be_disabled_via_config(tmp_path) -> None:
     wav = tmp_path / "nocache.wav"
     _write_wav(str(wav))
@@ -364,6 +456,40 @@ def test_processing_cache_can_be_disabled_via_config(tmp_path) -> None:
 
     assert counting_stt.call_count >= 2
     assert pipeline.processing_cache.get_stt(audio_key) is None
+
+
+def test_stt_start_event_is_emitted(tmp_path) -> None:
+    wav = tmp_path / "diag.wav"
+    _write_wav(str(wav))
+    diagnostics = DiagnosticRecorder(max_events=20)
+    pipeline = KuchikaePipeline(diagnostics=diagnostics)
+    pipeline.process(str(wav), TextTransformPrompt(instruction="テスト"))
+
+    names = [event.name for event in diagnostics.events()]
+    assert "stt.start" in names
+
+
+def test_voice_prompt_auto_generation_and_cache_key(tmp_path) -> None:
+    wav = tmp_path / "voice_auto.wav"
+    _write_wav(str(wav))
+    pipeline = KuchikaePipeline()
+    result = pipeline.process(str(wav), TextTransformPrompt(instruction="テスト"), None)
+    assert isinstance(result.output_audio_path, str)
+    assert getattr(pipeline, "_last_voice_style", None) is not None
+
+
+def test_audio_emotion_detector_can_timeout_without_failure(tmp_path, monkeypatch) -> None:
+    class SlowDetector:
+        def detect(self, audio_path: str):
+            import time
+            time.sleep(0.2)
+            return AudioEmotion()
+
+    wav = tmp_path / "slow_emotion.wav"
+    _write_wav(str(wav))
+    pipeline = KuchikaePipeline(audio_emotion_detector=SlowDetector(), voice_style_timeout_sec=0.01)
+    result = pipeline.process(str(wav), TextTransformPrompt(instruction="テスト"), None)
+    assert isinstance(result.output_audio_path, str)
 
 
 # ---------------------------------------------------------------------------

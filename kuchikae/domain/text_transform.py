@@ -21,6 +21,35 @@ PROMPT_FILES = {
 }
 
 
+def strip_cot(text: str) -> str:
+    t = text.strip()
+    t = re.sub(r"<think>.*?</think>", "", t, flags=re.DOTALL).strip()
+    t = re.sub(r"<reasoning>.*?</reasoning>", "", t, flags=re.DOTALL).strip()
+    t = re.sub(r"<思考>.*?</思考>", "", t, flags=re.DOTALL).strip()
+    return t
+
+
+def validate_transform(source_text: str, transformed_text: str) -> bool:
+    if not transformed_text or not transformed_text.strip():
+        return False
+    if "<think>" in transformed_text or "</think>" in transformed_text:
+        return False
+    meta_patterns = (r"^理由[:：]", r"^説明[:：]", r"^候補[:：]", r"^解説[:：]", r"^補足[:：]")
+    for pat in meta_patterns:
+        if re.match(pat, transformed_text.strip()):
+            return False
+    max_len = len(source_text) * 3 + 50
+    if len(transformed_text) > max_len:
+        return False
+    src_numbers = set(re.findall(r"\d+", source_text))
+    if src_numbers:
+        out_numbers = set(re.findall(r"\d+", transformed_text))
+        missing = src_numbers - out_numbers
+        if missing:
+            return False
+    return True
+
+
 class TextTransformBackend(ABC):
 
     @abstractmethod
@@ -39,10 +68,11 @@ class DummyTextTransformBackend(TextTransformBackend):
 
 class OllamaTextTransformBackend(TextTransformBackend):
 
-    def __init__(self, model: str = "qwen3:8b", strict: bool = False) -> None:
-        self.model = model
+    def __init__(self, model: str | None = None, strict: bool = False, on_cot_stripped: callable | None = None) -> None:
+        self.model = model or os.environ.get("KUCHIKAE_TEXT_MODEL", "qwen2.5:1.5b-instruct")
         self.strict = strict
         self._base_url = os.environ.get("KUCHIKAE_OLLAMA_URL", "http://localhost:11434")
+        self._on_cot_stripped = on_cot_stripped
 
     def transform(self, text: str, prompt: TextTransformPrompt) -> str:
         import httpx
@@ -66,20 +96,13 @@ class OllamaTextTransformBackend(TextTransformBackend):
                                 "新しい情報を追加しないでください。"
                             ),
                         },
-                        {
-                            "role": "user",
-                            "content": (
-                                f"## 変換ルール\n"
-                                f"{prompt.instruction}\n\n"
-                                f"## 変換対象テキスト\n"
-                                f"{text}"
-                            ),
-                        },
+                        {"role": "user", "content": f"/no_think\n## 変換ルール\n{prompt.instruction}\n\n## 変換対象テキスト\n{text}"},
                     ],
                     "stream": False,
                     "options": {
                         "temperature": 0.1,
-                        "num_predict": 256,
+                        "num_predict": 128,
+                        "top_p": 0.8,
                     },
                     "keep_alive": "5m",
                 },
@@ -88,10 +111,17 @@ class OllamaTextTransformBackend(TextTransformBackend):
             resp.raise_for_status()
             body = resp.json()
             msg = body["message"]
-            result = (msg.get("content") or msg.get("thinking") or "").strip()
+            result = strip_cot((msg.get("content") or "").strip())
+            if "<think>" in (msg.get("content") or "").lower():
+                logger.warning("text_transform.cot_stripped model=%s", self.model)
+                if self._on_cot_stripped:
+                    self._on_cot_stripped(self.model)
             if not result:
                 logger.warning("ollama returned empty response, using original text")
                 result = text
+            if not validate_transform(text, result):
+                logger.warning("text_transform.validation_failed model=%s", self.model)
+                return text
             else:
                 logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
             return result

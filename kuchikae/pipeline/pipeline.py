@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import time
+from dataclasses import asdict
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from typing import Generator
 
 from kuchikae.domain.audio import AudioSegmenter, FixedWindowSegmenter
@@ -20,6 +22,7 @@ from kuchikae.counting_backends import (
     CountingVoiceOutputBackend,
 )
 from kuchikae.domain.processing_cache import ProcessingCache
+from kuchikae.domain.audio_emotion import AudioEmotion, AudioEmotionDetector, DummyAudioEmotionDetector
 from kuchikae.domain.stt import (
     DummySTTBackend,
     FasterWhisperConfig,
@@ -34,6 +37,15 @@ from kuchikae.domain.text_transform import (
     PromptedRuleTextTransformBackend,
     RuleTextTransformBackend,
     TextTransformBackend,
+    strip_cot,
+    validate_transform,
+)
+from kuchikae.domain.voice_style import (
+    RuleVoiceStyleDetector,
+    VoiceStyle,
+    VoiceStyleDetector,
+    merge_voice_style,
+    voice_style_to_prompt,
 )
 from kuchikae.domain.types import (
     AudioCacheKey,
@@ -262,10 +274,15 @@ class KuchikaePipeline:
         diagnostics: DiagnosticRecorder | None = None,
         stt_preset: str = "balanced",
         stt_config: FasterWhisperConfig | None = None,
+        voice_style_detector: VoiceStyleDetector | None = None,
+        audio_emotion_detector: AudioEmotionDetector | None = None,
+        voice_style_timeout_sec: float = 0.05,
         backend_config: dict | None = None,
     ) -> None:
         self.stt_backend = stt_backend or DummySTTBackend()
         self.text_transform_backend = text_transform_backend or DummyTextTransformBackend()
+        if isinstance(self.text_transform_backend, OllamaTextTransformBackend):
+            self.text_transform_backend._on_cot_stripped = self._on_cot_stripped
         self.voice_output_backend = voice_output_backend or DummyVoiceOutputBackend()
         self.processing_cache = processing_cache or ProcessingCache()
         self.latency_logger = latency_logger
@@ -274,6 +291,11 @@ class KuchikaePipeline:
         self.run_id = new_run_id()
         self.stt_preset = stt_preset
         self.stt_config = stt_config
+        self.voice_style_detector = voice_style_detector or RuleVoiceStyleDetector()
+        self.audio_emotion_detector = audio_emotion_detector or DummyAudioEmotionDetector()
+        self.voice_style_timeout_sec = voice_style_timeout_sec
+        self._last_voice_style = "auto"
+        self._last_audio_emotion = "disabled"
         self.backend_config = backend_config or {}
         self._audio_cache = AudioCache()
         self._voice_context_extractor = VoiceContextExtractor()
@@ -329,6 +351,29 @@ class KuchikaePipeline:
             )
         )
 
+    def _emit_failed(self, stage: str, backend: str, error: Exception) -> None:
+        self._emit(
+            "pipeline.failed",
+            f"{type(error).__name__}: {error}",
+            "pipeline",
+            level=EventLevel.ERROR,
+            backend=backend,
+            data={"stage": stage, "hint": hint_for_error(stage, error)},
+        )
+
+    def _emit_style(self, name: str, stage: str, data: dict) -> None:
+        self._emit(name, name, stage, data=data)
+
+    def _on_cot_stripped(self, model: str) -> None:
+        self._emit(
+            "text_transform.cot_stripped",
+            "CoT content was stripped from transform result.",
+            "text",
+            level=EventLevel.WARNING,
+            backend="OllamaTextTransformBackend",
+            data={"model": model},
+        )
+
     def _stt_config_data(self) -> dict:
         config = getattr(self.stt_backend, "config", None)
         if config is not None:
@@ -349,18 +394,17 @@ class KuchikaePipeline:
         }
 
     def set_stt_preset(self, stt_preset: str) -> None:
-        self.stt_preset = stt_preset
         from kuchikae.backends.stt import FasterWhisperSTTBackend
 
         config = resolve_stt_preset(stt_preset)
+        old_preset = self.stt_preset
+        old_config = self.stt_config
         if isinstance(self.stt_backend, FasterWhisperSTTBackend):
             self.stt_backend = FasterWhisperSTTBackend(config=config)
-            self.stt_config = config
         elif hasattr(self.stt_backend, "_inner") and isinstance(getattr(self.stt_backend, "_inner"), FasterWhisperSTTBackend):
             self.stt_backend._inner = FasterWhisperSTTBackend(config=config)  # type: ignore[attr-defined]
-            self.stt_config = config
-        else:
-            self.stt_config = config
+        self.stt_preset = stt_preset
+        self.stt_config = config
         self._emit(
             "backend.selected",
             f"STT preset changed to {stt_preset}",
@@ -369,6 +413,9 @@ class KuchikaePipeline:
                 "stt": type(self.stt_backend).__name__,
                 "stt_preset": self.stt_preset,
                 "stt_config": self._stt_config_data(),
+                "previous_stt_preset": old_preset,
+                "previous_stt_config": asdict(old_config) if old_config is not None else None,
+                "cache_reuse_warning": "cached STT/text/voice outputs may reflect the previous preset",
             },
         )
         if isinstance(self.stt_backend, DummySTTBackend):
@@ -444,6 +491,86 @@ class KuchikaePipeline:
             self.processing_cache.set_stt(audio_key, text)
         return text
 
+    def _step_stt_stream(self, audio_path: str, audio_key: AudioKey) -> str:
+        self._emit(
+            "stt.start",
+            "STT started.",
+            "stt",
+            backend=type(self.stt_backend).__name__,
+        )
+        if hasattr(self.stt_backend, "transcribe_stream"):
+            accumulated = ""
+            for partial in self.stt_backend.transcribe_stream(audio_path):
+                accumulated = partial
+            if not self.disable_processing_cache:
+                self.processing_cache.set_stt(audio_key, accumulated)
+            return accumulated
+        return self._step_stt(audio_path, audio_key)
+
+    def _voice_context(self, audio_path: str, audio_key: AudioKey) -> object:
+        if self.disable_processing_cache:
+            return self._voice_context_extractor.extract(audio_path)
+        cached = self.processing_cache.get_voice_context(audio_key)
+        if cached is not None:
+            self._emit(
+                "cache.voice_hit",
+                "Voice context cache hit; extractor was not executed.",
+                "voice_context",
+                cache="voice_context",
+                data={"reference_audio_path": cached.reference_audio_path, "ready": cached.ready},
+            )
+            return cached
+        voice_context = self._voice_context_extractor.extract(audio_path)
+        self.processing_cache.set_voice_context(audio_key, voice_context)
+        return voice_context
+
+    def _detect_audio_emotion_async(self, audio_path: str):
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(self.audio_emotion_detector.detect, audio_path)
+        return future, executor
+
+    def _detect_voice_style(self, text: str) -> VoiceStyle:
+        self._emit_style("voice_style.detect.start", "voice_style", {})
+        style = self.voice_style_detector.detect(text)
+        self._emit_style(
+            "voice_style.detect.done",
+            "voice_style",
+            {
+                "mood": style.mood.value,
+                "speed": style.speed.value,
+                "clarity": style.clarity.value,
+                "emphasis": style.emphasis.value,
+                "confidence": style.confidence,
+                "source": style.source,
+            },
+        )
+        return style
+
+    def _build_voice_prompt(self, text_for_voice: str, audio_emotion: AudioEmotion | None, voice_output_prompt: VoiceOutputPrompt | None) -> VoiceOutputPrompt:
+        if voice_output_prompt is not None:
+            self._last_voice_style = "custom"
+            self._last_audio_emotion = getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled"
+            return voice_output_prompt
+        text_style = self._detect_voice_style(text_for_voice)
+        final_style = merge_voice_style(text_style, audio_emotion)
+        prompt = VoiceOutputPrompt(instruction=voice_style_to_prompt(final_style))
+        self._last_voice_style = final_style.mood.value
+        self._last_audio_emotion = getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled"
+        self._emit_style(
+            "voice_style.generated",
+            "voice_style",
+            {
+                "mood": final_style.mood.value,
+                "speed": final_style.speed.value,
+                "clarity": final_style.clarity.value,
+                "emphasis": final_style.emphasis.value,
+                "confidence": final_style.confidence,
+                "source": final_style.source,
+                "generated_prompt_preview": prompt.instruction[:120],
+            },
+        )
+        return prompt
+
     def _step_voice(
         self,
         text: str,
@@ -452,14 +579,14 @@ class KuchikaePipeline:
         voice_context,
         voice_output_prompt: VoiceOutputPrompt | None = None,
     ) -> str:
+        if self.disable_processing_cache:
+            return self.voice_output_backend.synthesize(text, voice_context, voice_output_prompt)
         cached_context = self.processing_cache.get_voice_context(audio_key)
         if cached_context is not None:
             voice_context = cached_context
         else:
             self.processing_cache.set_voice_context(audio_key, voice_context)
-        
-        out = self.voice_output_backend.synthesize(text, voice_context, voice_output_prompt)
-        return out
+        return self.voice_output_backend.synthesize(text, voice_context, voice_output_prompt)
 
     def process(
         self,
@@ -483,7 +610,9 @@ class KuchikaePipeline:
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
         voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = None if self.disable_processing_cache else self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        cached_result = None
+        if not self.disable_processing_cache and voice_output_prompt is not None:
+            cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
         if cached_result is not None:
             logger.info(
                 "process:full_cache_hit output_audio_path=%s source_len=%d transformed_len=%d",
@@ -512,6 +641,12 @@ class KuchikaePipeline:
         )
 
         t1 = time.time()
+        self._emit(
+            "stt.start",
+            "STT started.",
+            "stt",
+            backend=type(self.stt_backend).__name__,
+        )
         logger.info("process:stt:start")
         try:
             source_text = self._step_stt(audio_path, audio_key)
@@ -525,6 +660,7 @@ class KuchikaePipeline:
                 data={"source_len": len(source_text), "source_preview": source_text[:80]},
             )
         except Exception as e:
+            self._emit_failed("stt", type(self.stt_backend).__name__, e)
             self._emit(
                 "stt.failed",
                 f"{type(e).__name__}: {e}",
@@ -566,6 +702,20 @@ class KuchikaePipeline:
                     backend=type(self.text_transform_backend).__name__,
                 )
                 transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+                if not validate_transform(source_text, transformed_text):
+                    self._emit(
+                        "text_transform.validation_failed",
+                        "Text transform validation failed.",
+                        "text",
+                        level=EventLevel.WARNING,
+                        data={"source_len": len(source_text), "transformed_len": len(transformed_text)},
+                    )
+                    transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
+                    self._emit(
+                        "text_transform.fallback_used",
+                        "PromptedRuleTextTransformBackend fallback used.",
+                        "text",
+                    )
                 self._emit(
                     "text.done",
                     "Text transform finished.",
@@ -574,6 +724,7 @@ class KuchikaePipeline:
                     data={"transformed_len": len(transformed_text), "transformed_preview": transformed_text[:80]},
                 )
             except Exception as e:
+                self._emit_failed("text", type(self.text_transform_backend).__name__, e)
                 self._emit(
                     "text.failed",
                     f"{type(e).__name__}: {e}",
@@ -583,7 +734,8 @@ class KuchikaePipeline:
                     data={"hint": hint_for_error("text", e)},
                 )
                 raise
-            self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
+            if not self.disable_processing_cache:
+                self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
         text_latency = time.time() - t2
         logger.info(
             "process:text:done latency=%.2fs transformed_len=%d transformed_preview=%r",
@@ -613,6 +765,7 @@ class KuchikaePipeline:
                 },
             )
         except Exception as e:
+            self._emit_failed("voice_context", type(self._voice_context_extractor).__name__, e)
             self._emit(
                 "voice_context.failed",
                 f"{type(e).__name__}: {e}",
@@ -629,7 +782,52 @@ class KuchikaePipeline:
             voice_context.speaker_embedding is not None,
             voice_context.prosody_profile is not None,
         )
+        audio_future = None
+        audio_executor = None
+        try:
+            audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
+        except Exception:
+            pass
         text_for_voice = transformed_text.strip() or source_text
+        audio_emotion = None
+        if audio_future is not None:
+            try:
+                self._emit(
+                    "audio_emotion.detect.start",
+                    "Audio emotion detection started.",
+                    "audio_emotion",
+                    backend=type(self.audio_emotion_detector).__name__,
+                )
+                audio_emotion = audio_future.result(timeout=self.voice_style_timeout_sec)
+                self._emit(
+                    "audio_emotion.detect.done",
+                    "Audio emotion detection finished.",
+                    "audio_emotion",
+                    backend=type(self.audio_emotion_detector).__name__,
+                    data=asdict(audio_emotion),
+                )
+            except FuturesTimeoutError:
+                self._emit(
+                    "audio_emotion.detect.timeout",
+                    "Audio emotion detection timed out.",
+                    "audio_emotion",
+                    level=EventLevel.WARNING,
+                    backend=type(self.audio_emotion_detector).__name__,
+                )
+                audio_emotion = None
+            except Exception as e:
+                self._emit(
+                    "audio_emotion.detect.failed",
+                    f"{type(e).__name__}: {e}",
+                    "audio_emotion",
+                    level=EventLevel.WARNING,
+                    backend=type(self.audio_emotion_detector).__name__,
+                )
+                audio_emotion = None
+            finally:
+                audio_executor.shutdown(wait=False, cancel_futures=True)
+        voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
+        voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
             len(text_for_voice),
@@ -670,6 +868,7 @@ class KuchikaePipeline:
                     data={"output_audio_path": output_audio_path},
                 )
             except Exception as e:
+                self._emit_failed("tts", type(self.voice_output_backend).__name__, e)
                 self._emit(
                     "tts.failed",
                     f"{type(e).__name__}: {e}",
@@ -679,12 +878,13 @@ class KuchikaePipeline:
                     data={"hint": hint_for_error("tts", e)},
                 )
                 raise
-            self.processing_cache.set_voice_output(
-                text_for_voice,
-                voice_prompt_text,
-                voice_context,
-                output_audio_path,
-            )
+            if not self.disable_processing_cache:
+                self.processing_cache.set_voice_output(
+                    text_for_voice,
+                    voice_prompt_text,
+                    voice_context,
+                    output_audio_path,
+                )
         voice_latency = time.time() - t3
         logger.info(
             "process:voice:done latency=%.2fs output_audio_path=%s",
@@ -749,7 +949,9 @@ class KuchikaePipeline:
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
         voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = None if self.disable_processing_cache else self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        cached_result = None
+        if not self.disable_processing_cache and voice_output_prompt is not None:
+            cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
         if cached_result is not None:
             logger.info("process_stream:full_cache_hit")
             self._emit(
@@ -798,6 +1000,10 @@ class KuchikaePipeline:
             logger.info("process_stream:text:cache_hit transformed_len=%d", len(transformed_text))
         else:
             transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+            if not validate_transform(source_text, transformed_text):
+                self._emit("text_transform.validation_failed", "Text transform validation failed.", "text", level=EventLevel.WARNING, data={"source_len": len(source_text), "transformed_len": len(transformed_text)})
+                transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
+                self._emit("text_transform.fallback_used", "PromptedRuleTextTransformBackend fallback used.", "text")
             if not self.disable_processing_cache:
                 self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
         logger.info(
@@ -810,7 +1016,7 @@ class KuchikaePipeline:
         logger.info("process_stream:yield VOX")
         yield "VOX", source_text, transformed_text, None
         logger.info("process_stream:voice_context:start")
-        voice_context = self._voice_context_extractor.extract(audio_path)
+        voice_context = self._voice_context(audio_path, audio_key)
         logger.info(
             "process_stream:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
             voice_context.reference_audio_path,
@@ -818,7 +1024,28 @@ class KuchikaePipeline:
             voice_context.speaker_embedding is not None,
             voice_context.prosody_profile is not None,
         )
+        audio_future = None
+        audio_executor = None
+        try:
+            audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
+        except Exception:
+            pass
         text_for_voice = transformed_text.strip() or source_text
+        audio_emotion = None
+        if audio_future is not None:
+            try:
+                self._emit("audio_emotion.detect.start", "Audio emotion detection started.", "audio_emotion", backend=type(self.audio_emotion_detector).__name__)
+                audio_emotion = audio_future.result(timeout=self.voice_style_timeout_sec)
+                self._emit("audio_emotion.detect.done", "Audio emotion detection finished.", "audio_emotion", backend=type(self.audio_emotion_detector).__name__, data=asdict(audio_emotion))
+            except FuturesTimeoutError:
+                self._emit("audio_emotion.detect.timeout", "Audio emotion detection timed out.", "audio_emotion", level=EventLevel.WARNING, backend=type(self.audio_emotion_detector).__name__)
+            except Exception as e:
+                self._emit("audio_emotion.detect.failed", f"{type(e).__name__}: {e}", "audio_emotion", level=EventLevel.WARNING, backend=type(self.audio_emotion_detector).__name__)
+            finally:
+                if audio_executor is not None:
+                    audio_executor.shutdown(wait=False, cancel_futures=True)
+        voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
+        voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process_stream:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
             len(text_for_voice),
@@ -893,7 +1120,9 @@ class KuchikaePipeline:
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
         voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = None if self.disable_processing_cache else self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        cached_result = None
+        if not self.disable_processing_cache and voice_output_prompt is not None:
+            cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
         if cached_result is not None:
             logger.info("process_stream_live:full_cache_hit")
             self._emit(
@@ -939,6 +1168,12 @@ class KuchikaePipeline:
             logger.info("process_stream_live:yield STT")
             yield "STT", source_text, None, None
         else:
+            self._emit(
+                "stt.start",
+                "STT started.",
+                "stt",
+                backend=type(self.stt_backend).__name__,
+            )
             # Stream STT
             if hasattr(self.stt_backend, "transcribe_stream"):
                 logger.info("process_stream_live:stt_stream:start backend=%s", type(self.stt_backend).__name__)
@@ -955,6 +1190,13 @@ class KuchikaePipeline:
                 source_text = accumulated
                 if not self.disable_processing_cache:
                     self.processing_cache.set_stt(audio_key, source_text)
+                self._emit(
+                    "stt.done",
+                    "STT finished.",
+                    "stt",
+                    backend=type(self.stt_backend).__name__,
+                    data={"source_len": len(source_text), "source_preview": source_text[:80]},
+                )
                 logger.info(
                     "process_stream_live:stt_stream:done source_len=%d source_preview=%r",
                     len(source_text),
@@ -965,6 +1207,13 @@ class KuchikaePipeline:
             else:
                 logger.info("process_stream_live:stt_fallback:start backend=%s", type(self.stt_backend).__name__)
                 source_text = self._step_stt(audio_path, audio_key)
+                self._emit(
+                    "stt.done",
+                    "STT finished.",
+                    "stt",
+                    backend=type(self.stt_backend).__name__,
+                    data={"source_len": len(source_text), "source_preview": source_text[:80]},
+                )
                 logger.info(
                     "process_stream_live:stt_fallback:done source_len=%d source_preview=%r",
                     len(source_text),
@@ -985,9 +1234,26 @@ class KuchikaePipeline:
             transformed_text = cached_text
             logger.info("process_stream_live:text:cache_hit transformed_len=%d", len(transformed_text))
         else:
+            self._emit(
+                "text.start",
+                "Text transform started.",
+                "text",
+                backend=type(self.text_transform_backend).__name__,
+            )
             transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+            if not validate_transform(source_text, transformed_text):
+                self._emit("text_transform.validation_failed", "Text transform validation failed.", "text", level=EventLevel.WARNING, data={"source_len": len(source_text), "transformed_len": len(transformed_text)})
+                transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
+                self._emit("text_transform.fallback_used", "PromptedRuleTextTransformBackend fallback used.", "text")
             if not self.disable_processing_cache:
                 self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
+            self._emit(
+                "text.done",
+                "Text transform finished.",
+                "text",
+                backend=type(self.text_transform_backend).__name__,
+                data={"transformed_len": len(transformed_text), "transformed_preview": transformed_text[:80]},
+            )
         logger.info(
             "process_stream_live:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
             time.time() - t0,
@@ -999,7 +1265,7 @@ class KuchikaePipeline:
         logger.info("process_stream_live:yield VOX")
         yield "VOX", source_text, transformed_text, None
         logger.info("process_stream_live:voice_context:start")
-        voice_context = self._voice_context_extractor.extract(audio_path)
+        voice_context = self._voice_context(audio_path, audio_key)
         logger.info(
             "process_stream_live:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
             voice_context.reference_audio_path,
@@ -1007,7 +1273,28 @@ class KuchikaePipeline:
             voice_context.speaker_embedding is not None,
             voice_context.prosody_profile is not None,
         )
+        audio_future = None
+        audio_executor = None
+        try:
+            audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
+        except Exception:
+            pass
         text_for_voice = transformed_text.strip() or source_text
+        audio_emotion = None
+        if audio_future is not None:
+            try:
+                self._emit("audio_emotion.detect.start", "Audio emotion detection started.", "audio_emotion", backend=type(self.audio_emotion_detector).__name__)
+                audio_emotion = audio_future.result(timeout=self.voice_style_timeout_sec)
+                self._emit("audio_emotion.detect.done", "Audio emotion detection finished.", "audio_emotion", backend=type(self.audio_emotion_detector).__name__, data=asdict(audio_emotion))
+            except FuturesTimeoutError:
+                self._emit("audio_emotion.detect.timeout", "Audio emotion detection timed out.", "audio_emotion", level=EventLevel.WARNING, backend=type(self.audio_emotion_detector).__name__)
+            except Exception as e:
+                self._emit("audio_emotion.detect.failed", f"{type(e).__name__}: {e}", "audio_emotion", level=EventLevel.WARNING, backend=type(self.audio_emotion_detector).__name__)
+            finally:
+                if audio_executor is not None:
+                    audio_executor.shutdown(wait=False, cancel_futures=True)
+        voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
+        voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process_stream_live:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
             len(text_for_voice),
@@ -1019,6 +1306,12 @@ class KuchikaePipeline:
             output_audio_path = cached_audio
             logger.info("process_stream_live:voice:cache_hit output_audio_path=%s", output_audio_path)
         else:
+            self._emit(
+                "tts.start",
+                "Voice output started.",
+                "tts",
+                backend=type(self.voice_output_backend).__name__,
+            )
             output_audio_path = self._step_voice(
                 text_for_voice,
                 audio_path,
@@ -1033,6 +1326,13 @@ class KuchikaePipeline:
                     voice_context,
                     output_audio_path,
                 )
+            self._emit(
+                "tts.done",
+                "Voice output finished.",
+                "tts",
+                backend=type(self.voice_output_backend).__name__,
+                data={"output_audio_path": output_audio_path},
+            )
         logger.info(
             "process_stream_live:voice:done elapsed=%.2fs output_audio_path=%s",
             time.time() - t0,

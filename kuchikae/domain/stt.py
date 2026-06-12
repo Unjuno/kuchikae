@@ -57,9 +57,13 @@ STT_PRESETS: dict[str, FasterWhisperConfig] = {
 
 
 def resolve_stt_preset(name: str | None) -> FasterWhisperConfig:
-    if not name:
+    if name is None or name == "":
         return STT_PRESETS["balanced"]
-    return STT_PRESETS.get(name, STT_PRESETS["balanced"])
+    preset = STT_PRESETS.get(name)
+    if preset is not None:
+        return preset
+    available = ", ".join(sorted(STT_PRESETS))
+    raise ValueError(f"Unknown STT preset: {name!r}. Available presets: {available}")
 
 
 class STTBackend:

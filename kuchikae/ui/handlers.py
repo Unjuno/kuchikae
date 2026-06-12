@@ -14,6 +14,7 @@ import gradio as gr
 import soundfile as sf
 
 from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
+from kuchikae.domain.voice_style import VOICE_STYLE_PRESETS
 from kuchikae.pipeline import KuchikaePipeline
 
 logger = logging.getLogger("kuchikae.ui.handlers")
@@ -24,6 +25,13 @@ TEMPLATES = {
     "柔らかく": "次のテキストを柔らかく丁寧な表現に変換してください。",
     "短く": "次のテキストを簡潔に短く要約・変換してください。内容や固有名詞は変えないでください。",
     "カスタム": "",
+}
+
+VOICE_STYLE_PRESETS = {
+    "natural": "自然で聞き取りやすく、元話者の声質に近い雰囲気で読んでください。文章内容は変えないでください。",
+    "calm": "落ち着いた声で、自然な速さで、聞き取りやすく読んでください。文章内容は変えないでください。",
+    "bright": "明るく、自然な抑揚で、聞き取りやすく読んでください。文章内容は変えないでください。",
+    "slow_clear": "少しゆっくり、明瞭に、聞き取りやすく読んでください。文章内容は変えないでください。",
 }
 
 
@@ -105,6 +113,16 @@ def normalize_voice_output_prompt(value) -> VoiceOutputPrompt | None:
     return VoiceOutputPrompt(instruction=text)
 
 
+def resolve_voice_style(voice_style: str, custom_prompt: str | None = None) -> VoiceOutputPrompt | None:
+    if voice_style == "auto" or not voice_style:
+        return None
+    if voice_style == "custom" and custom_prompt and custom_prompt.strip():
+        return VoiceOutputPrompt(instruction=custom_prompt.strip())
+    if voice_style in VOICE_STYLE_PRESETS:
+        return VoiceOutputPrompt(instruction=VOICE_STYLE_PRESETS[voice_style])
+    return None
+
+
 def _backend_status(pipeline: KuchikaePipeline) -> str:
     cache_state = "disabled" if getattr(pipeline, "disable_processing_cache", False) else "enabled"
     summary = ""
@@ -126,7 +144,13 @@ def _backend_status(pipeline: KuchikaePipeline) -> str:
         )
     else:
         stt_cfg_text = "n/a"
-    base = f"STT: {stt_backend} / {stt_preset} / {stt_cfg_text} | CACHE: {cache_state}"
+    voice_style = getattr(pipeline, "_last_voice_style", "auto")
+    audio_emotion = getattr(pipeline, "_last_audio_emotion", "disabled")
+    base = (
+        f"STT: {stt_backend} / {stt_preset} / {stt_cfg_text} | "
+        f"VOICE_STYLE: {voice_style} | AUDIO_EMOTION: {audio_emotion} | "
+        f"CACHE: {cache_state}"
+    )
     return f"{base} | {summary}" if summary else base
 
 
@@ -136,13 +160,16 @@ def run_simple(
     live_streaming: bool = False,
     voice_output_prompt=None,
     stt_preset: str | None = None,
+    voice_style: str = "auto",
+    custom_voice_prompt: str = "",
 ) -> Generator:
     logger.info(
-        "[run_simple] called live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s",
+        "[run_simple] called live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s voice_style=%s",
         live_streaming,
         type(audio_input).__name__,
         repr(audio_input)[:400],
         "set" if voice_output_prompt is not None else "none",
+        voice_style,
     )
     path = normalize_audio_path(audio_input)
     last_status = "音声認識中"
@@ -159,7 +186,9 @@ def run_simple(
         return
 
     prompt = TextTransformPrompt(instruction=TEMPLATES["自然に"])
-    voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
+    voice_prompt = resolve_voice_style(voice_style, custom_voice_prompt)
+    if voice_prompt is None and voice_style != "auto":
+        voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
     if stt_preset and hasattr(pipeline, "set_stt_preset"):
         pipeline.set_stt_preset(stt_preset)
@@ -219,14 +248,17 @@ def run(
     live_streaming: bool = False,
     voice_output_prompt=None,
     stt_preset: str | None = None,
+    voice_style: str = "auto",
+    custom_voice_prompt: str = "",
 ) -> Generator:
     logger.info(
-        "[run] called template=%s live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s",
+        "[run] called template=%s live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s voice_style=%s",
         template_name,
         live_streaming,
         type(audio_input).__name__,
         repr(audio_input)[:400],
         "set" if voice_output_prompt is not None else "none",
+        voice_style,
     )
     path = normalize_audio_path(audio_input)
     last_status = "音声認識中"
@@ -250,7 +282,9 @@ def run(
         prompt_text = TEMPLATES["自然に"]
 
     prompt = TextTransformPrompt(instruction=prompt_text)
-    voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
+    voice_prompt = resolve_voice_style(voice_style, custom_voice_prompt)
+    if voice_prompt is None and voice_style != "auto":
+        voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
     if stt_preset and hasattr(pipeline, "set_stt_preset"):
         pipeline.set_stt_preset(stt_preset)

@@ -58,12 +58,18 @@ def create_app(
 
                     run_btn = gr.Button("言い直す", elem_id="run-btn")
 
-                    voice_prompt = gr.Textbox(
-                        elem_id="voice-prompt-box",
-                        label="声の出し方プロンプト",
-                        value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
-                        lines=3,
+                    voice_style = gr.Radio(
+                        choices=["auto", "natural", "calm", "bright", "slow_clear", "custom"],
+                        value="auto",
+                        label="声の出し方",
                     )
+                    with gr.Accordion("詳細設定", open=False):
+                        voice_prompt = gr.Textbox(
+                            elem_id="voice-prompt-box",
+                            label="声の出し方プロンプト",
+                            value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
+                            lines=3,
+                        )
 
                     with gr.Row(elem_id="normal-text-compare"):
                         source_text = gr.Textbox(
@@ -95,7 +101,7 @@ def create_app(
                         lines=3,
                     )
 
-                    def _run_handler(audio_value, template_value, text_prompt_value, voice_prompt_value, stt_preset_value):
+                    def _run_handler(audio_value, template_value, text_prompt_value, voice_prompt_value, stt_preset_value, voice_style_value):
                         yield from run(
                             audio_value,
                             template_value,
@@ -104,6 +110,7 @@ def create_app(
                             live_streaming=live_streaming,
                             voice_output_prompt=voice_prompt_value,
                             stt_preset=stt_preset_value,
+                            voice_style=voice_style_value,
                         )
 
                     template.change(
@@ -113,7 +120,7 @@ def create_app(
                     )
                     run_btn.click(
                         _run_handler,
-                        inputs=[audio_input, template, text_prompt, voice_prompt, stt_preset],
+                        inputs=[audio_input, template, text_prompt, voice_prompt, stt_preset, voice_style],
                         outputs=[output_audio, source_text, transformed_text, status],
                     )
 
@@ -127,12 +134,18 @@ def create_app(
 
                     gr.HTML(PTT_HTML, js_on_load=PTT_JS)
 
-                    simple_voice_prompt = gr.Textbox(
-                        elem_id="simple-voice-prompt-box",
-                        label="声の出し方プロンプト",
-                        value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
-                        lines=3,
+                    simple_voice_style = gr.Radio(
+                        choices=["auto"],
+                        value="auto",
+                        label="声の出し方",
                     )
+                    with gr.Accordion("詳細設定", open=False):
+                        simple_voice_prompt = gr.Textbox(
+                            elem_id="simple-voice-prompt-box",
+                            label="声の出し方プロンプト",
+                            value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
+                            lines=3,
+                        )
 
                     with gr.Row(elem_id="simple-text-compare"):
                         simple_source = gr.Textbox(
@@ -155,25 +168,26 @@ def create_app(
                         autoplay=True,
                     )
 
-                    def _run_simple_handler(audio_value, voice_prompt_value, stt_preset_value):
+                    def _run_simple_handler(audio_value, voice_prompt_value, stt_preset_value, voice_style_value):
                         yield from run_simple(
                             pipeline,
                             audio_value,
                             live_streaming=live_streaming,
                             voice_output_prompt=voice_prompt_value,
                             stt_preset=stt_preset_value,
+                            voice_style=voice_style_value,
                         )
 
                     simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
 
                     simple_audio.stop(
                         _run_simple_handler,
-                        inputs=[simple_audio, simple_voice_prompt, stt_preset],
+                        inputs=[simple_audio, simple_voice_prompt, stt_preset, simple_voice_style],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],
                     )
                     simple_audio.change(
                         _run_simple_handler,
-                        inputs=[simple_audio, simple_voice_prompt, stt_preset],
+                        inputs=[simple_audio, simple_voice_prompt, stt_preset, simple_voice_style],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],
                     )
 
