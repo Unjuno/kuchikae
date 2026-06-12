@@ -50,6 +50,7 @@ from kuchikae.domain.voice_style import (
     RuleVoiceStyleDetector,
     VoiceStyle,
     VoiceStyleDetector,
+    fuse_voice_styles,
     merge_voice_style,
     voice_style_to_prompt,
 )
@@ -561,6 +562,31 @@ class KuchikaePipeline:
             return None
         try:
             audio_emotion = audio_future.result(timeout=self.voice_style_timeout_sec)
+            detector = self.audio_emotion_detector
+            if detector is not None and getattr(detector, "model_unavailable", False):
+                self._emit(
+                    "audio_emotion.model_unavailable",
+                    "Audio emotion model was unavailable; dummy behavior was used.",
+                    "audio_emotion",
+                    level=EventLevel.WARNING,
+                    backend=type(detector).__name__,
+                    data={
+                        "model_id": getattr(detector, "model_id", None),
+                        "error_type": getattr(detector, "load_error_type", None),
+                    },
+                )
+            if detector is not None and getattr(detector, "fallback_dummy", False):
+                self._emit(
+                    "audio_emotion.fallback_dummy",
+                    "Audio emotion detection fell back to dummy behavior.",
+                    "audio_emotion",
+                    level=EventLevel.WARNING,
+                    backend=type(detector).__name__,
+                    data={
+                        "model_id": getattr(detector, "model_id", None),
+                        "error_type": getattr(detector, "load_error_type", None),
+                    },
+                )
             self._emit(
                 "audio_emotion.detect.done",
                 "Audio emotion detection finished.",
@@ -606,26 +632,62 @@ class KuchikaePipeline:
         )
         return style
 
-    def _build_voice_prompt(self, text_for_voice: str, audio_emotion: AudioEmotion | None, voice_output_prompt: VoiceOutputPrompt | None) -> VoiceOutputPrompt:
+    def _build_voice_prompt(self, source_text: str, text_for_voice: str, audio_emotion: AudioEmotion | None, voice_output_prompt: VoiceOutputPrompt | None) -> VoiceOutputPrompt:
         if voice_output_prompt is not None:
             self._last_voice_style = "custom"
             self._last_audio_emotion = getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled"
             return voice_output_prompt
-        text_style = self._detect_voice_style(text_for_voice)
-        final_style = merge_voice_style(text_style, audio_emotion)
+        source_style = self._detect_voice_style(source_text)
+        self._emit_style(
+            "voice_style.source.detect.done",
+            "voice_style",
+            {
+                "mood": source_style.mood.value,
+                "speed": source_style.speed.value,
+                "clarity": source_style.clarity.value,
+                "emphasis": source_style.emphasis.value,
+                "confidence": source_style.confidence,
+                "source": source_style.source,
+            },
+        )
+        transformed_style = self._detect_voice_style(text_for_voice)
+        self._emit_style(
+            "voice_style.transformed.detect.done",
+            "voice_style",
+            {
+                "mood": transformed_style.mood.value,
+                "speed": transformed_style.speed.value,
+                "clarity": transformed_style.clarity.value,
+                "emphasis": transformed_style.emphasis.value,
+                "confidence": transformed_style.confidence,
+                "source": transformed_style.source,
+            },
+        )
+        final_style = fuse_voice_styles(source_style, transformed_style, audio_emotion)
         prompt = VoiceOutputPrompt(instruction=voice_style_to_prompt(final_style))
         self._last_voice_style = final_style.mood.value
         self._last_audio_emotion = getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled"
         self._emit_style(
-            "voice_style.generated",
+            "voice_style.fusion.done",
             "voice_style",
             {
-                "mood": final_style.mood.value,
-                "speed": final_style.speed.value,
-                "clarity": final_style.clarity.value,
-                "emphasis": final_style.emphasis.value,
-                "confidence": final_style.confidence,
-                "source": final_style.source,
+                "source_mood": source_style.mood.value,
+                "source_speed": source_style.speed.value,
+                "source_emphasis": source_style.emphasis.value,
+                "source_confidence": source_style.confidence,
+                "transformed_mood": transformed_style.mood.value,
+                "transformed_speed": transformed_style.speed.value,
+                "transformed_emphasis": transformed_style.emphasis.value,
+                "transformed_confidence": transformed_style.confidence,
+                "audio_energy": getattr(audio_emotion, "energy", "disabled") if audio_emotion is not None else "disabled",
+                "audio_arousal": getattr(audio_emotion, "arousal", 0.0) if audio_emotion is not None else 0.0,
+                "audio_confidence": getattr(audio_emotion, "confidence", 0.0) if audio_emotion is not None else 0.0,
+                "audio_source": getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled",
+                "final_mood": final_style.mood.value,
+                "final_speed": final_style.speed.value,
+                "final_emphasis": final_style.emphasis.value,
+                "final_confidence": final_style.confidence,
+                "final_source": final_style.source,
                 "generated_prompt_preview": prompt.instruction[:120],
             },
         )
@@ -845,7 +907,7 @@ class KuchikaePipeline:
         )
         text_for_voice = transformed_text.strip() or source_text
         audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
-        voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
+        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_output_prompt)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
@@ -1046,7 +1108,7 @@ class KuchikaePipeline:
         )
         text_for_voice = transformed_text.strip() or source_text
         audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
-        voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
+        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_output_prompt)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process_stream:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
@@ -1278,7 +1340,7 @@ class KuchikaePipeline:
         )
         text_for_voice = transformed_text.strip() or source_text
         audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
-        voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
+        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_output_prompt)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process_stream_live:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",

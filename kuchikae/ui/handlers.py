@@ -139,6 +139,13 @@ def _backend_status(pipeline: KuchikaePipeline) -> str:
         stt_cfg_text = "n/a"
     voice_style = getattr(pipeline, "_last_voice_style", "auto")
     audio_emotion = getattr(pipeline, "_last_audio_emotion", "disabled")
+    audio_detector = getattr(pipeline, "audio_emotion_detector", None)
+    if audio_detector is None or getattr(audio_detector, "disabled", False):
+        audio_emotion = "disabled"
+    elif getattr(audio_detector, "fallback_dummy", False):
+        audio_emotion = f"fallback_dummy:{getattr(audio_detector, 'model_id', 'unknown')}"
+    elif getattr(audio_detector, "model_id", None):
+        audio_emotion = f"transformers:{getattr(audio_detector, 'model_id')}"
     base = (
         f"STT: {stt_backend} / {stt_preset} / {stt_cfg_text} | "
         f"VOICE_STYLE: {voice_style} | AUDIO_EMOTION: {audio_emotion} | "

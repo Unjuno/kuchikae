@@ -554,6 +554,26 @@ def test_disabled_audio_emotion_detector_emits_no_start_event(tmp_path) -> None:
     assert "audio_emotion.detect.start" not in names
 
 
+def test_dummy_audio_emotion_detector_emits_start_and_done(tmp_path) -> None:
+    from kuchikae.pipeline import create_pipeline
+
+    wav = tmp_path / "dummy_audio_emotion.wav"
+    _write_wav(str(wav))
+    diagnostics = DiagnosticRecorder(max_events=50)
+    pipeline = create_pipeline(
+        {
+            "allow_dummy_backends": True,
+            "audio_emotion_detector": "dummy",
+        }
+    )
+    pipeline.diagnostics = diagnostics
+    pipeline.process(str(wav), TextTransformPrompt(instruction="テスト"), None)
+
+    names = [event.name for event in diagnostics.events()]
+    assert "audio_emotion.detect.start" in names
+    assert "audio_emotion.detect.done" in names
+
+
 # ---------------------------------------------------------------------------
 # warmup — error handling should not raise
 # ---------------------------------------------------------------------------
