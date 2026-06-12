@@ -17,6 +17,19 @@ def test_templates_include_expected_keys() -> None:
         "執事っぽく",
         "魔王っぽく",
         "深夜ラジオっぽく",
+        "先生っぽく",
+        "友達っぽく",
+        "ニュースキャスターっぽく",
+        "セールスっぽく",
+        "詩的に",
+        "実験: 関西弁",
+        "実験: ギャルっぽく",
+        "実験: 赤ちゃんっぽく",
+        "実験: 武士っぽく",
+        "実験: 毒舌",
+        "実験: 皮肉っぽく",
+        "実験: 外国人っぽく",
+        "実験: 特定キャラっぽく",
         "カスタム",
     }
     assert expected.issubset(TEMPLATES.keys())
@@ -50,3 +63,30 @@ def test_on_template_change_unknown_falls_back_to_natural() -> None:
     update = on_template_change("unknown-template")
     assert isinstance(update, dict)
     assert update.get("value") == TEMPLATES["自然に"]
+
+
+def test_official_candidate_templates_exist() -> None:
+    official_candidates = [
+        "先生っぽく",
+        "友達っぽく",
+        "ニュースキャスターっぽく",
+        "セールスっぽく",
+        "詩的に",
+    ]
+    for template in official_candidates:
+        assert template in TEMPLATES, f"Official candidate template '{template}' not found"
+
+
+def test_experimental_candidate_templates_exist() -> None:
+    experimental_candidates = [
+        "実験: 関西弁",
+        "実験: ギャルっぽく",
+        "実験: 赤ちゃんっぽく",
+        "実験: 武士っぽく",
+        "実験: 毒舌",
+        "実験: 皮肉っぽく",
+        "実験: 外国人っぽく",
+        "実験: 特定キャラっぽく",
+    ]
+    for template in experimental_candidates:
+        assert template in TEMPLATES, f"Experimental candidate template '{template}' not found"

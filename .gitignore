@@ -30,3 +30,6 @@ Thumbs.db
 
 # Diagnostic logs
 logs/
+
+# Evaluation artifacts
+artifacts/

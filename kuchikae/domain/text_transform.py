@@ -78,6 +78,22 @@ def validate_transform(
     for pat in meta_patterns:
         if re.match(pat, transformed_text.strip()):
             return False
+    # Reject meta output prefixes
+    META_PREFIXES = (
+        "次のように変換します",
+        "以下のように変換します",
+        "はい、わかりました",
+        "承知しました。以下",
+        "申し訳ありませんが",
+        "できません",
+        "変換結果:",
+        "出力:",
+    )
+    stripped = transformed_text.strip()
+    for prefix in META_PREFIXES:
+        if stripped.startswith(prefix):
+            logger.warning("validate_transform: meta prefix detected: %s", prefix)
+            return False
     max_len = len(source_text) * 3 + 50
     if len(transformed_text) > max_len:
         return False
@@ -152,6 +168,19 @@ class OllamaTextTransformBackend(TextTransformBackend):
                                 "- 事実、数値、日時、場所、固有名詞、否定条件、約束、依頼内容は変えない。\n"
                                 "- 新しい事実、予定、金額、名前、場所は作らない。\n"
                                 "- 文体、語尾、語順、テンション、リズム、話し方は大胆に変えてよい。\n\n"
+                                "出力制約:\n"
+                                "- 「次のように変換します」「以下の通りです」「申し訳ありませんが」「できません」などの前置きや拒否文を出さない。\n"
+                                "- 説明、理由、候補、採点、注釈、Markdown、引用符を出さない。\n"
+                                "- テンプレート本文や変換ルールをそのまま出力しない。\n"
+                                "- 入力が短くても、必ず変換後の発話だけを1つ返す。\n"
+                                "- 日本語以外の文字や中国語表現を混ぜない。\n"
+                                "- ひらがな、カタカナ、漢字を使った自然な日本語として出力する。\n"
+                                "- 特定キャラクター名、作品名、有名人名を出さない。\n"
+                                "- 変換できないと言わず、制約内で最も近い安全な表現に変換する。\n\n"
+                                "情報保持:\n"
+                                "- 日時、数字、場所、固有名詞、金額、否定条件、依頼内容は変えない。\n"
+                                "- 情報発話では、面白さより正確性を優先する。\n"
+                                "- 比喩や演出を入れる場合でも、入力にない場所・予定・人物・出来事を作らない。\n\n"
                                 "自由度:\n"
                                 "- 挨拶、感謝、謝罪、相づち、応援、呼びかけなどの短い社交的発話では、\n"
                                 "  元の意図を保ったまま、指定スタイルに合う自然な一言を補ってよい。\n"
