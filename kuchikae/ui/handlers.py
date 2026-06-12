@@ -151,18 +151,15 @@ def run_simple(
     pipeline: KuchikaePipeline,
     audio_input,
     live_streaming: bool = False,
-    voice_output_prompt=None,
     stt_preset: str | None = None,
-    voice_style: str = "auto",
-    custom_voice_prompt: str = "",
+    template_name: str = "自然に",
 ) -> Generator:
     logger.info(
-        "[run_simple] called live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s voice_style=%s",
+        "[run_simple] called live_streaming=%s audio_type=%s audio_repr=%r template=%s",
         live_streaming,
         type(audio_input).__name__,
         repr(audio_input)[:400],
-        "set" if voice_output_prompt is not None else "none",
-        voice_style,
+        template_name,
     )
     path = normalize_audio_path(audio_input)
     last_status = "音声認識中"
@@ -178,24 +175,24 @@ def run_simple(
         )
         return
 
-    prompt = TextTransformPrompt(instruction=TEMPLATES["自然に"])
-    voice_prompt = resolve_voice_style(voice_style, custom_voice_prompt)
-    if voice_prompt is None and voice_style != "auto":
-        voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
+    if template_name in TEMPLATES:
+        prompt_text = TEMPLATES[template_name]
+    else:
+        prompt_text = TEMPLATES["自然に"]
+    prompt = TextTransformPrompt(instruction=prompt_text)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
     if stt_preset and hasattr(pipeline, "set_stt_preset"):
         pipeline.set_stt_preset(stt_preset)
     logger.info(
-        "[run_simple] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
+        "[run_simple] stream_fn=%s path=%s text_prompt_preview=%r",
         getattr(stream_fn, "__name__", repr(stream_fn)),
         path,
         prompt.instruction[:160],
-        "set" if voice_prompt is not None else "none",
     )
 
     try:
         for idx, (status, src, txt, aud) in enumerate(
-            stream_fn(path, prompt, voice_prompt),
+            stream_fn(path, prompt),
             start=1,
         ):
             last_status = status

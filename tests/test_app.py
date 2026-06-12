@@ -77,8 +77,8 @@ def test_dict_prefers_path_over_orig_name(tmp_path: str) -> None:
 
 
 def test_ptt_html_uses_find_audio_button_and_no_raw_button_fallback() -> None:
-    assert "clickNativeControl('record')" in PTT_JS
-    assert "clickNativeControl('stop')" in PTT_JS
+    assert "findRecordButton" in PTT_JS
+    assert "findStopButton" in PTT_JS
     assert "onpointerdown" not in PTT_HTML
     assert "onpointerup" not in PTT_HTML
     assert "addEventListener('pointerdown'" in PTT_JS

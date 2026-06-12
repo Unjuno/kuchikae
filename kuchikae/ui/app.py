@@ -134,18 +134,12 @@ def create_app(
 
                     gr.HTML(PTT_HTML, js_on_load=PTT_JS)
 
-                    simple_voice_style = gr.Radio(
-                        choices=["auto"],
-                        value="auto",
-                        label="声の出し方",
+                    simple_template = gr.Dropdown(
+                        elem_id="simple-template-select",
+                        label="どう言い換える？",
+                        choices=list(TEMPLATES.keys()),
+                        value="自然に",
                     )
-                    with gr.Accordion("詳細設定", open=False):
-                        simple_voice_prompt = gr.Textbox(
-                            elem_id="simple-voice-prompt-box",
-                            label="声の出し方プロンプト",
-                            value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
-                            lines=3,
-                        )
 
                     with gr.Row(elem_id="simple-text-compare"):
                         simple_source = gr.Textbox(
@@ -168,26 +162,25 @@ def create_app(
                         autoplay=True,
                     )
 
-                    def _run_simple_handler(audio_value, voice_prompt_value, stt_preset_value, voice_style_value):
+                    def _run_simple_handler(audio_value, template_value, stt_preset_value):
                         yield from run_simple(
                             pipeline,
                             audio_value,
                             live_streaming=live_streaming,
-                            voice_output_prompt=voice_prompt_value,
                             stt_preset=stt_preset_value,
-                            voice_style=voice_style_value,
+                            template_name=template_value,
                         )
 
                     simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
 
                     simple_audio.stop(
                         _run_simple_handler,
-                        inputs=[simple_audio, simple_voice_prompt, stt_preset, simple_voice_style],
+                        inputs=[simple_audio, simple_template, stt_preset],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],
                     )
                     simple_audio.change(
                         _run_simple_handler,
-                        inputs=[simple_audio, simple_voice_prompt, stt_preset, simple_voice_style],
+                        inputs=[simple_audio, simple_template, stt_preset],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],
                     )
 

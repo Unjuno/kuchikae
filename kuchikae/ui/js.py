@@ -39,20 +39,53 @@ PTT_JS = r"""
     return document.getElementById('simple-audio-wrap');
   }
 
-  function findControlButton(wrap, name) {
+  function findRecordButton(wrap) {
     if (!wrap) return null;
-    const target = name.toLowerCase();
-    return Array.from(wrap.querySelectorAll('button')).find((b) => {
-      const text = (b.textContent || '').trim().toLowerCase();
-      const aria = (b.getAttribute('aria-label') || '').toLowerCase();
-      const title = (b.getAttribute('title') || '').toLowerCase();
-      return text === target || text.includes(target) || aria.includes(target) || title.includes(target);
-    }) || null;
+    const buttons = Array.from(wrap.querySelectorAll('button'));
+    for (const btn of buttons) {
+      const svg = btn.querySelector('svg');
+      if (svg) {
+        const paths = Array.from(svg.querySelectorAll('path'));
+        const hasMicPath = paths.some(p => {
+          const d = p.getAttribute('d') || '';
+          return d.includes('M12') && (d.includes('12 14') || d.includes('12 16'));
+        });
+        if (hasMicPath) return btn;
+      }
+    }
+    for (const btn of buttons) {
+      const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+      const title = (btn.getAttribute('title') || '').toLowerCase();
+      if (aria.includes('record') || aria.includes('録音') || title.includes('record') || title.includes('録音')) {
+        return btn;
+      }
+    }
+    if (buttons.length > 0) return buttons[0];
+    return null;
   }
 
-  function clickNativeControl(name) {
-    const wrap = findAudioWrap();
-    const btn = findControlButton(wrap, name);
+  function findStopButton(wrap) {
+    if (!wrap) return null;
+    const buttons = Array.from(wrap.querySelectorAll('button'));
+    for (const btn of buttons) {
+      const svg = btn.querySelector('svg');
+      if (svg) {
+        const rects = Array.from(svg.querySelectorAll('rect'));
+        if (rects.length > 0) return btn;
+      }
+    }
+    for (const btn of buttons) {
+      const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+      const title = (btn.getAttribute('title') || '').toLowerCase();
+      if (aria.includes('stop') || aria.includes('停止') || title.includes('stop') || title.includes('停止')) {
+        return btn;
+      }
+    }
+    if (buttons.length > 1) return buttons[1];
+    return null;
+  }
+
+  function clickButton(btn) {
     if (!btn) return false;
     btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
     btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
@@ -67,7 +100,9 @@ PTT_JS = r"""
     pttState = 1;
     setButtonState(true);
     setHint('録音中…');
-    if (!clickNativeControl('record')) {
+    const wrap = findAudioWrap();
+    const btn = findRecordButton(wrap);
+    if (!btn || !clickButton(btn)) {
       pttState = 0;
       setButtonState(false);
       setHint('録音ボタンが見つかりませんでした。');
@@ -79,10 +114,13 @@ PTT_JS = r"""
     pttState = 0;
     setButtonState(false);
     setHint('変換中…');
-    if (!clickNativeControl('stop')) {
+    const wrap = findAudioWrap();
+    const btn = findStopButton(wrap);
+    if (!btn) {
       setHint('停止ボタンが見つかりませんでした。');
       return;
     }
+    clickButton(btn);
   }
 
   function handleKeyDown(e) {

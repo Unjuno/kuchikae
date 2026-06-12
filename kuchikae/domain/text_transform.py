@@ -29,7 +29,47 @@ def strip_cot(text: str) -> str:
     return t
 
 
-def validate_transform(source_text: str, transformed_text: str) -> bool:
+def _prompt_echo_score(source_text: str, transformed_text: str, prompt_instruction: str | None = None) -> float:
+    """Return 0.0–1.0 score indicating how likely the output is a prompt echo.
+
+    0.0 = clean transformation, 1.0 = definite echo.
+    """
+    if not prompt_instruction:
+        return 0.0
+    out = transformed_text.strip()
+    instr = prompt_instruction.strip()
+    if not out or not instr:
+        return 0.0
+    # Check if output IS the prompt instruction (exact match or high overlap)
+    if out == instr:
+        return 1.0
+    # Check if output is identical to source (no transformation at all)
+    src_stripped = source_text.strip()
+    if src_stripped and out == src_stripped:
+        return 1.0
+    # Check if output contains key phrases from the prompt instruction
+    instr_words = [w for w in re.split(r"[。、\s]+", instr) if len(w) >= 4]
+    if instr_words:
+        matches = sum(1 for w in instr_words if w in out)
+        phrase_ratio = matches / len(instr_words)
+        if phrase_ratio >= 0.6:
+            return phrase_ratio
+    # Check if output is nearly identical to source (no transformation)
+    if src_stripped and out:
+        shorter = min(len(src_stripped), len(out))
+        longer = max(len(src_stripped), len(out))
+        common = sum(1 for a, b in zip(src_stripped, out) if a == b)
+        similarity = common / longer if longer else 0
+        if similarity > 0.95:
+            return 1.0
+    return 0.0
+
+
+def validate_transform(
+    source_text: str,
+    transformed_text: str,
+    prompt_instruction: str | None = None,
+) -> bool:
     if not transformed_text or not transformed_text.strip():
         return False
     if "<think>" in transformed_text or "</think>" in transformed_text:
@@ -47,6 +87,10 @@ def validate_transform(source_text: str, transformed_text: str) -> bool:
         missing = src_numbers - out_numbers
         if missing:
             return False
+    echo_score = _prompt_echo_score(source_text, transformed_text, prompt_instruction)
+    if echo_score >= 0.6:
+        logger.warning("validate_transform: prompt echo detected (score=%.2f)", echo_score)
+        return False
     return True
 
 
@@ -118,10 +162,10 @@ class OllamaTextTransformBackend(TextTransformBackend):
                     self._on_cot_stripped(self.model)
             if not result:
                 logger.warning("ollama returned empty response")
-                return result
-            if not validate_transform(text, result):
+                return text
+            if not validate_transform(text, result, prompt.instruction):
                 logger.warning("text_transform.validation_failed model=%s", self.model)
-                return result
+                return text
             logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
             return result
         except (httpx.ConnectError, httpx.TimeoutException) as e:

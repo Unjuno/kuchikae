@@ -825,7 +825,7 @@ class KuchikaePipeline:
                     backend=type(self.text_transform_backend).__name__,
                 )
                 transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-                if not validate_transform(source_text, transformed_text):
+                if not validate_transform(source_text, transformed_text, text_transform_prompt.instruction):
                     self._emit(
                         "text_transform.validation_failed",
                         "Text transform validation failed.",
@@ -1082,7 +1082,7 @@ class KuchikaePipeline:
             logger.info("process_stream:text:cache_hit transformed_len=%d", len(transformed_text))
         else:
             transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-            if not validate_transform(source_text, transformed_text):
+            if not validate_transform(source_text, transformed_text, text_transform_prompt.instruction):
                 self._emit("text_transform.validation_failed", "Text transform validation failed.", "text", level=EventLevel.WARNING, data={"source_len": len(source_text), "transformed_len": len(transformed_text)})
                 transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
                 self._emit("text_transform.fallback_used", "PromptedRuleTextTransformBackend fallback used.", "text")
@@ -1306,7 +1306,7 @@ class KuchikaePipeline:
                 backend=type(self.text_transform_backend).__name__,
             )
             transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-            if not validate_transform(source_text, transformed_text):
+            if not validate_transform(source_text, transformed_text, text_transform_prompt.instruction):
                 self._emit("text_transform.validation_failed", "Text transform validation failed.", "text", level=EventLevel.WARNING, data={"source_len": len(source_text), "transformed_len": len(transformed_text)})
                 transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
                 self._emit("text_transform.fallback_used", "PromptedRuleTextTransformBackend fallback used.", "text")

@@ -60,8 +60,8 @@ def test_create_app_simple_tab_components():
     assert "simple-trf" in config_str
     assert "simple-output-audio" in config_str
     assert "simple-status" in config_str
-    assert "simple-voice-prompt-box" in config_str
     assert "simple-text-compare" in config_str
+    assert "simple-template-select" in config_str
 
 
 def test_create_app_ptt_button():
