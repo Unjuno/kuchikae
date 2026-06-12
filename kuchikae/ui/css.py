@@ -296,28 +296,71 @@ gradio-app, .gradio-app {
   box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
 }
 
-#simple-audio {
+#simple-audio-wrap {
   background: var(--bg-tertiary);
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 8px;
   border: 1px solid var(--border-color);
+  position: relative;
 }
 
-#simple-audio .block {
+#simple-audio-wrap .block {
   background: transparent !important;
   box-shadow: none !important;
 }
 
-#simple-audio label {
+#simple-audio-wrap label {
   color: var(--text-muted) !important;
 }
 
-#simple-audio .record-button {
+#simple-audio-wrap .record-button {
   background: #2D1B4E !important;
   color: var(--accent-light) !important;
   border: 1px solid var(--border-color) !important;
   border-radius: 8px !important;
+}
+
+#simple-template-select {
+  margin-bottom: 12px;
+}
+
+#simple-template-select > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 6px;
+}
+
+#simple-template-select .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 !important;
+}
+
+#simple-template-select label {
+  padding: 4px 12px !important;
+  min-height: 28px !important;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transition: all .15s ease;
+  color: var(--text-secondary);
+}
+
+#simple-template-select label.selected {
+  background: #2D1B4E;
+  border-color: var(--accent-primary);
+  color: var(--accent-light);
+  font-weight: 600;
+}
+
+#simple-template-select label input {
+  display: none;
 }
 
 #simple-src > .block, #simple-trf > .block {
@@ -327,24 +370,24 @@ gradio-app, .gradio-app {
 }
 
 #simple-src textarea {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.5;
   resize: none;
 }
 
 #simple-trf textarea {
-  background: var(--bg-accent);
-  border: 1px solid var(--border-color);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(91, 33, 182, 0.12) 100%);
+  border: 1px solid rgba(124, 58, 237, 0.3);
   border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--accent-light);
+  line-height: 1.5;
   resize: none;
 }
 
@@ -355,18 +398,22 @@ gradio-app, .gradio-app {
 }
 
 #simple-output-audio {
-  margin-top: 4px;
-  border: 1px solid var(--border-color);
+  margin-top: 12px;
+  border: 1px solid rgba(124, 58, 237, 0.3);
   border-radius: 12px;
-  padding: 12px;
-  background: var(--bg-tertiary);
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.05) 0%, transparent 100%);
 }
 
 #simple-output-audio audio {
   height: 44px !important;
   margin: 0 auto;
-  background: var(--bg-tertiary);
   border-radius: 8px;
+}
+
+#simple-output-audio label {
+  color: var(--accent-light) !important;
+  font-weight: 600;
 }
 
 #ptt-container {
@@ -374,37 +421,53 @@ gradio-app, .gradio-app {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 8px 0 16px;
+  padding: 16px 0 20px;
+  margin: 8px 0;
+  background: linear-gradient(180deg, rgba(124, 58, 237, 0.05) 0%, transparent 100%);
+  border-radius: 16px;
 }
 
 #ptt-btn {
-  width: 168px;
-  height: 168px;
+  width: 140px;
+  height: 140px;
   border-radius: 9999px;
-  border: 1px solid var(--accent-secondary);
+  border: 2px solid var(--accent-primary);
   background: radial-gradient(circle at 30% 30%, #8B5CF6, var(--accent-secondary) 70%, var(--accent-dark) 100%);
   color: #FFFFFF;
-  box-shadow: 0 16px 40px rgba(91, 33, 182, 0.35);
+  box-shadow: 0 12px 32px rgba(91, 33, 182, 0.4), 0 0 0 4px rgba(124, 58, 237, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   user-select: none;
   touch-action: none;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.02em;
   transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
 }
 
 #ptt-btn:hover {
-  filter: brightness(1.04);
+  filter: brightness(1.1);
+  box-shadow: 0 14px 36px rgba(91, 33, 182, 0.5), 0 0 0 6px rgba(124, 58, 237, 0.15);
 }
 
-#ptt-btn:active,
+#ptt-btn:active {
+  transform: scale(0.96);
+  box-shadow: 0 8px 20px rgba(91, 33, 182, 0.3);
+}
+
 #ptt-btn.ptt-recording {
-  transform: scale(0.98);
-  box-shadow: 0 10px 22px rgba(91, 33, 182, 0.24);
+  transform: scale(0.96);
+  background: radial-gradient(circle at 30% 30%, #EF4444, #DC2626 70%, #991B1B 100%);
+  border-color: #EF4444;
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4), 0 0 0 4px rgba(239, 68, 68, 0.2);
+  animation: ptt-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ptt-pulse {
+  0%, 100% { box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4), 0 0 0 4px rgba(239, 68, 68, 0.2); }
+  50% { box-shadow: 0 8px 20px rgba(239, 68, 68, 0.6), 0 0 0 8px rgba(239, 68, 68, 0.1); }
 }
 
 #ptt-btn:focus {
@@ -414,14 +477,32 @@ gradio-app, .gradio-app {
 
 #ptt-label {
   display: block;
-  max-width: 110px;
-  line-height: 1.35;
+  max-width: 100px;
+  line-height: 1.3;
 }
 
 #ptt-hint {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
+  opacity: 0.8;
+}
+
+#simple-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  min-height: 20px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(124, 58, 237, 0.08);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+#simple-status.processing {
+  color: var(--accent-light);
+  background: rgba(124, 58, 237, 0.15);
 }
 
 input[type="text"]:focus,

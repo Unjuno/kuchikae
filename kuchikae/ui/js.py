@@ -18,6 +18,18 @@ PTT_JS = r"""
     if (hint) hint.textContent = text;
   }
 
+  function setStatus(text, processing) {
+    const status = document.getElementById('simple-status');
+    if (status) {
+      status.textContent = text;
+      if (processing) {
+        status.classList.add('processing');
+      } else {
+        status.classList.remove('processing');
+      }
+    }
+  }
+
   function setButtonState(recording) {
     const btn = document.getElementById('ptt-btn');
     const label = document.getElementById('ptt-label');
@@ -26,7 +38,8 @@ PTT_JS = r"""
       btn.className = 'ptt-recording';
       btn.setAttribute('aria-label', '録音中');
       btn.setAttribute('aria-pressed', 'true');
-      label.textContent = '話し終えたら離す';
+      label.textContent = '話したら離す';
+      setStatus('録音中...', true);
     } else {
       btn.className = 'ptt-idle';
       btn.setAttribute('aria-label', '押して話す');
@@ -99,13 +112,15 @@ PTT_JS = r"""
     if (pttState === 1) return;
     pttState = 1;
     setButtonState(true);
-    setHint('録音中…');
+    setHint('ボタンを押しながら話す');
+    setStatus('録音中...', true);
     const wrap = findAudioWrap();
     const btn = findRecordButton(wrap);
     if (!btn || !clickButton(btn)) {
       pttState = 0;
       setButtonState(false);
-      setHint('録音ボタンが見つかりませんでした。');
+      setHint('ボタンを押しながら話す、離すと自動変換');
+      setStatus('録音ボタンが見つかりませんでした', false);
     }
   }
 
@@ -113,11 +128,13 @@ PTT_JS = r"""
     if (pttState !== 1) return;
     pttState = 0;
     setButtonState(false);
-    setHint('変換中…');
+    setHint('変換処理中...');
+    setStatus('変換処理中...', true);
     const wrap = findAudioWrap();
     const btn = findStopButton(wrap);
     if (!btn) {
-      setHint('停止ボタンが見つかりませんでした。');
+      setHint('ボタンを押しながら話す、離すと自動変換');
+      setStatus('停止ボタンが見つかりませんでした', false);
       return;
     }
     clickButton(btn);

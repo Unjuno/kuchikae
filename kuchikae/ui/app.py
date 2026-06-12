@@ -125,15 +125,6 @@ def create_app(
                     )
 
                 with gr.Tab("簡易"):
-                    simple_audio = gr.Audio(
-                        elem_id="simple-audio-wrap",
-                        label="",
-                        sources=["microphone"],
-                        type="filepath",
-                    )
-
-                    gr.HTML(PTT_HTML, js_on_load=PTT_JS)
-
                     simple_template = gr.Dropdown(
                         elem_id="simple-template-select",
                         label="どう言い換える？",
@@ -141,17 +132,29 @@ def create_app(
                         value="自然に",
                     )
 
+                    gr.HTML(PTT_HTML, js_on_load=PTT_JS)
+
+                    simple_audio = gr.Audio(
+                        elem_id="simple-audio-wrap",
+                        label="",
+                        sources=["microphone"],
+                        type="filepath",
+                        visible=False,
+                    )
+
+                    simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
+
                     with gr.Row(elem_id="simple-text-compare"):
                         simple_source = gr.Textbox(
                             elem_id="simple-src",
                             label="聞き取った内容",
-                            lines=4,
+                            lines=3,
                             interactive=False,
                         )
                         simple_transformed = gr.Textbox(
                             elem_id="simple-trf",
                             label="言い直した内容",
-                            lines=4,
+                            lines=3,
                             interactive=False,
                         )
 
@@ -170,8 +173,6 @@ def create_app(
                             stt_preset=stt_preset_value,
                             template_name=template_value,
                         )
-
-                    simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
 
                     simple_audio.stop(
                         _run_simple_handler,
