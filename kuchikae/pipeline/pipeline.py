@@ -22,7 +22,12 @@ from kuchikae.counting_backends import (
     CountingVoiceOutputBackend,
 )
 from kuchikae.domain.processing_cache import ProcessingCache
-from kuchikae.domain.audio_emotion import AudioEmotion, AudioEmotionDetector, DummyAudioEmotionDetector
+from kuchikae.domain.audio_emotion import (
+    AudioEmotion,
+    AudioEmotionDetector,
+    DummyAudioEmotionDetector,
+    TransformersAudioEmotionDetector,
+)
 from kuchikae.domain.stt import (
     DummySTTBackend,
     FasterWhisperConfig,
@@ -206,6 +211,17 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     except ImportError:
         pass
 
+    audio_emotion_detector_type = config.get("audio_emotion_detector", "dummy")
+    if audio_emotion_detector_type == "transformers_audio_emotion":
+        audio_emotion_detector = TransformersAudioEmotionDetector(
+            model_id=config.get("audio_emotion_model_id"),
+            strict=bool(config.get("audio_emotion_strict", False)),
+        )
+    elif audio_emotion_detector_type == "disabled":
+        audio_emotion_detector = None
+    else:
+        audio_emotion_detector = DummyAudioEmotionDetector()
+
     if voice_output_type == "irodori" and _irodori_ready:
         from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
         vo = IrodoriTTSVoiceOutputBackend()
@@ -257,6 +273,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         disable_processing_cache=disable_processing_cache,
         stt_preset=stt_preset_name,
         stt_config=stt_config if stt_type == "faster_whisper" and has_faster_whisper else None,
+        audio_emotion_detector=audio_emotion_detector,
         backend_config=config,
     )
 
