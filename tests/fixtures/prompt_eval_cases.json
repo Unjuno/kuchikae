@@ -1,0 +1,704 @@
+[
+  {
+    "id": "greeting_hello_basic",
+    "category": "social_greeting",
+    "input": "こんにちは",
+    "intent": "挨拶",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "挨拶として成立する",
+      "短すぎてもスタイル差が出る",
+      "必要なら自然な一言を補ってよい"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "入力意図と無関係な設定を足す"
+    ]
+  },
+  {
+    "id": "greeting_morning",
+    "category": "social_greeting",
+    "input": "おはよう",
+    "intent": "朝の挨拶",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "朝の挨拶として成立する",
+      "スタイルに応じた朝の挨拶になる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "greeting_others辛苦",
+    "category": "social_greeting",
+    "input": "お疲れさまです",
+    "intent": "労い",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "労いの挨拶として成立する",
+      "相手を労う表現になる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "thanks_basic",
+    "category": "thanks",
+    "input": "ありがとう",
+    "intent": "感謝",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "感謝の意が伝わる",
+      "短くてもスタイル差が出る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "thanks_detailed",
+    "category": "thanks",
+    "input": "助かりました、ありがとうございます",
+    "intent": "感謝",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "感謝の意がより強く伝わる",
+      "助かったという気持ちが残る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "apology_late",
+    "category": "apology",
+    "input": "すみません、遅れました",
+    "intent": "遅刻の謝罪",
+    "risk_level": "medium",
+    "must_preserve": ["遅れました"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "謝罪の意が伝わる",
+      "遅れたという事実が残る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "遅れなかったことにする"
+    ]
+  },
+  {
+    "id": "apology_refusal",
+    "category": "apology",
+    "input": "ごめん、ちょっと無理そう",
+    "intent": "できないことの謝罪",
+    "risk_level": "medium",
+    "must_preserve": ["無理そう"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "謝罪と断りの両方が伝わる",
+      "無理という意思が残る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "できるように変える"
+    ]
+  },
+  {
+    "id": "encouragement_reassure",
+    "category": "encouragement",
+    "input": "大丈夫、気にしないで",
+    "intent": "相手を安心させる",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "安心感を与える",
+      "相手を気遣う表現になる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "encouragement_cheer",
+    "category": "encouragement",
+    "input": "がんばって",
+    "intent": "応援",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "応援の意が伝わる",
+      "前向きな表現になる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "emotion_tired",
+    "category": "emotion",
+    "input": "今日はちょっと疲れた",
+    "intent": "疲労感の共有",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "疲労感が伝わる",
+      "感情が表現される"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "emotion_frustrated",
+    "category": "emotion",
+    "input": "なんかうまくいかないな",
+    "intent": "困りごと・弱音",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "困りごとが伝わる",
+      "弱音として自然"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "smalltalk_agree",
+    "category": "smalltalk",
+    "input": "それ、いいですね",
+    "intent": "肯定・同意",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "同意の意が伝わる",
+      "ポジティブな反応になる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "question_call",
+    "category": "question",
+    "input": "ちょっと聞いてもいい？",
+    "intent": "質問前の呼びかけ",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "質問前の呼びかけとして成立する",
+      "相手に配慮した表現になる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "question_opinion",
+    "category": "question",
+    "input": "これどう思う？",
+    "intent": "意見を聞く",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "意見を求める表現になる",
+      "相手に問いかける形になる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "request_documents",
+    "category": "request",
+    "input": "明日までに資料を送ってください",
+    "intent": "資料送付の依頼",
+    "risk_level": "high",
+    "must_preserve": ["明日まで", "資料", "送ってください"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "依頼の意が伝わる",
+      "期日と対象が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "期日や対象を変える"
+    ]
+  },
+  {
+    "id": "request_confirm",
+    "category": "request",
+    "input": "田中さんに確認してください",
+    "intent": "確認依頼",
+    "risk_level": "high",
+    "must_preserve": ["田中さん", "確認"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "依頼の意が伝わる",
+      "対象者が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "対象者を変える"
+    ]
+  },
+  {
+    "id": "request_reply",
+    "category": "request",
+    "input": "17時までに返信してください",
+    "intent": "返信依頼",
+    "risk_level": "high",
+    "must_preserve": ["17時まで", "返信"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "依頼の意が伝わる",
+      "期限が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "期限を変える"
+    ]
+  },
+  {
+    "id": "decline_participation",
+    "category": "decline",
+    "input": "今日は参加できません",
+    "intent": "不参加の連絡",
+    "risk_level": "high",
+    "must_preserve": ["今日", "参加できません"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "不参加の意が伝わる",
+      "日時と内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "参加できるように変える"
+    ]
+  },
+  {
+    "id": "decline_postpone",
+    "category": "decline",
+    "input": "今回は見送ります",
+    "intent": "断り",
+    "risk_level": "medium",
+    "must_preserve": ["見送ります"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "断りの意が伝わる",
+      "今回はという条件が残る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "decline_refuse",
+    "category": "decline",
+    "input": "無理です",
+    "intent": "拒否",
+    "risk_level": "medium",
+    "must_preserve": ["無理"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "拒否の意が明確に伝わる",
+      "無理という意思が残る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "できるように変える"
+    ]
+  },
+  {
+    "id": "schedule_meeting",
+    "category": "schedule",
+    "input": "明日の10時に会議があります",
+    "intent": "予定通知",
+    "risk_level": "high",
+    "must_preserve": ["明日", "10時", "会議"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "予定の通知として成立する",
+      "日時と内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "日時や内容を変える"
+    ]
+  },
+  {
+    "id": "schedule_meeting_detail",
+    "category": "schedule",
+    "input": "6月20日に渋谷で打ち合わせです",
+    "intent": "打ち合わせ予定",
+    "risk_level": "high",
+    "must_preserve": ["6月20日", "渋谷", "打ち合わせ"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "予定の通知として成立する",
+      "日時・場所・内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "日時・場所・内容を変える"
+    ]
+  },
+  {
+    "id": "schedule_delay",
+    "category": "schedule",
+    "input": "15分遅れます",
+    "intent": "遅延連絡",
+    "risk_level": "high",
+    "must_preserve": ["15分", "遅れます"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "遅延の連絡として成立する",
+      "時間が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "時間を変える"
+    ]
+  },
+  {
+    "id": "report_progress",
+    "category": "report",
+    "input": "進捗はだいたい半分くらいです",
+    "intent": "進捗報告",
+    "risk_level": "medium",
+    "must_preserve": ["半分くらい"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "進捗報告として成立する",
+      "程度が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "進捗を変える"
+    ]
+  },
+  {
+    "id": "report_bug",
+    "category": "report",
+    "input": "バグはまだ直っていません",
+    "intent": "未修正報告",
+    "risk_level": "high",
+    "must_preserve": ["バグ", "まだ直っていません"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "未修正の報告として成立する",
+      "状態が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "直ったことにする"
+    ]
+  },
+  {
+    "id": "report_test_pass",
+    "category": "report",
+    "input": "テストは全部通りました",
+    "intent": "テスト成功報告",
+    "risk_level": "high",
+    "must_preserve": ["テスト", "全部通りました"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "成功の報告として成立する",
+      "結果が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "失敗したことにする"
+    ]
+  },
+  {
+    "id": "warning_dont_touch",
+    "category": "warning",
+    "input": "そこは触らないでください",
+    "intent": "注意",
+    "risk_level": "high",
+    "must_preserve": ["触らないでください"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "注意の意が伝わる",
+      "禁止の内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "触ってよいことにする"
+    ]
+  },
+  {
+    "id": "warning_dont_delete",
+    "category": "warning",
+    "input": "このファイルは削除しないでください",
+    "intent": "削除禁止",
+    "risk_level": "high",
+    "must_preserve": ["このファイル", "削除しないでください"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "禁止の意が伝わる",
+      "対象と内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "削除してよいことにする"
+    ]
+  },
+  {
+    "id": "warning_danger",
+    "category": "warning",
+    "input": "その操作は危ないです",
+    "intent": "危険注意",
+    "risk_level": "high",
+    "must_preserve": ["危ない"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "危険の注意として成立する",
+      "安全性の警告が伝わる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "安全であることにする"
+    ]
+  },
+  {
+    "id": "instruction_retry",
+    "category": "instruction",
+    "input": "もう一回やって",
+    "intent": "再実行指示",
+    "risk_level": "medium",
+    "must_preserve": ["もう一回"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "指示の意が伝わる",
+      "再実行の内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "instruction_fix",
+    "category": "instruction",
+    "input": "ここを直して",
+    "intent": "修正指示",
+    "risk_level": "medium",
+    "must_preserve": ["ここ", "直して"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "修正の指示として成立する",
+      "対象と内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "instruction_check_log",
+    "category": "instruction",
+    "input": "先にログを確認して",
+    "intent": "ログ確認指示",
+    "risk_level": "high",
+    "must_preserve": ["先に", "ログ", "確認"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "指示の意が伝わる",
+      "順序と内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "順序を変える"
+    ]
+  },
+  {
+    "id": "ambiguous_improve",
+    "category": "ambiguous",
+    "input": "いい感じにして",
+    "intent": "曖昧な改善依頼",
+    "risk_level": "medium",
+    "must_preserve": [],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "改善の依頼として成立する",
+      "曖昧さが残る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "ambiguous_fix",
+    "category": "ambiguous",
+    "input": "なんとかして",
+    "intent": "曖昧な依頼",
+    "risk_level": "medium",
+    "must_preserve": [],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "依頼の意が伝わる",
+      "曖昧さが残る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "short_yes",
+    "category": "short_response",
+    "input": "はい",
+    "intent": "肯定",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "肯定の意が伝わる",
+      "短くてもスタイル差が出る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "short_no",
+    "category": "short_response",
+    "input": "いやです",
+    "intent": "拒否",
+    "risk_level": "medium",
+    "must_preserve": ["いや"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "拒否の意が明確に伝わる",
+      "いやという意思が残る"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "肯定に変える"
+    ]
+  },
+  {
+    "id": "short_understand",
+    "category": "short_response",
+    "input": "なるほど",
+    "intent": "理解・相づち",
+    "risk_level": "low",
+    "must_preserve": [],
+    "allowed_freedom": "high",
+    "expected_traits": [
+      "理解の意が伝わる",
+      "相づちとして自然"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "instruction_wait",
+    "category": "instruction",
+    "input": "ちょっと待って",
+    "intent": "待機依頼",
+    "risk_level": "medium",
+    "must_preserve": ["待って"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "待機の依頼として成立する",
+      "待つという意思が伝わる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す"
+    ]
+  },
+  {
+    "id": "report_leave",
+    "category": "report",
+    "input": "今日はもう帰ります",
+    "intent": "退勤・帰宅連絡",
+    "risk_level": "medium",
+    "must_preserve": ["今日", "帰ります"],
+    "allowed_freedom": "low",
+    "expected_traits": [
+      "帰宅の連絡として成立する",
+      "日時と内容が明確"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "帰らないことにする"
+    ]
+  },
+  {
+    "id": "opinion_disagree",
+    "category": "opinion",
+    "input": "それは違うと思います",
+    "intent": "反対意見",
+    "risk_level": "medium",
+    "must_preserve": ["違うと思います"],
+    "allowed_freedom": "medium",
+    "expected_traits": [
+      "反対意見として成立する",
+      "意見の表明が伝わる"
+    ],
+    "forbidden": [
+      "複数案を出す",
+      "説明を出す",
+      "同意に変える"
+    ]
+  }
+]
