@@ -225,12 +225,10 @@ def test_process_passes_voice_output_prompt(tmp_path) -> None:
     pipeline = KuchikaePipeline(voice_output_backend=counting_vo)
 
     text_prompt = TextTransformPrompt(instruction="テスト")
-    voice_prompt = VoiceOutputPrompt.from_file()
 
-    pipeline.process(str(wav), text_prompt, voice_prompt)
+    pipeline.process(str(wav), text_prompt, voice_style="auto")
 
     assert counting_vo.call_count == 1
-    assert counting_vo.last_prompt == voice_prompt
 
 
 def test_process_stream_passes_voice_output_prompt(tmp_path) -> None:
@@ -241,12 +239,10 @@ def test_process_stream_passes_voice_output_prompt(tmp_path) -> None:
     pipeline = KuchikaePipeline(voice_output_backend=counting_vo)
 
     text_prompt = TextTransformPrompt(instruction="テスト")
-    voice_prompt = VoiceOutputPrompt.from_file()
 
-    list(pipeline.process_stream(str(wav), text_prompt, voice_prompt))
+    list(pipeline.process_stream(str(wav), text_prompt, voice_style="auto"))
 
     assert counting_vo.call_count == 1
-    assert counting_vo.last_prompt == voice_prompt
 
 
 def test_process_stream_live_passes_voice_output_prompt(tmp_path) -> None:
@@ -257,12 +253,10 @@ def test_process_stream_live_passes_voice_output_prompt(tmp_path) -> None:
     pipeline = KuchikaePipeline(voice_output_backend=counting_vo)
 
     text_prompt = TextTransformPrompt(instruction="テスト")
-    voice_prompt = VoiceOutputPrompt.from_file()
 
-    list(pipeline.process_stream_live(str(wav), text_prompt, voice_prompt))
+    list(pipeline.process_stream_live(str(wav), text_prompt, voice_style="auto"))
 
     assert counting_vo.call_count == 1
-    assert counting_vo.last_prompt == voice_prompt
 
 
 def test_dummy_stt_sentinel_is_not_natural_sentence() -> None:

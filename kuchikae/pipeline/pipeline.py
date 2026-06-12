@@ -54,6 +54,11 @@ from kuchikae.domain.voice_style import (
     merge_voice_style,
     voice_style_to_prompt,
 )
+from kuchikae.domain.voice_prompt import (
+    build_voice_output_prompt_from_analysis,
+    get_emotion_description,
+    get_voice_style_display,
+)
 from kuchikae.domain.types import (
     AudioCacheKey,
     PipelineResult,
@@ -632,65 +637,49 @@ class KuchikaePipeline:
         )
         return style
 
-    def _build_voice_prompt(self, source_text: str, text_for_voice: str, audio_emotion: AudioEmotion | None, voice_output_prompt: VoiceOutputPrompt | None) -> VoiceOutputPrompt:
-        if voice_output_prompt is not None:
-            self._last_voice_style = "custom"
-            self._last_audio_emotion = getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled"
-            return voice_output_prompt
-        source_style = self._detect_voice_style(source_text)
-        self._emit_style(
-            "voice_style.source.detect.done",
-            "voice_style",
-            {
-                "mood": source_style.mood.value,
-                "speed": source_style.speed.value,
-                "clarity": source_style.clarity.value,
-                "emphasis": source_style.emphasis.value,
-                "confidence": source_style.confidence,
-                "source": source_style.source,
-            },
+    def _build_voice_prompt(
+        self,
+        source_text: str,
+        text_for_voice: str,
+        audio_emotion: AudioEmotion | None,
+        voice_style: str = "auto",
+    ) -> VoiceOutputPrompt:
+        """Build voice output prompt from emotion analysis and voice style.
+
+        Priority:
+        1. Explicit preset (natural, calm, bright, slow_clear) -> use preset
+        2. Auto mode -> generate from emotion analysis
+        3. Fallback -> neutral prompt
+        """
+        emotion_mood = getattr(audio_emotion, "mood", None) if audio_emotion is not None else None
+
+        # Use the new helper to build prompt from emotion analysis
+        prompt = build_voice_output_prompt_from_analysis(
+            emotion=emotion_mood,
+            voice_style=voice_style,
         )
-        transformed_style = self._detect_voice_style(text_for_voice)
-        self._emit_style(
-            "voice_style.transformed.detect.done",
-            "voice_style",
-            {
-                "mood": transformed_style.mood.value,
-                "speed": transformed_style.speed.value,
-                "clarity": transformed_style.clarity.value,
-                "emphasis": transformed_style.emphasis.value,
-                "confidence": transformed_style.confidence,
-                "source": transformed_style.source,
-            },
-        )
-        final_style = fuse_voice_styles(source_style, transformed_style, audio_emotion)
-        prompt = VoiceOutputPrompt(instruction=voice_style_to_prompt(final_style))
-        self._last_voice_style = final_style.mood.value
+
+        # Update tracking state
+        if voice_style and voice_style != "auto" and voice_style in ("natural", "calm", "bright", "slow_clear"):
+            self._last_voice_style = voice_style
+        else:
+            self._last_voice_style = "auto"
         self._last_audio_emotion = getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled"
+
+        # Emit diagnostics
+        emotion_label, prompt_desc, applied_style = get_voice_style_display(voice_style, emotion_mood)
         self._emit_style(
-            "voice_style.fusion.done",
+            "voice_style.resolved",
             "voice_style",
             {
-                "source_mood": source_style.mood.value,
-                "source_speed": source_style.speed.value,
-                "source_emphasis": source_style.emphasis.value,
-                "source_confidence": source_style.confidence,
-                "transformed_mood": transformed_style.mood.value,
-                "transformed_speed": transformed_style.speed.value,
-                "transformed_emphasis": transformed_style.emphasis.value,
-                "transformed_confidence": transformed_style.confidence,
-                "audio_energy": getattr(audio_emotion, "energy", "disabled") if audio_emotion is not None else "disabled",
-                "audio_arousal": getattr(audio_emotion, "arousal", 0.0) if audio_emotion is not None else 0.0,
-                "audio_confidence": getattr(audio_emotion, "confidence", 0.0) if audio_emotion is not None else 0.0,
-                "audio_source": getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled",
-                "final_mood": final_style.mood.value,
-                "final_speed": final_style.speed.value,
-                "final_emphasis": final_style.emphasis.value,
-                "final_confidence": final_style.confidence,
-                "final_source": final_style.source,
-                "generated_prompt_preview": prompt.instruction[:120],
+                "emotion": emotion_mood or "unknown",
+                "voice_style": voice_style,
+                "applied_style": applied_style,
+                "emotion_description": prompt_desc,
+                "generated_prompt_preview": prompt.instruction[:120] if prompt else "",
             },
         )
+
         return prompt
 
     def _step_voice(
@@ -714,14 +703,14 @@ class KuchikaePipeline:
         self,
         audio_path: str,
         text_transform_prompt: TextTransformPrompt,
-        voice_output_prompt: VoiceOutputPrompt | None = None,
+        voice_style: str = "auto",
     ) -> PipelineResult:
         t0 = time.time()
         logger.info(
-            "process:start audio_path=%s text_prompt_len=%d voice_prompt=%s stt=%s text=%s voice=%s cache=%s",
+            "process:start audio_path=%s text_prompt_len=%d voice_style=%s stt=%s text=%s voice=%s cache=%s",
             audio_path,
             len(text_transform_prompt.instruction),
-            "set" if voice_output_prompt is not None else "none",
+            voice_style,
             type(self.stt_backend).__name__,
             type(self.text_transform_backend).__name__,
             type(self.voice_output_backend).__name__,
@@ -731,29 +720,6 @@ class KuchikaePipeline:
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
-        voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = None
-        if not self.disable_processing_cache and voice_output_prompt is not None:
-            cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
-        if cached_result is not None:
-            logger.info(
-                "process:full_cache_hit output_audio_path=%s source_len=%d transformed_len=%d",
-                cached_result.output_audio_path,
-                len(cached_result.source_text),
-                len(cached_result.transformed_text),
-            )
-            self._emit(
-                "cache.full_hit",
-                "Full pipeline cache hit; STT/text/TTS were not executed.",
-                "pipeline",
-                cache="full_result",
-                data={
-                    "source_len": len(cached_result.source_text),
-                    "transformed_len": len(cached_result.transformed_text),
-                    "output_audio_path": cached_result.output_audio_path,
-                },
-            )
-            return cached_result
         logger.info(
             "process:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
             cache_key.path,
@@ -907,7 +873,7 @@ class KuchikaePipeline:
         )
         text_for_voice = transformed_text.strip() or source_text
         audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
-        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_output_prompt)
+        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_style)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
@@ -1014,14 +980,14 @@ class KuchikaePipeline:
         self,
         audio_path: str,
         text_transform_prompt: TextTransformPrompt,
-        voice_output_prompt: VoiceOutputPrompt | None = None,
+        voice_style: str = "auto",
     ) -> Generator[tuple[str, str | None, str | None, str | None], None, None]:
         t0 = time.time()
         logger.info(
-            "process_stream:start audio_path=%s text_prompt_len=%d voice_prompt=%s stt=%s text=%s voice=%s",
+            "process_stream:start audio_path=%s text_prompt_len=%d voice_style=%s stt=%s text=%s voice=%s",
             audio_path,
             len(text_transform_prompt.instruction),
-            "set" if voice_output_prompt is not None else "none",
+            voice_style,
             type(self.stt_backend).__name__,
             type(self.text_transform_backend).__name__,
             type(self.voice_output_backend).__name__,
@@ -1029,28 +995,6 @@ class KuchikaePipeline:
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
-        voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = None
-        if not self.disable_processing_cache and voice_output_prompt is not None:
-            cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
-        if cached_result is not None:
-            logger.info("process_stream:full_cache_hit")
-            self._emit(
-                "cache.full_hit",
-                "Full pipeline cache hit; STT/text/TTS were not executed.",
-                "pipeline",
-                cache="full_result",
-                data={
-                    "source_len": len(cached_result.source_text),
-                    "transformed_len": len(cached_result.transformed_text),
-                    "output_audio_path": cached_result.output_audio_path,
-                },
-            )
-            yield "STT", cached_result.source_text, None, None
-            yield "TXT", cached_result.source_text, cached_result.transformed_text, None
-            yield "VOX", cached_result.source_text, cached_result.transformed_text, None
-            yield "DONE", cached_result.source_text, cached_result.transformed_text, cached_result.output_audio_path
-            return
         logger.info(
             "process_stream:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
             cache_key.path,
@@ -1108,7 +1052,7 @@ class KuchikaePipeline:
         )
         text_for_voice = transformed_text.strip() or source_text
         audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
-        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_output_prompt)
+        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_style)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process_stream:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
@@ -1163,7 +1107,7 @@ class KuchikaePipeline:
         self,
         audio_path: str,
         text_transform_prompt: TextTransformPrompt,
-        voice_output_prompt: VoiceOutputPrompt | None = None,
+        voice_style: str = "auto",
     ) -> Generator[tuple[str, str | None, str | None, str | None], None, None]:
         """Live streaming pipeline with partial STT results.
         
@@ -1172,10 +1116,10 @@ class KuchikaePipeline:
         """
         t0 = time.time()
         logger.info(
-            "process_stream_live:start audio_path=%s text_prompt_len=%d voice_prompt=%s stt=%s text=%s voice=%s",
+            "process_stream_live:start audio_path=%s text_prompt_len=%d voice_style=%s stt=%s text=%s voice=%s",
             audio_path,
             len(text_transform_prompt.instruction),
-            "set" if voice_output_prompt is not None else "none",
+            voice_style,
             type(self.stt_backend).__name__,
             type(self.text_transform_backend).__name__,
             type(self.voice_output_backend).__name__,
@@ -1183,28 +1127,6 @@ class KuchikaePipeline:
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
-        voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = None
-        if not self.disable_processing_cache and voice_output_prompt is not None:
-            cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
-        if cached_result is not None:
-            logger.info("process_stream_live:full_cache_hit")
-            self._emit(
-                "cache.full_hit",
-                "Full pipeline cache hit; STT/text/TTS were not executed.",
-                "pipeline",
-                cache="full_result",
-                data={
-                    "source_len": len(cached_result.source_text),
-                    "transformed_len": len(cached_result.transformed_text),
-                    "output_audio_path": cached_result.output_audio_path,
-                },
-            )
-            yield "STT", cached_result.source_text, None, None
-            yield "TXT", cached_result.source_text, cached_result.transformed_text, None
-            yield "VOX", cached_result.source_text, cached_result.transformed_text, None
-            yield "DONE", cached_result.source_text, cached_result.transformed_text, cached_result.output_audio_path
-            return
         logger.info(
             "process_stream_live:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
             cache_key.path,
@@ -1340,7 +1262,7 @@ class KuchikaePipeline:
         )
         text_for_voice = transformed_text.strip() or source_text
         audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
-        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_output_prompt)
+        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_style)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
             "process_stream_live:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",

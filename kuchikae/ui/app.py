@@ -24,6 +24,10 @@ from kuchikae.ui.js import PTT_HTML, PTT_JS
 logger = logging.getLogger("kuchikae.ui.app")
 
 
+def _voice_analysis_pending_html() -> str:
+    return '<span id="voice-analysis-label" style="color: #A1A1AA; font-size: 12px;">声の印象: 分析中...</span>'
+
+
 def create_app(
     pipeline: KuchikaePipeline,
     default_prompt: TextTransformPrompt,
@@ -59,17 +63,15 @@ def create_app(
                     run_btn = gr.Button("言い直す", elem_id="run-btn")
 
                     voice_style = gr.Radio(
-                        choices=["auto", "natural", "calm", "bright", "slow_clear", "custom"],
+                        choices=["auto", "natural", "calm", "bright", "slow_clear"],
                         value="auto",
                         label="声の出し方",
                     )
-                    with gr.Accordion("詳細設定", open=False):
-                        voice_prompt = gr.Textbox(
-                            elem_id="voice-prompt-box",
-                            label="声の出し方プロンプト",
-                            value=(default_voice_prompt.instruction if default_voice_prompt is not None else ""),
-                            lines=3,
-                        )
+
+                    voice_analysis_label = gr.HTML(
+                        elem_id="voice-analysis-label",
+                        value=_voice_analysis_pending_html(),
+                    )
 
                     with gr.Row(elem_id="normal-text-compare"):
                         source_text = gr.Textbox(
@@ -101,14 +103,13 @@ def create_app(
                         lines=3,
                     )
 
-                    def _run_handler(audio_value, template_value, text_prompt_value, voice_prompt_value, stt_preset_value, voice_style_value):
+                    def _run_handler(audio_value, template_value, text_prompt_value, stt_preset_value, voice_style_value):
                         yield from run(
                             audio_value,
                             template_value,
                             text_prompt_value,
                             pipeline=pipeline,
                             live_streaming=live_streaming,
-                            voice_output_prompt=voice_prompt_value,
                             stt_preset=stt_preset_value,
                             voice_style=voice_style_value,
                         )
@@ -120,7 +121,7 @@ def create_app(
                     )
                     run_btn.click(
                         _run_handler,
-                        inputs=[audio_input, template, text_prompt, voice_prompt, stt_preset, voice_style],
+                        inputs=[audio_input, template, text_prompt, stt_preset, voice_style],
                         outputs=[output_audio, source_text, transformed_text, status],
                     )
 

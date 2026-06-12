@@ -236,18 +236,15 @@ def run(
     custom_prompt: str,
     pipeline: KuchikaePipeline,
     live_streaming: bool = False,
-    voice_output_prompt=None,
     stt_preset: str | None = None,
     voice_style: str = "auto",
-    custom_voice_prompt: str = "",
 ) -> Generator:
     logger.info(
-        "[run] called template=%s live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s voice_style=%s",
+        "[run] called template=%s live_streaming=%s audio_type=%s audio_repr=%r voice_style=%s",
         template_name,
         live_streaming,
         type(audio_input).__name__,
         repr(audio_input)[:400],
-        "set" if voice_output_prompt is not None else "none",
         voice_style,
     )
     path = normalize_audio_path(audio_input)
@@ -272,23 +269,20 @@ def run(
         prompt_text = TEMPLATES["自然に"]
 
     prompt = TextTransformPrompt(instruction=prompt_text)
-    voice_prompt = resolve_voice_style(voice_style, custom_voice_prompt)
-    if voice_prompt is None and voice_style != "auto":
-        voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
     if stt_preset and hasattr(pipeline, "set_stt_preset"):
         pipeline.set_stt_preset(stt_preset)
     logger.info(
-        "[run] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
+        "[run] stream_fn=%s path=%s text_prompt_preview=%r voice_style=%s",
         getattr(stream_fn, "__name__", repr(stream_fn)),
         path,
         prompt.instruction[:160],
-        "set" if voice_prompt is not None else "none",
+        voice_style,
     )
 
     try:
         for idx, (status, src, txt, aud) in enumerate(
-            stream_fn(path, prompt, voice_prompt),
+            stream_fn(path, prompt, voice_style),
             start=1,
         ):
             last_status = status

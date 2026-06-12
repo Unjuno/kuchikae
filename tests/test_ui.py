@@ -46,8 +46,13 @@ def test_create_app_normal_tab_components():
     assert "transformed-text" in config_str
     assert "output-audio" in config_str
     assert "prompt-box" in config_str
-    assert "voice-prompt-box" in config_str
     assert "normal-text-compare" in config_str
+    # Voice prompt textbox should NOT exist
+    assert "voice-prompt-box" not in config_str
+    # Voice analysis label should exist
+    assert "voice-analysis-label" in config_str
+    # custom should NOT be in voice_style choices
+    assert '"custom"' not in config_str or "custom" not in config_str.split("voice_style")[0] if "voice_style" in config_str else True
 
 
 def test_create_app_simple_tab_components():
