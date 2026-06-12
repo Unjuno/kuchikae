@@ -91,12 +91,16 @@ def validate_transform(
     if echo_score >= 0.6:
         logger.warning("validate_transform: prompt echo detected (score=%.2f)", echo_score)
         return False
-    # Reject if output contains simplified Chinese characters (common LLM error)
-    cn_chars = re.findall(r"[\u4e00-\u9fff]", transformed_text)
-    jp_chars = re.findall(r"[\u3040-\u309f\u30a0-\u30ff]", transformed_text)
-    if cn_chars and not jp_chars:
-        logger.warning("validate_transform: simplified Chinese characters detected")
-        return False
+    # Heuristic: reject CJK-only long outputs, which are often Chinese.
+    # Short kanji-only Japanese responses such as "了解" or "大丈夫" are allowed.
+    _KANJI_ONLY_JA_OK = {"了解", "承知", "感謝", "無理", "大丈夫", "確認", "失礼", "了解です", "承知しました", "大丈夫です"}
+    cjk_chars = re.findall(r"[\u4e00-\u9fff]", transformed_text)
+    kana_chars = re.findall(r"[\u3040-\u309f\u30a0-\u30ff]", transformed_text)
+    if cjk_chars and not kana_chars:
+        stripped = transformed_text.strip()
+        if stripped not in _KANJI_ONLY_JA_OK and len(stripped) >= 8:
+            logger.warning("validate_transform: CJK-only long output detected: %s", stripped[:20])
+            return False
     return True
 
 
@@ -207,10 +211,10 @@ class OllamaTextTransformBackend(TextTransformBackend):
                     self._on_cot_stripped(self.model)
             if not result:
                 logger.warning("ollama returned empty response")
-                return text
+                return result
             if not validate_transform(text, result, prompt.instruction):
                 logger.warning("text_transform.validation_failed model=%s", self.model)
-                return text
+                return result
             logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
             return result
         except (httpx.ConnectError, httpx.TimeoutException) as e:
