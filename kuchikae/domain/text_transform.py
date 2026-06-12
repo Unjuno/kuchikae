@@ -42,7 +42,7 @@ class OllamaTextTransformBackend(TextTransformBackend):
     def __init__(self, model: str = "qwen3:8b", strict: bool = False) -> None:
         self.model = model
         self.strict = strict
-        self._base_url = "http://localhost:11434"
+        self._base_url = os.environ.get("KUCHIKAE_OLLAMA_URL", "http://localhost:11434")
 
     def transform(self, text: str, prompt: TextTransformPrompt) -> str:
         import httpx
@@ -159,8 +159,6 @@ class GPTTextTransformBackend(TextTransformBackend):
             logger.info("gpt: %.2fs → %s", time.time() - t0, result[:60])
             return result
         except Exception as e:
-            if self.strict:
-                raise RuntimeError("GPT text transform failed.") from e
             raise RuntimeError("GPT text transform failed.") from e
 
 

@@ -46,7 +46,7 @@ The pipeline (`pipeline.py`) and UI (`app.py`) contain zero model-specific logic
 ## 6. External models = outside the repository
 
 No model weights, checkpoints, or external repositories are committed to Kuchikae:
-- OpenVoice lives at `/Users/taka/repos/OpenVoice` (cloned via git, LFS pull).
+- OpenVoice lives at `$KUCHIKAE_OPENVOICE_PATH` (cloned via git, LFS pull).
 - Whisper models live in `~/.cache/faster-whisper/`.
 - Model weights downloaded lazily on first use.
 

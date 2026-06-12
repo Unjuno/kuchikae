@@ -3,7 +3,7 @@
 ## Quick start (OpenVoice — Phase 3)
 
 ```bash
-cd /Users/taka/repos/OpenVoice
+cd $KUCHIKAE_OPENVOICE_PATH
 git lfs install
 git lfs pull  # download checkpoint files (~600 MB).
 OPENVOICE_READY=1 uv run python scripts/smoke_e2e.py
@@ -50,5 +50,5 @@ All backends gracefully fall back to `Dummy*` when dependencies are missing:
 ## External model location policy
 
 External model repos live **outside** the Kuchikae repository:
-- `/Users/taka/repos/OpenVoice` (cloned via git)
+- `$KUCHIKAE_OPENVOICE_PATH` (cloned via git)
 - Model weights in `.cache/` or inside the cloned repo's `checkpoints/`.

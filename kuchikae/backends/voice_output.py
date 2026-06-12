@@ -19,7 +19,7 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
 
     def __init__(self, openvoice_path: str | None = None) -> None:
         self._openvoice_path = openvoice_path or os.environ.get(
-            "KUCHIKAE_OPENVOICE_PATH", "/Users/taka/repos/OpenVoice"
+            "KUCHIKAE_OPENVOICE_PATH", ""
         )
         self._base_tts: Any = None
         self._converter: Any = None
@@ -30,6 +30,12 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
     def _ensure_models_loaded(self) -> tuple[Any, Any]:
         if self._base_tts is not None and self._converter is not None:
             return self._base_tts, self._converter
+
+        if not self._openvoice_path:
+            raise RuntimeError(
+                "OpenVoice path is not configured. "
+                "Set KUCHIKAE_OPENVOICE_PATH environment variable to the path of your OpenVoice checkout."
+            )
 
         if os.path.isdir(self._openvoice_path) and self._openvoice_path not in sys.path:
             sys.path.insert(0, self._openvoice_path)

@@ -26,14 +26,14 @@ class LatencyLogger:
         return os.path.join(self.log_dir, "latency.jsonl")
 
     def log_report(self, report: StreamingLatencyReport) -> None:
-        with open(self._path, "a") as f:
+        with open(self._path, "a", encoding="utf-8") as f:
             f.write(json.dumps(asdict(report), ensure_ascii=False) + "\n")
 
     def read_reports(self) -> list[StreamingLatencyReport]:
         if not os.path.exists(self._path):
             return []
         reports: list[StreamingLatencyReport] = []
-        with open(self._path) as f:
+        with open(self._path, encoding="utf-8") as f:
             for line in f:
                 data = json.loads(line)
                 reports.append(StreamingLatencyReport(**data))

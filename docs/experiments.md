@@ -120,7 +120,7 @@ U:
 
 Result:
 - Benchmark JSON: `benchmarks/results/stt_kotoba_bilingual.json`
-- Failure: `RuntimeError: Unable to open file 'model.bin' in model '/Users/taka/.cache/huggingface/hub/models--kotoba-tech--kotoba-whisper-bilingual-v1.0/snapshots/5b2c01ec5bc234cd784e9187e74bc86582ed5944'`
+- Failure: `RuntimeError: Unable to open file 'model.bin' in model '~/.cache/huggingface/hub/models--kotoba-tech--kotoba-whisper-bilingual-v1.0/snapshots/...'`
 - Decision: reject for the current backend path; keep as a model-card candidate only until the correct weight layout is verified.
 
 ## Experiment 6: Kotoba Whisper v1.0 faster-whisper repo

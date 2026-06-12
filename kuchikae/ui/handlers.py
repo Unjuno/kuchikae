@@ -111,14 +111,22 @@ def _backend_status(pipeline: KuchikaePipeline) -> str:
     if hasattr(pipeline, "diagnostics") and pipeline.diagnostics is not None:
         summary = pipeline.diagnostics.user_summary().replace("\n", " | ")
     stt_backend = type(getattr(pipeline, "stt_backend", object())).__name__
-    text_backend = type(getattr(pipeline, "text_transform_backend", object())).__name__
-    voice_backend = type(getattr(pipeline, "voice_output_backend", object())).__name__
-    base = (
-        f"STT: {stt_backend} | "
-        f"TEXT: {text_backend} | "
-        f"VOICE: {voice_backend} | "
-        f"CACHE: {cache_state}"
-    )
+    stt_preset = getattr(pipeline, "stt_preset", "balanced")
+    stt_config = getattr(pipeline, "stt_config", None)
+    if stt_config is not None:
+        stt_cfg_text = " / ".join(
+            str(bit)
+            for bit in [
+                f"model={getattr(stt_config, 'model_size', None)}",
+                f"device={getattr(stt_config, 'device', None)}",
+                f"compute={getattr(stt_config, 'compute_type', None)}",
+                f"beam={getattr(stt_config, 'beam_size', None)}",
+                f"vad={getattr(stt_config, 'vad_filter', None)}",
+            ]
+        )
+    else:
+        stt_cfg_text = "n/a"
+    base = f"STT: {stt_backend} / {stt_preset} / {stt_cfg_text} | CACHE: {cache_state}"
     return f"{base} | {summary}" if summary else base
 
 
@@ -127,6 +135,7 @@ def run_simple(
     audio_input,
     live_streaming: bool = False,
     voice_output_prompt=None,
+    stt_preset: str | None = None,
 ) -> Generator:
     logger.info(
         "[run_simple] called live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s",
@@ -152,7 +161,8 @@ def run_simple(
     prompt = TextTransformPrompt(instruction=TEMPLATES["自然に"])
     voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
-    backend_status = _backend_status(pipeline)
+    if stt_preset and hasattr(pipeline, "set_stt_preset"):
+        pipeline.set_stt_preset(stt_preset)
     logger.info(
         "[run_simple] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
         getattr(stream_fn, "__name__", repr(stream_fn)),
@@ -169,6 +179,7 @@ def run_simple(
             last_status = status
             last_source = src or ""
             last_text = txt or ""
+            backend_status = _backend_status(pipeline)
             logger.info(
                 "[run_simple] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
                 idx,
@@ -207,6 +218,7 @@ def run(
     pipeline: KuchikaePipeline,
     live_streaming: bool = False,
     voice_output_prompt=None,
+    stt_preset: str | None = None,
 ) -> Generator:
     logger.info(
         "[run] called template=%s live_streaming=%s audio_type=%s audio_repr=%r voice_prompt=%s",
@@ -240,7 +252,8 @@ def run(
     prompt = TextTransformPrompt(instruction=prompt_text)
     voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
-    backend_status = _backend_status(pipeline)
+    if stt_preset and hasattr(pipeline, "set_stt_preset"):
+        pipeline.set_stt_preset(stt_preset)
     logger.info(
         "[run] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
         getattr(stream_fn, "__name__", repr(stream_fn)),
@@ -257,6 +270,7 @@ def run(
             last_status = status
             last_source = src or ""
             last_text = txt or ""
+            backend_status = _backend_status(pipeline)
             logger.info(
                 "[run] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
                 idx,

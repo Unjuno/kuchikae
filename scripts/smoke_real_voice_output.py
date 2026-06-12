@@ -2,7 +2,7 @@
 """Smoke test for real voice output (OpenVoice).
 
 Requires:
-- OpenVoice repo at /Users/taka/repos/OpenVoice or ../OpenVoice.
+- OpenVoice repo at $KUCHIKAE_OPENVOICE_PATH or ../OpenVoice.
 - Checkpoint files downloaded from HuggingFace.
   See docs/REAL_MODEL_SETUP.md for how to download them.
 - torch, torchaudio installed.

@@ -12,6 +12,9 @@ class Timer:
         self._start = time.time()
         return self
 
+    def __exit__(self, *args: object) -> None:
+        pass
+
     @property
     def elapsed(self) -> float:
         return time.time() - self._start
@@ -26,6 +29,9 @@ class PerfTimer:
     def __enter__(self) -> "PerfTimer":
         self._start = time.perf_counter()
         return self
+
+    def __exit__(self, *args: object) -> None:
+        pass
 
     @property
     def elapsed(self) -> float:

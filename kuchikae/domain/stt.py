@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 import os
 import tempfile
@@ -16,6 +17,49 @@ from kuchikae.domain.audio_stream import AudioChunk
 from kuchikae.domain.types import STTPartial
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class FasterWhisperConfig:
+    model_size: str = "small"
+    device: str = "cpu"
+    compute_type: str = "int8"
+    language: str = "ja"
+    beam_size: int = 1
+    vad_filter: bool = True
+    temperature: float = 0.0
+    condition_on_previous_text: bool = False
+
+
+STT_PRESETS: dict[str, FasterWhisperConfig] = {
+    "fast": FasterWhisperConfig(
+        model_size="tiny",
+        device="cpu",
+        compute_type="int8",
+        beam_size=1,
+        vad_filter=False,
+    ),
+    "balanced": FasterWhisperConfig(
+        model_size="small",
+        device="cpu",
+        compute_type="int8",
+        beam_size=1,
+        vad_filter=True,
+    ),
+    "accurate": FasterWhisperConfig(
+        model_size="medium",
+        device="cpu",
+        compute_type="int8",
+        beam_size=3,
+        vad_filter=True,
+    ),
+}
+
+
+def resolve_stt_preset(name: str | None) -> FasterWhisperConfig:
+    if not name:
+        return STT_PRESETS["balanced"]
+    return STT_PRESETS.get(name, STT_PRESETS["balanced"])
 
 
 class STTBackend:
@@ -107,11 +151,16 @@ class SegmentedSTTBackend(STTBackend):
         logger.info("segmented stt: %d chunks", len(chunks))
         results: List[str] = []
         for chunk in chunks:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                sf.write(tmp.name, chunk.samples, chunk.sample_rate)
-                text = self._inner.transcribe(tmp.name)
+            tmp_name = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    tmp_name = tmp.name
+                sf.write(tmp_name, chunk.samples, chunk.sample_rate)
+                text = self._inner.transcribe(tmp_name)
                 results.append(text)
-            os.unlink(tmp.name)
+            finally:
+                if tmp_name and os.path.exists(tmp_name):
+                    os.unlink(tmp_name)
         return self._joiner.join(results)
 
     def transcribe_stream(self, audio_path: str) -> Generator[str, None, None]:
@@ -119,9 +168,14 @@ class SegmentedSTTBackend(STTBackend):
         logger.info("segmented stt stream: %d chunks", len(chunks))
         results: List[str] = []
         for chunk in chunks:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                sf.write(tmp.name, chunk.samples, chunk.sample_rate)
-                text = self._inner.transcribe(tmp.name)
+            tmp_name = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    tmp_name = tmp.name
+                sf.write(tmp_name, chunk.samples, chunk.sample_rate)
+                text = self._inner.transcribe(tmp_name)
                 results.append(text)
                 yield self._joiner.join(results)
-            os.unlink(tmp.name)
+            finally:
+                if tmp_name and os.path.exists(tmp_name):
+                    os.unlink(tmp_name)

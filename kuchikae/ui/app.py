@@ -33,6 +33,12 @@ def create_app(
     with gr.Blocks(title="Kuchikae") as demo:
         with gr.Column(elem_classes="wrap"):
             gr.HTML('<div id="title">Kuchikae</div>')
+            stt_preset = gr.Radio(
+                choices=["fast", "balanced", "accurate"],
+                value=getattr(pipeline, "stt_preset", "balanced"),
+                label="音声認識モード",
+                elem_id="stt-preset",
+            )
 
             with gr.Tabs(elem_classes="tabs"):
                 with gr.Tab("通常"):
@@ -89,7 +95,7 @@ def create_app(
                         lines=3,
                     )
 
-                    def _run_handler(audio_value, template_value, text_prompt_value, voice_prompt_value):
+                    def _run_handler(audio_value, template_value, text_prompt_value, voice_prompt_value, stt_preset_value):
                         yield from run(
                             audio_value,
                             template_value,
@@ -97,6 +103,7 @@ def create_app(
                             pipeline=pipeline,
                             live_streaming=live_streaming,
                             voice_output_prompt=voice_prompt_value,
+                            stt_preset=stt_preset_value,
                         )
 
                     template.change(
@@ -106,7 +113,7 @@ def create_app(
                     )
                     run_btn.click(
                         _run_handler,
-                        inputs=[audio_input, template, text_prompt, voice_prompt],
+                        inputs=[audio_input, template, text_prompt, voice_prompt, stt_preset],
                         outputs=[output_audio, source_text, transformed_text, status],
                     )
 
@@ -148,24 +155,25 @@ def create_app(
                         autoplay=True,
                     )
 
-                    def _run_simple_handler(audio_value, voice_prompt_value):
+                    def _run_simple_handler(audio_value, voice_prompt_value, stt_preset_value):
                         yield from run_simple(
                             pipeline,
                             audio_value,
                             live_streaming=live_streaming,
                             voice_output_prompt=voice_prompt_value,
+                            stt_preset=stt_preset_value,
                         )
 
                     simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
 
                     simple_audio.stop(
                         _run_simple_handler,
-                        inputs=[simple_audio, simple_voice_prompt],
+                        inputs=[simple_audio, simple_voice_prompt, stt_preset],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],
                     )
                     simple_audio.change(
                         _run_simple_handler,
-                        inputs=[simple_audio, simple_voice_prompt],
+                        inputs=[simple_audio, simple_voice_prompt, stt_preset],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],
                     )
 

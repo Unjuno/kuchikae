@@ -122,7 +122,7 @@ tests/
 
 External Models (outside the repo):
 ┌───────────────────────────────┐  ┌───────────────────────────────┐
-│ /Users/taka/repos/OpenVoice   │  │ .cache/faster-whisper         │
+│ $KUCHIKAE_OPENVOICE_PATH      │  │ .cache/faster-whisper         │
 │ ├── checkpoints/              │  │   └── small.en.pt             │
 │ │   ├── base_speakers/EN/   │  └────────────────────────────────┘
 │ │   │   ├── config.json      │  (lazy download on first transcribe)

@@ -11,7 +11,7 @@ from typing import Generator
 import soundfile as sf
 
 from kuchikae.domain.audio_stream import AudioChunk
-from kuchikae.domain.stt import STTBackend, StreamingSTTBackend
+from kuchikae.domain.stt import FasterWhisperConfig, STTBackend, StreamingSTTBackend
 from kuchikae.domain.types import STTPartial
 
 logger = logging.getLogger(__name__)
@@ -21,21 +21,31 @@ class FasterWhisperSTTBackend(STTBackend):
 
     def __init__(
         self,
-        model_size: str = "tiny",
-        device: str = "cpu",
-        compute_type: str = "int8",
-        beam_size: int = 1,
-        vad_filter: bool = True,
-        temperature: float = 0.0,
-        condition_on_previous_text: bool = False,
+        config: FasterWhisperConfig | None = None,
+        model_size: str | None = None,
+        device: str | None = None,
+        compute_type: str | None = None,
+        language: str | None = None,
+        beam_size: int | None = None,
+        vad_filter: bool | None = None,
+        temperature: float | None = None,
+        condition_on_previous_text: bool | None = None,
     ) -> None:
-        self._model_size = model_size
-        self._device = device
-        self._compute_type = compute_type
-        self._beam_size = beam_size
-        self._vad_filter = vad_filter
-        self._temperature = temperature
-        self._condition_on_previous_text = condition_on_previous_text
+        resolved = config or FasterWhisperConfig()
+        self._config = FasterWhisperConfig(
+            model_size=model_size or resolved.model_size,
+            device=device or resolved.device,
+            compute_type=compute_type or resolved.compute_type,
+            language=language or resolved.language,
+            beam_size=beam_size if beam_size is not None else resolved.beam_size,
+            vad_filter=vad_filter if vad_filter is not None else resolved.vad_filter,
+            temperature=temperature if temperature is not None else resolved.temperature,
+            condition_on_previous_text=(
+                condition_on_previous_text
+                if condition_on_previous_text is not None
+                else resolved.condition_on_previous_text
+            ),
+        )
         self._model = None
         self._resolved_model_size: str | None = None
         self._resolved_device: str | None = None
@@ -48,14 +58,30 @@ class FasterWhisperSTTBackend(STTBackend):
                 "Install with ``uv pip install faster-whisper``."
             )
 
+    @property
+    def config(self) -> FasterWhisperConfig:
+        return self._config
+
+    @property
+    def model_size(self) -> str:
+        return self._resolved_model_size or self._config.model_size
+
+    @property
+    def device(self) -> str:
+        return self._resolved_device or self._config.device
+
+    @property
+    def compute_type(self) -> str:
+        return self._resolved_compute_type or self._config.compute_type
+
     def _load_model(self):
         if self._model is not None:
             return self._model
         from faster_whisper import WhisperModel
 
-        model_size = os.environ.get("WHISPER_MODEL_SIZE", self._model_size)
-        device = os.environ.get("WHISPER_DEVICE", self._device)
-        compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", self._compute_type)
+        model_size = os.environ.get("WHISPER_MODEL_SIZE", self._config.model_size)
+        device = os.environ.get("WHISPER_DEVICE", self._config.device)
+        compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", self._config.compute_type)
         logger.info("loading whisper model '%s' (device=%s compute_type=%s)...", model_size, device, compute_type)
         t0 = time.time()
         self._model = WhisperModel(model_size, device=device, compute_type=compute_type)
@@ -71,12 +97,12 @@ class FasterWhisperSTTBackend(STTBackend):
         t1 = time.time()
         segments, info = model.transcribe(
             audio_path,
-            language="ja",
-            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._beam_size))),
-            vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._vad_filter))).lower() in ("1", "true", "yes"),
-            temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._temperature))),
+            language=self._config.language,
+            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._config.beam_size))),
+            vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._config.vad_filter))).lower() in ("1", "true", "yes"),
+            temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._config.temperature))),
             condition_on_previous_text=os.environ.get(
-                "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._condition_on_previous_text))
+                "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._config.condition_on_previous_text))
             ).lower() in ("1", "true", "yes"),
         )
         logger.info("whisper transcribe: %.2fs", time.time() - t1)
@@ -91,12 +117,12 @@ class FasterWhisperSTTBackend(STTBackend):
         t1 = time.time()
         segments, info = model.transcribe(
             audio_path,
-            language="ja",
-            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._beam_size))),
-            vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._vad_filter))).lower() in ("1", "true", "yes"),
-            temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._temperature))),
+            language=self._config.language,
+            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._config.beam_size))),
+            vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._config.vad_filter))).lower() in ("1", "true", "yes"),
+            temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._config.temperature))),
             condition_on_previous_text=os.environ.get(
-                "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._condition_on_previous_text))
+                "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._config.condition_on_previous_text))
             ).lower() in ("1", "true", "yes"),
         )
         logger.info("whisper transcribe: %.2fs", time.time() - t1)
@@ -115,7 +141,7 @@ class StreamingFasterWhisperSTTBackend(FasterWhisperSTTBackend):
     """
 
     def __init__(self, model_size: str = "tiny", chunk_sec: float = 5.0, overlap_sec: float = 1.0) -> None:
-        super().__init__(model_size)
+        super().__init__(model_size=model_size)
         self._chunk_sec = chunk_sec
         self._overlap_sec = overlap_sec
 
@@ -143,13 +169,13 @@ class StreamingFasterWhisperSTTBackend(FasterWhisperSTTBackend):
                     tmp_name = tmp.name
                     sf.write(tmp.name, chunk, sr)
                 segments, _ = model.transcribe(
-                    tmp_name,
-                    language="ja",
-                    beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._beam_size))),
-                    vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._vad_filter))).lower() in ("1", "true", "yes"),
-                    temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._temperature))),
+                tmp_name,
+                    language=self._config.language,
+                    beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._config.beam_size))),
+                    vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._config.vad_filter))).lower() in ("1", "true", "yes"),
+                    temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._config.temperature))),
                     condition_on_previous_text=os.environ.get(
-                        "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._condition_on_previous_text))
+                        "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._config.condition_on_previous_text))
                     ).lower() in ("1", "true", "yes"),
                 )
             finally:

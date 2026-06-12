@@ -278,6 +278,79 @@ def test_create_pipeline_rejects_unknown_stt_backend_without_dummy() -> None:
         create_pipeline({"stt_backend": "definitely_not_real", "allow_dummy_backends": False})
 
 
+def test_create_pipeline_uses_balanced_stt_preset_by_default() -> None:
+    from kuchikae.pipeline import create_pipeline
+
+    pipeline = create_pipeline({"allow_dummy_backends": True})
+    assert getattr(pipeline, "stt_preset", None) == "balanced"
+
+
+def test_resolve_stt_preset_returns_expected_default() -> None:
+    from kuchikae.domain.stt import resolve_stt_preset
+
+    preset = resolve_stt_preset("balanced")
+    assert preset.model_size == "small"
+    assert preset.device == "cpu"
+    assert preset.compute_type == "int8"
+    assert preset.beam_size == 1
+    assert preset.vad_filter is True
+
+
+def test_resolve_stt_presets_cover_fast_balanced_accurate() -> None:
+    from kuchikae.domain.stt import resolve_stt_preset
+
+    fast = resolve_stt_preset("fast")
+    balanced = resolve_stt_preset("balanced")
+    accurate = resolve_stt_preset("accurate")
+
+    assert fast.model_size == "tiny"
+    assert fast.device == "cpu"
+    assert fast.compute_type == "int8"
+    assert fast.beam_size == 1
+    assert fast.vad_filter is False
+
+    assert balanced.model_size == "small"
+    assert balanced.beam_size == 1
+    assert balanced.vad_filter is True
+
+    assert accurate.model_size == "medium"
+    assert accurate.beam_size == 3
+    assert accurate.vad_filter is True
+
+
+def test_create_pipeline_passes_preset_to_faster_whisper_backend(monkeypatch) -> None:
+    from kuchikae.pipeline import create_pipeline
+    from kuchikae.backends import stt as stt_module
+
+    captured = {}
+
+    class FakeWhisperModel:
+        pass
+
+    class FakeFasterWhisperBackend:
+        def __init__(self, config=None, **kwargs):
+            captured["config"] = config
+            self.config = config
+
+    monkeypatch.setattr(stt_module, "FasterWhisperSTTBackend", FakeFasterWhisperBackend)
+    monkeypatch.setitem(__import__("sys").modules, "faster_whisper", type("M", (), {"WhisperModel": FakeWhisperModel})())
+
+    pipeline = create_pipeline({"allow_dummy_backends": True, "stt_preset": "fast"})
+    assert getattr(pipeline, "stt_preset", None) == "fast"
+    assert captured["config"].model_size == "tiny"
+    assert captured["config"].vad_filter is False
+    assert captured["config"].beam_size == 1
+
+
+def test_disable_processing_cache_via_env(monkeypatch) -> None:
+    from kuchikae.pipeline import create_pipeline
+
+    monkeypatch.setenv("KUCHIKAE_DISABLE_PROCESSING_CACHE", "1")
+    pipeline = create_pipeline({"allow_dummy_backends": True})
+
+    assert getattr(pipeline, "disable_processing_cache", False) is True
+
+
 def test_processing_cache_can_be_disabled_via_config(tmp_path) -> None:
     wav = tmp_path / "nocache.wav"
     _write_wav(str(wav))

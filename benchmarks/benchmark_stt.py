@@ -28,6 +28,7 @@ from kuchikae.backends.stt_ct2 import AnimeWhisperCT2FP16STTBackend, AnimeWhispe
 from kuchikae.backends.stt_nemo import ReazonSpeechNemoASRBackend
 from kuchikae.backends.stt_transformers import TransformersJapaneseASRBackend
 from kuchikae.backends.stt_transformers_whisper import TransformersWhisperJapaneseASRBackend
+from kuchikae.domain.stt import FasterWhisperConfig, resolve_stt_preset
 
 
 def main() -> int:
@@ -38,6 +39,7 @@ def main() -> int:
     parser.add_argument("--audio-path", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=Path("benchmarks/results/stt.json"))
     parser.add_argument("--model-size", default=None)
+    parser.add_argument("--preset", choices=["fast", "balanced", "accurate"], default="balanced")
     parser.add_argument(
         "--backend",
         choices=[
@@ -51,6 +53,11 @@ def main() -> int:
         default="faster_whisper",
     )
     parser.add_argument("--model-id", default=None)
+    parser.add_argument(
+        "--compare-presets",
+        action="store_true",
+        help="Run the same audio against fast/balanced/accurate presets and compare latency/text.",
+    )
     args = parser.parse_args()
 
     ensure_dir(args.output.parent)
@@ -59,6 +66,9 @@ def main() -> int:
     else:
         tmp_audio = ensure_dir(repo_root() / ".bench_audio") / "stt.wav"
         write_wav(tmp_audio, duration_sec=args.audio_seconds)
+
+    if args.compare_presets and args.backend != "faster_whisper":
+        raise SystemExit("--compare-presets is only supported with faster_whisper")
 
     if args.backend == "transformers_japanese":
         backend = TransformersJapaneseASRBackend(model_id=args.model_id)
@@ -72,8 +82,39 @@ def main() -> int:
         backend = AnimeWhisperCT2FP16STTBackend()
     elif args.model_size:
         backend = FasterWhisperSTTBackend(model_size=args.model_size)
+    elif not args.compare_presets:
+        backend = FasterWhisperSTTBackend(config=resolve_stt_preset(args.preset))
     else:
-        backend = FasterWhisperSTTBackend()
+        backend = None
+
+    if args.compare_presets:
+        compare_results = []
+        for preset_name in ("fast", "balanced", "accurate"):
+            preset_backend = FasterWhisperSTTBackend(config=resolve_stt_preset(preset_name))
+            t0 = time.perf_counter()
+            text = preset_backend.transcribe(str(tmp_audio))
+            sec = time.perf_counter() - t0
+            compare_results.append(
+                {
+                    "preset": preset_name,
+                    "latency_sec": sec,
+                    "rtf": sec / max(audio_duration_sec(str(tmp_audio)), 1e-6),
+                    "text": text,
+                    "text_len": len(text),
+                    "config": preset_backend.config.__dict__,
+                }
+            )
+        result = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "git_sha": git_sha(),
+            "machine": machine_info(),
+            "audio_path": str(tmp_audio),
+            "audio_duration_sec": audio_duration_sec(str(tmp_audio)),
+            "comparison": compare_results,
+        }
+        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(args.output)
+        return 0
 
     load_t0 = time.perf_counter()
     try:
@@ -86,10 +127,10 @@ def main() -> int:
             "machine": machine_info(),
             "backend": {
                 "stt": type(backend).__name__,
-                "model_id": getattr(backend, "_model_id", None) or getattr(backend, "_model_size", None),
-                "device": getattr(backend, "_device", None),
-                "compute_type": getattr(backend, "_compute_type", None) or getattr(backend, "_torch_dtype", None),
-                "config": {},
+                "model_id": getattr(backend, "model_size", None) if hasattr(backend, "model_size") else getattr(backend, "_model_id", None),
+                "device": getattr(backend, "device", None) if hasattr(backend, "device") else getattr(backend, "_device", None),
+                "compute_type": getattr(backend, "compute_type", None) if hasattr(backend, "compute_type") else getattr(backend, "_torch_dtype", None),
+                "config": getattr(backend, "config", None).__dict__ if getattr(backend, "config", None) is not None else {},
             },
             "runs": [{"name": "cold", "load_sec": 0.0, "inference_sec": 0.0, "total_sec": 0.0, "rtf": 0.0, "memory_mb": memory_mb(), "text": "", "text_len": 0, "output_path": "", "output_exists": False, "output_duration_sec": 0.0, "error": f"{type(e).__name__}: {e}"}],
             "summary": {"median_warm_total_sec": 0.0, "median_warm_rtf": 0.0, "p95_warm_total_sec": 0.0},
@@ -163,10 +204,10 @@ def main() -> int:
         "machine": machine_info(),
         "backend": {
             "stt": type(backend).__name__,
-            "model_id": getattr(backend, "_model_id", None) or getattr(backend, "_model_size", None),
-            "device": getattr(backend, "_device", None),
-            "compute_type": getattr(backend, "_compute_type", None) or getattr(backend, "_torch_dtype", None),
-            "config": {},
+            "model_id": getattr(backend, "model_size", None) if hasattr(backend, "model_size") else getattr(backend, "_model_id", None),
+            "device": getattr(backend, "device", None) if hasattr(backend, "device") else getattr(backend, "_device", None),
+            "compute_type": getattr(backend, "compute_type", None) if hasattr(backend, "compute_type") else getattr(backend, "_torch_dtype", None),
+            "config": getattr(backend, "config", None).__dict__ if getattr(backend, "config", None) is not None else {},
         },
         "runs": runs,
         "summary": {

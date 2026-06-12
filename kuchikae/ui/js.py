@@ -1,11 +1,11 @@
 """Kuchikae UI — PTT JavaScript snippet."""
 
 PTT_HTML = """
-<div id="ptt-container">
-  <button id="ptt-btn" class="ptt-idle" aria-label="押して話す">
+<div id="ptt-container" role="region" aria-label="音声録音コントロール">
+  <button id="ptt-btn" class="ptt-idle" aria-label="押して話す" aria-pressed="false" type="button">
     <span id="ptt-label">押して話す</span>
   </button>
-  <div id="ptt-hint">ボタンを押しながら話す、離すと自動変換</div>
+  <div id="ptt-hint" aria-live="polite">ボタンを押しながら話す、離すと自動変換</div>
 </div>
 """
 
@@ -25,10 +25,12 @@ PTT_JS = r"""
     if (recording) {
       btn.className = 'ptt-recording';
       btn.setAttribute('aria-label', '録音中');
+      btn.setAttribute('aria-pressed', 'true');
       label.textContent = '話し終えたら離す';
     } else {
       btn.className = 'ptt-idle';
       btn.setAttribute('aria-label', '押して話す');
+      btn.setAttribute('aria-pressed', 'false');
       label.textContent = '押して話す';
     }
   }
@@ -83,6 +85,17 @@ PTT_JS = r"""
     }
   }
 
+  function handleKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (pttState === 0) {
+        startRecording();
+      } else {
+        stopRecording();
+      }
+    }
+  }
+
   function attachPTTHandlers() {
     const btn = document.getElementById('ptt-btn');
     if (!btn || btn.dataset.pttBound === '1') return;
@@ -97,6 +110,7 @@ PTT_JS = r"""
     });
     btn.addEventListener('pointercancel', stopRecording);
     btn.addEventListener('pointerleave', stopRecording);
+    btn.addEventListener('keydown', handleKeyDown);
   }
 
   attachPTTHandlers();

@@ -20,7 +20,13 @@ from kuchikae.counting_backends import (
     CountingVoiceOutputBackend,
 )
 from kuchikae.domain.processing_cache import ProcessingCache
-from kuchikae.domain.stt import DummySTTBackend, SegmentedSTTBackend, STTBackend
+from kuchikae.domain.stt import (
+    DummySTTBackend,
+    FasterWhisperConfig,
+    SegmentedSTTBackend,
+    STTBackend,
+    resolve_stt_preset,
+)
 from kuchikae.domain.text_transform import (
     DummyTextTransformBackend,
     GPTTextTransformBackend,
@@ -49,6 +55,8 @@ logger = setup_logger("kuchikae.pipeline")
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     config = backend_config or {}
     allow_dummy_backends = config.get("allow_dummy_backends", False)
+    stt_preset_name = config.get("stt_preset", "balanced")
+    stt_preset = resolve_stt_preset(stt_preset_name)
     disable_processing_cache = bool(
         config.get("disable_processing_cache", False)
         or os.environ.get("KUCHIKAE_DISABLE_PROCESSING_CACHE", "").lower() in ("1", "true", "yes")
@@ -80,15 +88,19 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
 
     if stt_type == "faster_whisper" and has_faster_whisper:
         from kuchikae.backends.stt import FasterWhisperSTTBackend
-        inner = FasterWhisperSTTBackend(
-            model_size=config.get("stt_model_size", "tiny"),
-            device=config.get("stt_device", "cpu"),
-            compute_type=config.get("stt_compute_type", "int8"),
-            beam_size=int(config.get("stt_beam_size", 1)),
-            vad_filter=bool(config.get("stt_vad_filter", True)),
-            temperature=float(config.get("stt_temperature", 0.0)),
-            condition_on_previous_text=bool(config.get("stt_condition_on_previous_text", False)),
+        stt_config = FasterWhisperConfig(
+            model_size=config.get("stt_model_size", stt_preset.model_size),
+            device=config.get("stt_device", stt_preset.device),
+            compute_type=config.get("stt_compute_type", stt_preset.compute_type),
+            language=config.get("stt_language", stt_preset.language),
+            beam_size=int(config.get("stt_beam_size", stt_preset.beam_size)),
+            vad_filter=bool(config.get("stt_vad_filter", stt_preset.vad_filter)),
+            temperature=float(config.get("stt_temperature", stt_preset.temperature)),
+            condition_on_previous_text=bool(
+                config.get("stt_condition_on_previous_text", stt_preset.condition_on_previous_text)
+            ),
         )
+        inner = FasterWhisperSTTBackend(config=stt_config)
     elif stt_type == "faster_whisper" and not allow_dummy_backends:
         raise RuntimeError(
             "faster-whisper is required for the selected STT backend, but it is not "
@@ -140,6 +152,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         )
 
     stt: STTBackend
+    stt_config: FasterWhisperConfig | None = None
     if use_segmented:
         segmenter: AudioSegmenter = FixedWindowSegmenter(chunk_sec=30.0, overlap_sec=2.0)
         stt = SegmentedSTTBackend(inner=inner, segmenter=segmenter)
@@ -173,7 +186,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         tt_kwargs["strict"] = text_strict
 
     voice_output_type = config.get("voice_output_backend", "irodori")
-    _ow_path = os.environ.get("KUCHIKAE_OPENVOICE_PATH", "/Users/taka/repos/OpenVoice")
+    _ow_path = os.environ.get("KUCHIKAE_OPENVOICE_PATH", "")
     _irodori_ready = False
     try:
         from irodori_tts.inference_runtime import InferenceRuntime  # noqa: F401
@@ -199,7 +212,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
             "available or OPENVOICE_READY is not set."
         )
     else:
-        _ow_ready = os.path.isdir(_ow_path) and os.environ.get("OPENVOICE_READY")
+        _ow_ready = _ow_path and os.path.isdir(_ow_path) and os.environ.get("OPENVOICE_READY")
         if _ow_ready:
             from kuchikae.backends.voice_output import OpenVoiceOutputBackend
             vo = OpenVoiceOutputBackend()
@@ -211,9 +224,16 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         else:
             vo = DummyVoiceOutputBackend()
 
-    logger.info("pipeline: stt=%s text=%s(%s) voice=%s",
-                type(stt).__name__, type(tt_class()).__name__,
-                text_model or "default", type(vo).__name__)
+    logger.info(
+        "pipeline: stt=%s preset=%s config=%s text=%s(%s) voice=%s cache=%s",
+        type(stt).__name__,
+        stt_preset_name,
+        stt_config if stt_type == "faster_whisper" and has_faster_whisper else None,
+        type(tt_class()).__name__,
+        text_model or "default",
+        type(vo).__name__,
+        "disabled" if disable_processing_cache else "enabled",
+    )
 
     if isinstance(stt, DummySTTBackend):
         logger.warning("backend.dummy_selected stage=stt message='Dummy STT selected; real audio will not be transcribed'")
@@ -223,6 +243,9 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         text_transform_backend=tt_class(**tt_kwargs),
         voice_output_backend=vo,
         disable_processing_cache=disable_processing_cache,
+        stt_preset=stt_preset_name,
+        stt_config=stt_config if stt_type == "faster_whisper" and has_faster_whisper else None,
+        backend_config=config,
     )
 
 
@@ -237,6 +260,9 @@ class KuchikaePipeline:
         latency_logger: LatencyLogger | None = None,
         disable_processing_cache: bool = False,
         diagnostics: DiagnosticRecorder | None = None,
+        stt_preset: str = "balanced",
+        stt_config: FasterWhisperConfig | None = None,
+        backend_config: dict | None = None,
     ) -> None:
         self.stt_backend = stt_backend or DummySTTBackend()
         self.text_transform_backend = text_transform_backend or DummyTextTransformBackend()
@@ -246,6 +272,9 @@ class KuchikaePipeline:
         self.disable_processing_cache = disable_processing_cache
         self.diagnostics = diagnostics or DiagnosticRecorder()
         self.run_id = new_run_id()
+        self.stt_preset = stt_preset
+        self.stt_config = stt_config
+        self.backend_config = backend_config or {}
         self._audio_cache = AudioCache()
         self._voice_context_extractor = VoiceContextExtractor()
         self.diagnostics.emit(
@@ -264,6 +293,8 @@ class KuchikaePipeline:
                     "text": type(self.text_transform_backend).__name__,
                     "voice": type(self.voice_output_backend).__name__,
                     "cache": "disabled" if self.disable_processing_cache else "enabled",
+                    "stt_preset": self.stt_preset,
+                    "stt_config": self._stt_config_data(),
                 },
             )
         )
@@ -297,6 +328,57 @@ class KuchikaePipeline:
                 data=data or {},
             )
         )
+
+    def _stt_config_data(self) -> dict:
+        config = getattr(self.stt_backend, "config", None)
+        if config is not None:
+            return {
+                "model_size": getattr(config, "model_size", None),
+                "device": getattr(config, "device", None),
+                "compute_type": getattr(config, "compute_type", None),
+                "language": getattr(config, "language", None),
+                "beam_size": getattr(config, "beam_size", None),
+                "vad_filter": getattr(config, "vad_filter", None),
+                "temperature": getattr(config, "temperature", None),
+                "condition_on_previous_text": getattr(config, "condition_on_previous_text", None),
+            }
+        return {
+            "model_size": getattr(self.stt_backend, "model_size", None),
+            "device": getattr(self.stt_backend, "device", None),
+            "compute_type": getattr(self.stt_backend, "compute_type", None),
+        }
+
+    def set_stt_preset(self, stt_preset: str) -> None:
+        self.stt_preset = stt_preset
+        from kuchikae.backends.stt import FasterWhisperSTTBackend
+
+        config = resolve_stt_preset(stt_preset)
+        if isinstance(self.stt_backend, FasterWhisperSTTBackend):
+            self.stt_backend = FasterWhisperSTTBackend(config=config)
+            self.stt_config = config
+        elif hasattr(self.stt_backend, "_inner") and isinstance(getattr(self.stt_backend, "_inner"), FasterWhisperSTTBackend):
+            self.stt_backend._inner = FasterWhisperSTTBackend(config=config)  # type: ignore[attr-defined]
+            self.stt_config = config
+        else:
+            self.stt_config = config
+        self._emit(
+            "backend.selected",
+            f"STT preset changed to {stt_preset}",
+            "pipeline",
+            data={
+                "stt": type(self.stt_backend).__name__,
+                "stt_preset": self.stt_preset,
+                "stt_config": self._stt_config_data(),
+            },
+        )
+        if isinstance(self.stt_backend, DummySTTBackend):
+            self._emit(
+                "backend.dummy_selected",
+                "Dummy STT selected; real audio will not be transcribed.",
+                "stt",
+                level=EventLevel.WARNING,
+                data={"allow_dummy_backends": True, "stt_preset": self.stt_preset},
+            )
 
     def warmup(self) -> None:
         logger.info("warming up...")

@@ -83,6 +83,25 @@ def test_create_app_templates_in_config():
         assert name in config_str
 
 
+def test_create_app_has_stt_preset_selector():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    assert "音声認識モード" in config_str
+    assert "fast" in config_str
+    assert "balanced" in config_str
+    assert "accurate" in config_str
+
+
+def test_backend_status_shows_stt_details():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    assert "音声認識モード" in config_str
+
+
 def test_create_app_live_streaming_param():
     pipeline = KuchikaePipeline()
     prompt = TextTransformPrompt(instruction="test")

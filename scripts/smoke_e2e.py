@@ -2,7 +2,7 @@
 """End-to-end smoke test with real backends.
 
 Requires:
-- OpenVoice repo at /Users/taka/repos/OpenVoice or ../OpenVoice.
+- OpenVoice repo at $KUCHIKAE_OPENVOICE_PATH or ../OpenVoice.
 - Checkpoint files downloaded from HuggingFace (see docs/REAL_MODEL_SETUP.md).
 - torch, torchaudio installed.
 
@@ -18,7 +18,7 @@ import numpy as np
 import soundfile as sf
 
 from kuchikae.pipeline import create_pipeline
-from kuchikae.types import TextTransformPrompt
+from kuchikae.domain.types import TextTransformPrompt
 
 
 def main() -> int:

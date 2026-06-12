@@ -69,11 +69,11 @@ def serve() -> None:
     default_voice_prompt = VoiceOutputPrompt.from_file()
     
     # Check for streaming STT config via env var
-    import os
     streaming_stt = os.environ.get("KUCHIKAE_STREAMING_STT", "").lower() in ("1", "true", "yes")
     pipeline = create_pipeline(
         {
             "stt_backend": os.environ.get("KUCHIKAE_STT_BACKEND", "faster_whisper"),
+            "stt_preset": os.environ.get("KUCHIKAE_STT_PRESET", "balanced"),
             "text_transform_backend": os.environ.get("KUCHIKAE_TEXT_BACKEND", "ollama"),
             "text_transform_model": os.environ.get("KUCHIKAE_TEXT_MODEL"),
             "voice_output_backend": os.environ.get("KUCHIKAE_VOICE_BACKEND", "irodori"),
