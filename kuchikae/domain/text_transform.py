@@ -113,7 +113,7 @@ class DummyTextTransformBackend(TextTransformBackend):
 class OllamaTextTransformBackend(TextTransformBackend):
 
     def __init__(self, model: str | None = None, strict: bool = False, on_cot_stripped: callable | None = None) -> None:
-        self.model = model or os.environ.get("KUCHIKAE_TEXT_MODEL", "qwen2.5:1.5b-instruct")
+        self.model = model or os.environ.get("KUCHIKAE_TEXT_MODEL", "qwen2.5-coder:7b")
         self.strict = strict
         self._base_url = os.environ.get("KUCHIKAE_OLLAMA_URL", "http://localhost:11434")
         self._on_cot_stripped = on_cot_stripped
@@ -132,19 +132,26 @@ class OllamaTextTransformBackend(TextTransformBackend):
                         {
                             "role": "system",
                             "content": (
-                                "あなたはテキスト変換の専門家です。"
+                                "あなたは日本語のテキスト変換アシスタントです。"
                                 "ユーザーから変換ルールと変換対象のテキストが与えられるので、"
                                 "ルールに従ってテキストを変換し、**変換結果だけ**を出力してください。\n"
                                 "説明や接頭語は一切付けないでください。\n"
                                 "元の内容・事実・数値・固有名詞は絶対に変えないでください。\n"
-                                "新しい情報を追加しないでください。"
+                                "新しい情報を追加しないでください。\n\n"
+                                "## 変換例\n"
+                                "入力: こんにちは\n"
+                                "出力: ご機嫌よう\n\n"
+                                "入力: ありがとうございます\n"
+                                "出力: 感謝いたします\n\n"
+                                "入力: すみません、遅れました\n"
+                                "出力: 申し訳ございません、遅くなりました"
                             ),
                         },
                         {"role": "user", "content": f"/no_think\n## 変換ルール\n{prompt.instruction}\n\n## 変換対象テキスト\n{text}"},
                     ],
                     "stream": False,
                     "options": {
-                        "temperature": 0.1,
+                        "temperature": 0.3,
                         "num_predict": 128,
                         "top_p": 0.8,
                     },
