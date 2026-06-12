@@ -22,6 +22,12 @@ class AudioSegmenter(ABC):
 class FixedWindowSegmenter(AudioSegmenter):
 
     def __init__(self, chunk_sec: float = 30.0, overlap_sec: float = 2.0) -> None:
+        if chunk_sec <= 0:
+            raise ValueError("chunk_sec must be > 0")
+        if overlap_sec < 0:
+            raise ValueError("overlap_sec must be >= 0")
+        if overlap_sec >= chunk_sec:
+            raise ValueError("overlap_sec must be smaller than chunk_sec")
         self._chunk_sec = chunk_sec
         self._overlap_sec = overlap_sec
 

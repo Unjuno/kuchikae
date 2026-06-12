@@ -105,6 +105,23 @@ def normalize_voice_output_prompt(value) -> VoiceOutputPrompt | None:
     return VoiceOutputPrompt(instruction=text)
 
 
+def _backend_status(pipeline: KuchikaePipeline) -> str:
+    cache_state = "disabled" if getattr(pipeline, "disable_processing_cache", False) else "enabled"
+    summary = ""
+    if hasattr(pipeline, "diagnostics") and pipeline.diagnostics is not None:
+        summary = pipeline.diagnostics.user_summary().replace("\n", " | ")
+    stt_backend = type(getattr(pipeline, "stt_backend", object())).__name__
+    text_backend = type(getattr(pipeline, "text_transform_backend", object())).__name__
+    voice_backend = type(getattr(pipeline, "voice_output_backend", object())).__name__
+    base = (
+        f"STT: {stt_backend} | "
+        f"TEXT: {text_backend} | "
+        f"VOICE: {voice_backend} | "
+        f"CACHE: {cache_state}"
+    )
+    return f"{base} | {summary}" if summary else base
+
+
 def run_simple(
     pipeline: KuchikaePipeline,
     audio_input,
@@ -135,6 +152,7 @@ def run_simple(
     prompt = TextTransformPrompt(instruction=TEMPLATES["自然に"])
     voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
+    backend_status = _backend_status(pipeline)
     logger.info(
         "[run_simple] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
         getattr(stream_fn, "__name__", repr(stream_fn)),
@@ -162,15 +180,15 @@ def run_simple(
                 txt[:120] if isinstance(txt, str) else txt,
             )
             if status == "DONE":
-                yield aud, src, txt, "言い直しました"
+                yield aud, src, txt, f"言い直しました | {backend_status}"
             elif status == "VOX":
-                yield gr.update(value=None), src, txt, "変換中..."
+                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}"
             elif status == "TXT":
-                yield gr.update(value=None), src, txt, "変換中..."
+                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}"
             elif status == "STT_PARTIAL":
-                yield gr.update(value=None), src, "", "文字起こし中..."
+                yield gr.update(value=None), src, "", f"文字起こし中... | {backend_status}"
             else:
-                yield gr.update(value=None), "", "", "音声認識中..."
+                yield gr.update(value=None), "", "", f"音声認識中... | {backend_status}"
     except Exception as e:
         logger.exception("[run_simple] inference failed")
         yield (
@@ -222,6 +240,7 @@ def run(
     prompt = TextTransformPrompt(instruction=prompt_text)
     voice_prompt = normalize_voice_output_prompt(voice_output_prompt)
     stream_fn = pipeline.process_stream_live if live_streaming else pipeline.process_stream
+    backend_status = _backend_status(pipeline)
     logger.info(
         "[run] stream_fn=%s path=%s text_prompt_preview=%r voice_prompt=%s",
         getattr(stream_fn, "__name__", repr(stream_fn)),
@@ -249,15 +268,15 @@ def run(
                 txt[:120] if isinstance(txt, str) else txt,
             )
             if status == "DONE":
-                yield aud, src, txt, "言い直しました"
+                yield aud, src, txt, f"言い直しました | {backend_status}"
             elif status == "VOX":
-                yield gr.update(value=None), src, txt, "変換中..."
+                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}"
             elif status == "TXT":
-                yield gr.update(value=None), src, txt, "変換中..."
+                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}"
             elif status == "STT_PARTIAL":
-                yield gr.update(value=None), src, "", "文字起こし中..."
+                yield gr.update(value=None), src, "", f"文字起こし中... | {backend_status}"
             else:
-                yield gr.update(value=None), "", "", "音声認識中..."
+                yield gr.update(value=None), "", "", f"音声認識中... | {backend_status}"
     except Exception as e:
         logger.exception("[run] inference failed")
         yield (

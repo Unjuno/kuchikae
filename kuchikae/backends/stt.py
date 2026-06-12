@@ -19,12 +19,27 @@ logger = logging.getLogger(__name__)
 
 class FasterWhisperSTTBackend(STTBackend):
 
-    def __init__(self, model_size: str = "tiny") -> None:
+    def __init__(
+        self,
+        model_size: str = "tiny",
+        device: str = "cpu",
+        compute_type: str = "int8",
+        beam_size: int = 1,
+        vad_filter: bool = True,
+        temperature: float = 0.0,
+        condition_on_previous_text: bool = False,
+    ) -> None:
         self._model_size = model_size
+        self._device = device
+        self._compute_type = compute_type
+        self._beam_size = beam_size
+        self._vad_filter = vad_filter
+        self._temperature = temperature
+        self._condition_on_previous_text = condition_on_previous_text
         self._model = None
         self._resolved_model_size: str | None = None
-        self._device: str | None = None
-        self._compute_type: str | None = None
+        self._resolved_device: str | None = None
+        self._resolved_compute_type: str | None = None
         try:
             from faster_whisper import WhisperModel  # noqa: F401
         except ImportError:
@@ -39,14 +54,14 @@ class FasterWhisperSTTBackend(STTBackend):
         from faster_whisper import WhisperModel
 
         model_size = os.environ.get("WHISPER_MODEL_SIZE", self._model_size)
-        device = os.environ.get("WHISPER_DEVICE", "cpu")
-        compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
+        device = os.environ.get("WHISPER_DEVICE", self._device)
+        compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", self._compute_type)
         logger.info("loading whisper model '%s' (device=%s compute_type=%s)...", model_size, device, compute_type)
         t0 = time.time()
         self._model = WhisperModel(model_size, device=device, compute_type=compute_type)
         self._resolved_model_size = model_size
-        self._device = device
-        self._compute_type = compute_type
+        self._resolved_device = device
+        self._resolved_compute_type = compute_type
         logger.info("whisper model loaded in %.2fs", time.time() - t0)
         return self._model
 
@@ -57,10 +72,12 @@ class FasterWhisperSTTBackend(STTBackend):
         segments, info = model.transcribe(
             audio_path,
             language="ja",
-            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", "1")),
-            vad_filter=os.environ.get("WHISPER_VAD_FILTER", "1").lower() in ("1", "true", "yes"),
-            temperature=float(os.environ.get("WHISPER_TEMPERATURE", "0.0")),
-            condition_on_previous_text=os.environ.get("WHISPER_CONDITION_ON_PREVIOUS_TEXT", "0").lower() in ("1", "true", "yes"),
+            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._beam_size))),
+            vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._vad_filter))).lower() in ("1", "true", "yes"),
+            temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._temperature))),
+            condition_on_previous_text=os.environ.get(
+                "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._condition_on_previous_text))
+            ).lower() in ("1", "true", "yes"),
         )
         logger.info("whisper transcribe: %.2fs", time.time() - t1)
 
@@ -75,10 +92,12 @@ class FasterWhisperSTTBackend(STTBackend):
         segments, info = model.transcribe(
             audio_path,
             language="ja",
-            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", "1")),
-            vad_filter=os.environ.get("WHISPER_VAD_FILTER", "1").lower() in ("1", "true", "yes"),
-            temperature=float(os.environ.get("WHISPER_TEMPERATURE", "0.0")),
-            condition_on_previous_text=os.environ.get("WHISPER_CONDITION_ON_PREVIOUS_TEXT", "0").lower() in ("1", "true", "yes"),
+            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._beam_size))),
+            vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._vad_filter))).lower() in ("1", "true", "yes"),
+            temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._temperature))),
+            condition_on_previous_text=os.environ.get(
+                "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._condition_on_previous_text))
+            ).lower() in ("1", "true", "yes"),
         )
         logger.info("whisper transcribe: %.2fs", time.time() - t1)
 
@@ -118,21 +137,33 @@ class StreamingFasterWhisperSTTBackend(FasterWhisperSTTBackend):
             end = min(start + chunk_samples, total)
             chunk = data[start:end]
             
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                sf.write(tmp.name, chunk, sr)
+            tmp_name = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    tmp_name = tmp.name
+                    sf.write(tmp.name, chunk, sr)
                 segments, _ = model.transcribe(
-                    tmp.name,
+                    tmp_name,
                     language="ja",
-                    beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", "1")),
-                    vad_filter=os.environ.get("WHISPER_VAD_FILTER", "1").lower() in ("1", "true", "yes"),
-                    temperature=float(os.environ.get("WHISPER_TEMPERATURE", "0.0")),
-                    condition_on_previous_text=os.environ.get("WHISPER_CONDITION_ON_PREVIOUS_TEXT", "0").lower() in ("1", "true", "yes"),
+                    beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._beam_size))),
+                    vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._vad_filter))).lower() in ("1", "true", "yes"),
+                    temperature=float(os.environ.get("WHISPER_TEMPERATURE", str(self._temperature))),
+                    condition_on_previous_text=os.environ.get(
+                        "WHISPER_CONDITION_ON_PREVIOUS_TEXT", str(int(self._condition_on_previous_text))
+                    ).lower() in ("1", "true", "yes"),
                 )
-                os.unlink(tmp.name)
-            
+            finally:
+                if tmp_name and os.path.exists(tmp_name):
+                    os.unlink(tmp_name)
+
             chunk_text = " ".join(seg.text for seg in segments).strip()
             if chunk_text:
-                accumulated.append(chunk_text)
+                if accumulated and chunk_text.startswith(accumulated[-1]):
+                    accumulated[-1] = chunk_text
+                elif accumulated and accumulated[-1] and accumulated[-1] in chunk_text:
+                    accumulated[-1] = chunk_text
+                else:
+                    accumulated.append(chunk_text)
                 yield " ".join(accumulated)
             
             if end >= total:
@@ -160,10 +191,15 @@ class ChunkedStreamingSTTBackend(StreamingSTTBackend):
     def push_audio(self, chunk: AudioChunk) -> STTPartial:
         import tempfile
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            sf.write(tmp.name, chunk.samples, chunk.sample_rate)
+        tmp_name = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                tmp_name = tmp.name
+                sf.write(tmp.name, chunk.samples, chunk.sample_rate)
             text = self._inner.transcribe(tmp.name)
-            os.unlink(tmp.name)
+        finally:
+            if tmp_name and os.path.exists(tmp_name):
+                os.unlink(tmp_name)
 
         self._chunk_texts.append(text)
         full_text = " ".join(self._chunk_texts)

@@ -98,6 +98,19 @@ class TestSTTCommit:
 
 
 class TestDummyStreamingSTTBackend:
+    def test_dummy_output_is_sentinel(self) -> None:
+        backend = DummyStreamingSTTBackend()
+        chunk = AudioChunk(
+            session_id="test",
+            samples=np.zeros(1600),
+            sample_rate=16000,
+            start_sec=0.0,
+            end_sec=0.1,
+        )
+        result = backend.push_audio(chunk)
+        assert result.text.startswith("[DUMMY_STT_OUTPUT]")
+        assert "明日までに資料を送ってください" not in result.text
+
     def test_push_audio_returns_partial(self) -> None:
         backend = DummyStreamingSTTBackend()
         chunk = AudioChunk(
@@ -123,7 +136,8 @@ class TestDummyStreamingSTTBackend:
         backend.push_audio(chunk)
         result = backend.flush("test")
         assert isinstance(result, STTPartial)
-        assert result.text == "明日までに資料を送ってください"
+        assert result.text.startswith("[DUMMY_STT_OUTPUT]")
+        assert "明日までに資料を送ってください" not in result.text
 
     def test_flush_returns_none_if_no_chunks(self) -> None:
         backend = DummyStreamingSTTBackend()

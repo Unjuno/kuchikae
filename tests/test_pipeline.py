@@ -262,6 +262,37 @@ def test_process_stream_live_passes_voice_output_prompt(tmp_path) -> None:
     assert counting_vo.last_prompt == voice_prompt
 
 
+def test_dummy_stt_sentinel_is_not_natural_sentence() -> None:
+    from kuchikae.domain.stt import DummySTTBackend
+
+    backend = DummySTTBackend()
+    out = backend.transcribe("/tmp/ignored.wav")
+    assert out.startswith("[DUMMY_STT_OUTPUT]")
+    assert "明日までに資料を送って" not in out
+
+
+def test_create_pipeline_rejects_unknown_stt_backend_without_dummy() -> None:
+    from kuchikae.pipeline import create_pipeline
+
+    with pytest.raises(RuntimeError, match="Unknown or unavailable STT backend"):
+        create_pipeline({"stt_backend": "definitely_not_real", "allow_dummy_backends": False})
+
+
+def test_processing_cache_can_be_disabled_via_config(tmp_path) -> None:
+    wav = tmp_path / "nocache.wav"
+    _write_wav(str(wav))
+    audio_key = AudioKey.from_file(str(wav))
+    counting_stt = CountingSTTBackend()
+    pipeline = KuchikaePipeline(stt_backend=counting_stt, disable_processing_cache=True)
+    prompt = TextTransformPrompt(instruction="テスト")
+
+    list(pipeline.process_stream(str(wav), prompt))
+    list(pipeline.process_stream(str(wav), prompt))
+
+    assert counting_stt.call_count >= 2
+    assert pipeline.processing_cache.get_stt(audio_key) is None
+
+
 # ---------------------------------------------------------------------------
 # warmup — error handling should not raise
 # ---------------------------------------------------------------------------

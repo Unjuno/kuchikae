@@ -10,6 +10,9 @@ from kuchikae.domain.audio import AudioSegmenter, FixedWindowSegmenter
 from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor, DummyVoiceContextExtractor
 from kuchikae.domain.audio_key import AudioKey, AudioKeyFromCacheKey
 from kuchikae.domain.metrics import LatencyLogger
+from kuchikae.domain.diagnostics import DiagnosticRecorder
+from kuchikae.domain.error_hints import hint_for_error
+from kuchikae.domain.events import DiagnosticEvent, EventLevel, new_run_id
 from kuchikae.counting_backends import (
     CountingSTTBackend,
     CountingTextTransformBackend,
@@ -46,6 +49,10 @@ logger = setup_logger("kuchikae.pipeline")
 def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     config = backend_config or {}
     allow_dummy_backends = config.get("allow_dummy_backends", False)
+    disable_processing_cache = bool(
+        config.get("disable_processing_cache", False)
+        or os.environ.get("KUCHIKAE_DISABLE_PROCESSING_CACHE", "").lower() in ("1", "true", "yes")
+    )
 
     stt_type = config.get("stt_backend", "faster_whisper")
     use_segmented = config.get("segmented_stt", False)
@@ -73,7 +80,15 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
 
     if stt_type == "faster_whisper" and has_faster_whisper:
         from kuchikae.backends.stt import FasterWhisperSTTBackend
-        inner = FasterWhisperSTTBackend()
+        inner = FasterWhisperSTTBackend(
+            model_size=config.get("stt_model_size", "tiny"),
+            device=config.get("stt_device", "cpu"),
+            compute_type=config.get("stt_compute_type", "int8"),
+            beam_size=int(config.get("stt_beam_size", 1)),
+            vad_filter=bool(config.get("stt_vad_filter", True)),
+            temperature=float(config.get("stt_temperature", 0.0)),
+            condition_on_previous_text=bool(config.get("stt_condition_on_previous_text", False)),
+        )
     elif stt_type == "faster_whisper" and not allow_dummy_backends:
         raise RuntimeError(
             "faster-whisper is required for the selected STT backend, but it is not "
@@ -82,7 +97,11 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         )
     elif stt_type == "transformers_japanese" and has_transformers:
         from kuchikae.backends.stt_transformers import TransformersJapaneseASRBackend
-        inner = TransformersJapaneseASRBackend()
+        inner = TransformersJapaneseASRBackend(
+            model_id=config.get("stt_model_id"),
+            device=config.get("stt_device"),
+            torch_dtype=config.get("stt_torch_dtype"),
+        )
     elif stt_type == "transformers_japanese" and not allow_dummy_backends:
         raise RuntimeError(
             "Transformers Japanese STT backend was requested, but `transformers` is not "
@@ -93,7 +112,11 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         from kuchikae.backends.stt_transformers_whisper import (
             TransformersWhisperJapaneseASRBackend,
         )
-        inner = TransformersWhisperJapaneseASRBackend()
+        inner = TransformersWhisperJapaneseASRBackend(
+            model_id=config.get("stt_model_id"),
+            device=config.get("stt_device"),
+            torch_dtype=config.get("stt_torch_dtype"),
+        )
     elif stt_type == "transformers_whisper" and not allow_dummy_backends:
         raise RuntimeError(
             "Transformers Whisper STT backend was requested, but `transformers` is not "
@@ -108,8 +131,13 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
             "reazonspeech_nemo was requested, but the required NeMo packages are not "
             "importable in the current uv environment."
         )
-    else:
+    elif allow_dummy_backends:
         inner = DummySTTBackend()
+    else:
+        raise RuntimeError(
+            f"Unknown or unavailable STT backend: {stt_type}. "
+            "Set allow_dummy_backends=true only for development fallback."
+        )
 
     stt: STTBackend
     if use_segmented:
@@ -187,10 +215,14 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
                 type(stt).__name__, type(tt_class()).__name__,
                 text_model or "default", type(vo).__name__)
 
+    if isinstance(stt, DummySTTBackend):
+        logger.warning("backend.dummy_selected stage=stt message='Dummy STT selected; real audio will not be transcribed'")
+
     return KuchikaePipeline(
         stt_backend=stt,
         text_transform_backend=tt_class(**tt_kwargs),
         voice_output_backend=vo,
+        disable_processing_cache=disable_processing_cache,
     )
 
 
@@ -203,14 +235,68 @@ class KuchikaePipeline:
         voice_output_backend: VoiceOutputBackend | None = None,
         processing_cache: ProcessingCache | None = None,
         latency_logger: LatencyLogger | None = None,
+        disable_processing_cache: bool = False,
+        diagnostics: DiagnosticRecorder | None = None,
     ) -> None:
         self.stt_backend = stt_backend or DummySTTBackend()
         self.text_transform_backend = text_transform_backend or DummyTextTransformBackend()
         self.voice_output_backend = voice_output_backend or DummyVoiceOutputBackend()
         self.processing_cache = processing_cache or ProcessingCache()
         self.latency_logger = latency_logger
+        self.disable_processing_cache = disable_processing_cache
+        self.diagnostics = diagnostics or DiagnosticRecorder()
+        self.run_id = new_run_id()
         self._audio_cache = AudioCache()
         self._voice_context_extractor = VoiceContextExtractor()
+        self.diagnostics.emit(
+            DiagnosticEvent(
+                name="backend.selected",
+                stage="pipeline",
+                backend=type(self.stt_backend).__name__,
+                message=(
+                    f"STT={type(self.stt_backend).__name__}, "
+                    f"TEXT={type(self.text_transform_backend).__name__}, "
+                    f"VOICE={type(self.voice_output_backend).__name__}"
+                ),
+                run_id=self.run_id,
+                data={
+                    "stt": type(self.stt_backend).__name__,
+                    "text": type(self.text_transform_backend).__name__,
+                    "voice": type(self.voice_output_backend).__name__,
+                    "cache": "disabled" if self.disable_processing_cache else "enabled",
+                },
+            )
+        )
+        if isinstance(self.stt_backend, DummySTTBackend):
+            self.diagnostics.emit(
+                DiagnosticEvent(
+                    name="backend.dummy_selected",
+                    level=EventLevel.WARNING,
+                    stage="stt",
+                    backend=type(self.stt_backend).__name__,
+                    message="STT backend is DummySTTBackend. 実音声は認識されません。",
+                    run_id=self.run_id,
+                    data={"allow_dummy_backends": True},
+                )
+            )
+
+    def _cache_enabled(self) -> bool:
+        return not self.disable_processing_cache
+
+    def _emit(self, name: str, message: str, stage: str, level: EventLevel = EventLevel.INFO, backend: str | None = None, cache: str | None = None, elapsed_sec: float | None = None, data: dict | None = None) -> None:
+        self.diagnostics.emit(
+            DiagnosticEvent(
+                name=name,
+                level=level,
+                message=message,
+                run_id=self.run_id,
+                stage=stage,
+                backend=backend,
+                cache=cache,
+                elapsed_sec=elapsed_sec,
+                data=data or {},
+            )
+        )
 
     def warmup(self) -> None:
         logger.info("warming up...")
@@ -261,11 +347,19 @@ class KuchikaePipeline:
             raise
 
     def _step_stt(self, audio_path: str, audio_key: AudioKey) -> str:
-        cached = self.processing_cache.get_stt(audio_key)
+        cached = None if self.disable_processing_cache else self.processing_cache.get_stt(audio_key)
         if cached is not None:
+            self._emit(
+                "cache.stt_hit",
+                "STT cache hit; backend was not executed.",
+                "stt",
+                cache="stt",
+                data={"source_len": len(cached), "source_preview": cached[:80]},
+            )
             return cached
         text = self.stt_backend.transcribe(audio_path)
-        self.processing_cache.set_stt(audio_key, text)
+        if not self.disable_processing_cache:
+            self.processing_cache.set_stt(audio_key, text)
         return text
 
     def _step_voice(
@@ -293,26 +387,38 @@ class KuchikaePipeline:
     ) -> PipelineResult:
         t0 = time.time()
         logger.info(
-            "process:start audio_path=%s text_prompt_len=%d voice_prompt=%s stt=%s text=%s voice=%s",
+            "process:start audio_path=%s text_prompt_len=%d voice_prompt=%s stt=%s text=%s voice=%s cache=%s",
             audio_path,
             len(text_transform_prompt.instruction),
             "set" if voice_output_prompt is not None else "none",
             type(self.stt_backend).__name__,
             type(self.text_transform_backend).__name__,
             type(self.voice_output_backend).__name__,
+            "disabled" if self.disable_processing_cache else "enabled",
         )
 
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
         voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        cached_result = None if self.disable_processing_cache else self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
         if cached_result is not None:
             logger.info(
                 "process:full_cache_hit output_audio_path=%s source_len=%d transformed_len=%d",
                 cached_result.output_audio_path,
                 len(cached_result.source_text),
                 len(cached_result.transformed_text),
+            )
+            self._emit(
+                "cache.full_hit",
+                "Full pipeline cache hit; STT/text/TTS were not executed.",
+                "pipeline",
+                cache="full_result",
+                data={
+                    "source_len": len(cached_result.source_text),
+                    "transformed_len": len(cached_result.transformed_text),
+                    "output_audio_path": cached_result.output_audio_path,
+                },
             )
             return cached_result
         logger.info(
@@ -325,8 +431,27 @@ class KuchikaePipeline:
 
         t1 = time.time()
         logger.info("process:stt:start")
-        source_text = self._step_stt(audio_path, audio_key)
-        stt_latency = time.time() - t1
+        try:
+            source_text = self._step_stt(audio_path, audio_key)
+            stt_latency = time.time() - t1
+            self._emit(
+                "stt.done",
+                "STT finished.",
+                "stt",
+                backend=type(self.stt_backend).__name__,
+                elapsed_sec=stt_latency,
+                data={"source_len": len(source_text), "source_preview": source_text[:80]},
+            )
+        except Exception as e:
+            self._emit(
+                "stt.failed",
+                f"{type(e).__name__}: {e}",
+                "stt",
+                level=EventLevel.ERROR,
+                backend=type(self.stt_backend).__name__,
+                data={"hint": hint_for_error("stt", e)},
+            )
+            raise
         logger.info(
             "process:stt:done latency=%.2fs source_len=%d source_preview=%r",
             stt_latency,
@@ -339,12 +464,43 @@ class KuchikaePipeline:
             "process:text:start text_prompt_preview=%r",
             text_transform_prompt.instruction[:160],
         )
-        cached_text = self.processing_cache.get_text(source_text, text_transform_prompt)
+        cached_text = None if self.disable_processing_cache else self.processing_cache.get_text(source_text, text_transform_prompt)
         if cached_text is not None:
             transformed_text = cached_text
             logger.info("process:text:cache_hit transformed_len=%d", len(transformed_text))
+            self._emit(
+                "cache.text_hit",
+                "Text transform cache hit; backend was not executed.",
+                "text",
+                cache="text",
+                data={"transformed_len": len(transformed_text)},
+            )
         else:
-            transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+            try:
+                self._emit(
+                    "text.start",
+                    "Text transform started.",
+                    "text",
+                    backend=type(self.text_transform_backend).__name__,
+                )
+                transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+                self._emit(
+                    "text.done",
+                    "Text transform finished.",
+                    "text",
+                    backend=type(self.text_transform_backend).__name__,
+                    data={"transformed_len": len(transformed_text), "transformed_preview": transformed_text[:80]},
+                )
+            except Exception as e:
+                self._emit(
+                    "text.failed",
+                    f"{type(e).__name__}: {e}",
+                    "text",
+                    level=EventLevel.ERROR,
+                    backend=type(self.text_transform_backend).__name__,
+                    data={"hint": hint_for_error("text", e)},
+                )
+                raise
             self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
         text_latency = time.time() - t2
         logger.info(
@@ -356,7 +512,34 @@ class KuchikaePipeline:
 
         t3 = time.time()
         logger.info("process:voice_context:start")
-        voice_context = self._voice_context_extractor.extract(audio_path)
+        try:
+            self._emit(
+                "voice_context.start",
+                "Voice context extraction started.",
+                "voice_context",
+                backend=type(self._voice_context_extractor).__name__,
+            )
+            voice_context = self._voice_context_extractor.extract(audio_path)
+            self._emit(
+                "voice_context.done",
+                "Voice context extraction finished.",
+                "voice_context",
+                backend=type(self._voice_context_extractor).__name__,
+                data={
+                    "reference_audio_path": voice_context.reference_audio_path,
+                    "ready": voice_context.ready,
+                },
+            )
+        except Exception as e:
+            self._emit(
+                "voice_context.failed",
+                f"{type(e).__name__}: {e}",
+                "voice_context",
+                level=EventLevel.ERROR,
+                backend=type(self._voice_context_extractor).__name__,
+                data={"hint": hint_for_error("voice_context", e)},
+            )
+            raise
         logger.info(
             "process:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
             voice_context.reference_audio_path,
@@ -371,18 +554,49 @@ class KuchikaePipeline:
             text_for_voice[:120],
             "set" if voice_output_prompt is not None else "none",
         )
-        cached_audio = self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
+        cached_audio = None if self.disable_processing_cache else self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
         if cached_audio is not None and os.path.exists(cached_audio):
             output_audio_path = cached_audio
             logger.info("process:voice:cache_hit output_audio_path=%s", output_audio_path)
-        else:
-            output_audio_path = self._step_voice(
-                text_for_voice,
-                audio_path,
-                audio_key,
-                voice_context,
-                voice_output_prompt,
+            self._emit(
+                "cache.voice_hit",
+                "Voice output cache hit; backend was not executed.",
+                "tts",
+                cache="voice_output",
+                data={"output_audio_path": output_audio_path},
             )
+        else:
+            try:
+                self._emit(
+                    "tts.start",
+                    "Voice output started.",
+                    "tts",
+                    backend=type(self.voice_output_backend).__name__,
+                )
+                output_audio_path = self._step_voice(
+                    text_for_voice,
+                    audio_path,
+                    audio_key,
+                    voice_context,
+                    voice_output_prompt,
+                )
+                self._emit(
+                    "tts.done",
+                    "Voice output finished.",
+                    "tts",
+                    backend=type(self.voice_output_backend).__name__,
+                    data={"output_audio_path": output_audio_path},
+                )
+            except Exception as e:
+                self._emit(
+                    "tts.failed",
+                    f"{type(e).__name__}: {e}",
+                    "tts",
+                    level=EventLevel.ERROR,
+                    backend=type(self.voice_output_backend).__name__,
+                    data={"hint": hint_for_error("tts", e)},
+                )
+                raise
             self.processing_cache.set_voice_output(
                 text_for_voice,
                 voice_prompt_text,
@@ -423,7 +637,14 @@ class KuchikaePipeline:
             )
             self.latency_logger.log_report(report)
 
-        self.processing_cache.set_result(audio_key, text_transform_prompt.instruction, voice_prompt_text, result)
+        if not self.disable_processing_cache:
+            self.processing_cache.set_result(audio_key, text_transform_prompt.instruction, voice_prompt_text, result)
+        self._emit(
+            "pipeline.done",
+            "Pipeline finished.",
+            "pipeline",
+            data={"total_latency": total, "source_len": len(source_text), "transformed_len": len(transformed_text)},
+        )
         return result
 
     def process_stream(
@@ -446,9 +667,20 @@ class KuchikaePipeline:
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
         voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        cached_result = None if self.disable_processing_cache else self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
         if cached_result is not None:
             logger.info("process_stream:full_cache_hit")
+            self._emit(
+                "cache.full_hit",
+                "Full pipeline cache hit; STT/text/TTS were not executed.",
+                "pipeline",
+                cache="full_result",
+                data={
+                    "source_len": len(cached_result.source_text),
+                    "transformed_len": len(cached_result.transformed_text),
+                    "output_audio_path": cached_result.output_audio_path,
+                },
+            )
             yield "STT", cached_result.source_text, None, None
             yield "TXT", cached_result.source_text, cached_result.transformed_text, None
             yield "VOX", cached_result.source_text, cached_result.transformed_text, None
@@ -478,13 +710,14 @@ class KuchikaePipeline:
             "process_stream:text:start text_prompt_preview=%r",
             text_transform_prompt.instruction[:160],
         )
-        cached_text = self.processing_cache.get_text(source_text, text_transform_prompt)
+        cached_text = None if self.disable_processing_cache else self.processing_cache.get_text(source_text, text_transform_prompt)
         if cached_text is not None:
             transformed_text = cached_text
             logger.info("process_stream:text:cache_hit transformed_len=%d", len(transformed_text))
         else:
             transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-            self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
+            if not self.disable_processing_cache:
+                self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
         logger.info(
             "process_stream:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
             time.time() - t0,
@@ -510,7 +743,7 @@ class KuchikaePipeline:
             text_for_voice[:120],
             "set" if voice_output_prompt is not None else "none",
         )
-        cached_audio = self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
+        cached_audio = None if self.disable_processing_cache else self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
         if cached_audio is not None and os.path.exists(cached_audio):
             output_audio_path = cached_audio
             logger.info("process_stream:voice:cache_hit output_audio_path=%s", output_audio_path)
@@ -522,12 +755,13 @@ class KuchikaePipeline:
                 voice_context,
                 voice_output_prompt,
             )
-            self.processing_cache.set_voice_output(
-                text_for_voice,
-                voice_prompt_text,
-                voice_context,
-                output_audio_path,
-            )
+            if not self.disable_processing_cache:
+                self.processing_cache.set_voice_output(
+                    text_for_voice,
+                    voice_prompt_text,
+                    voice_context,
+                    output_audio_path,
+                )
         logger.info(
             "process_stream:voice:done elapsed=%.2fs output_audio_path=%s",
             time.time() - t0,
@@ -536,20 +770,21 @@ class KuchikaePipeline:
 
         logger.info("process_stream:yield DONE")
         yield "DONE", source_text, transformed_text, output_audio_path
-        self.processing_cache.set_result(
-            audio_key,
-            text_transform_prompt.instruction,
-            voice_prompt_text,
-            PipelineResult(
-                output_audio_path=output_audio_path,
-                source_text=source_text,
-                transformed_text=transformed_text,
-                stt_latency=0.0,
-                text_transform_latency=0.0,
-                voice_output_latency=0.0,
-                total_latency=time.time() - t0,
-            ),
-        )
+        if not self.disable_processing_cache:
+            self.processing_cache.set_result(
+                audio_key,
+                text_transform_prompt.instruction,
+                voice_prompt_text,
+                PipelineResult(
+                    output_audio_path=output_audio_path,
+                    source_text=source_text,
+                    transformed_text=transformed_text,
+                    stt_latency=0.0,
+                    text_transform_latency=0.0,
+                    voice_output_latency=0.0,
+                    total_latency=time.time() - t0,
+                ),
+            )
 
     def process_stream_live(
         self,
@@ -576,9 +811,20 @@ class KuchikaePipeline:
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
         voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
-        cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        cached_result = None if self.disable_processing_cache else self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
         if cached_result is not None:
             logger.info("process_stream_live:full_cache_hit")
+            self._emit(
+                "cache.full_hit",
+                "Full pipeline cache hit; STT/text/TTS were not executed.",
+                "pipeline",
+                cache="full_result",
+                data={
+                    "source_len": len(cached_result.source_text),
+                    "transformed_len": len(cached_result.transformed_text),
+                    "output_audio_path": cached_result.output_audio_path,
+                },
+            )
             yield "STT", cached_result.source_text, None, None
             yield "TXT", cached_result.source_text, cached_result.transformed_text, None
             yield "VOX", cached_result.source_text, cached_result.transformed_text, None
@@ -593,12 +839,19 @@ class KuchikaePipeline:
         )
 
         # Check cache first
-        cached_stt = self.processing_cache.get_stt(audio_key)
+        cached_stt = None if self.disable_processing_cache else self.processing_cache.get_stt(audio_key)
         if cached_stt is not None:
             logger.info(
                 "process_stream_live:stt_cache_hit source_len=%d source_preview=%r",
                 len(cached_stt),
                 cached_stt[:120],
+            )
+            self._emit(
+                "cache.stt_hit",
+                "STT cache hit; backend was not executed.",
+                "stt",
+                cache="stt",
+                data={"source_len": len(cached_stt), "source_preview": cached_stt[:80]},
             )
             source_text = cached_stt
             logger.info("process_stream_live:yield STT")
@@ -618,7 +871,8 @@ class KuchikaePipeline:
                     )
                     yield "STT_PARTIAL", partial, None, None
                 source_text = accumulated
-                self.processing_cache.set_stt(audio_key, source_text)
+                if not self.disable_processing_cache:
+                    self.processing_cache.set_stt(audio_key, source_text)
                 logger.info(
                     "process_stream_live:stt_stream:done source_len=%d source_preview=%r",
                     len(source_text),
@@ -644,13 +898,14 @@ class KuchikaePipeline:
             "process_stream_live:text:start text_prompt_preview=%r",
             text_transform_prompt.instruction[:160],
         )
-        cached_text = self.processing_cache.get_text(source_text, text_transform_prompt)
+        cached_text = None if self.disable_processing_cache else self.processing_cache.get_text(source_text, text_transform_prompt)
         if cached_text is not None:
             transformed_text = cached_text
             logger.info("process_stream_live:text:cache_hit transformed_len=%d", len(transformed_text))
         else:
             transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-            self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
+            if not self.disable_processing_cache:
+                self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
         logger.info(
             "process_stream_live:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
             time.time() - t0,
@@ -677,7 +932,7 @@ class KuchikaePipeline:
             text_for_voice[:120],
             "set" if voice_output_prompt is not None else "none",
         )
-        cached_audio = self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
+        cached_audio = None if self.disable_processing_cache else self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
         if cached_audio is not None and os.path.exists(cached_audio):
             output_audio_path = cached_audio
             logger.info("process_stream_live:voice:cache_hit output_audio_path=%s", output_audio_path)
@@ -689,12 +944,13 @@ class KuchikaePipeline:
                 voice_context,
                 voice_output_prompt,
             )
-            self.processing_cache.set_voice_output(
-                text_for_voice,
-                voice_prompt_text,
-                voice_context,
-                output_audio_path,
-            )
+            if not self.disable_processing_cache:
+                self.processing_cache.set_voice_output(
+                    text_for_voice,
+                    voice_prompt_text,
+                    voice_context,
+                    output_audio_path,
+                )
         logger.info(
             "process_stream_live:voice:done elapsed=%.2fs output_audio_path=%s",
             time.time() - t0,
@@ -703,17 +959,18 @@ class KuchikaePipeline:
 
         logger.info("process_stream_live:yield DONE")
         yield "DONE", source_text, transformed_text, output_audio_path
-        self.processing_cache.set_result(
-            audio_key,
-            text_transform_prompt.instruction,
-            voice_prompt_text,
-            PipelineResult(
-                output_audio_path=output_audio_path,
-                source_text=source_text,
-                transformed_text=transformed_text,
-                stt_latency=0.0,
-                text_transform_latency=0.0,
-                voice_output_latency=0.0,
-                total_latency=time.time() - t0,
-            ),
-        )
+        if not self.disable_processing_cache:
+            self.processing_cache.set_result(
+                audio_key,
+                text_transform_prompt.instruction,
+                voice_prompt_text,
+                PipelineResult(
+                    output_audio_path=output_audio_path,
+                    source_text=source_text,
+                    transformed_text=transformed_text,
+                    stt_latency=0.0,
+                    text_transform_latency=0.0,
+                    voice_output_latency=0.0,
+                    total_latency=time.time() - t0,
+                ),
+            )

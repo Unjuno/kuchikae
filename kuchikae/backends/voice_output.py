@@ -51,26 +51,17 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         return self._base_tts, self._converter
 
     def _extract_multi_frame_se(self, audio_path: str) -> Any:
-        import torch
-        import torchaudio
         import openvoice.se_extractor as se_extractor_module
 
-        waveforms, sr = torchaudio.load(audio_path)
-        if waveforms.shape[0] > 1:
-            waveforms = torch.mean(waveforms, dim=0, keepdim=True)
-
-        chunk_samples = int(2.0 * sr)
-        se_list = []
-        num_chunks = max(1, waveforms.shape[1] // chunk_samples)
-
-        for i in range(num_chunks):
-            se_list.append(se_extractor_module.extract_se(
-                audio_path, device="cpu", fsave_se=False, save_path=OUTPUT_DIR,
-            ))
-
-        if len(se_list) == 1:
-            return se_list[0]
-        return torch.mean(torch.stack(se_list), dim=0)
+        # The previous implementation re-used the same path repeatedly and did
+        # not actually diversify chunks. Extract once until a real chunked
+        # prosody path is implemented.
+        return se_extractor_module.extract_se(
+            audio_path,
+            device="cpu",
+            fsave_se=False,
+            save_path=OUTPUT_DIR,
+        )
 
     def synthesize(
         self,

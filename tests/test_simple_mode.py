@@ -37,7 +37,8 @@ def test_run_simple_string_path_is_not_dropped(tmp_path):
     pipeline = KuchikaePipeline()
     gen = run_simple(pipeline, str(wav))
     results = list(gen)
-    assert results[-1][3] == "言い直しました"
+    assert results[-1][3].startswith("言い直しました")
+    assert "STT:" in results[-1][3]
 
 
 def test_run_simple_with_dummy_wav_yields_done(tmp_path):
@@ -52,7 +53,8 @@ def test_run_simple_with_dummy_wav_yields_done(tmp_path):
     assert isinstance(aud, str) and aud != ""
     assert isinstance(src, str) and len(src) > 0
     assert isinstance(trf, str) and len(trf) > 0
-    assert sts == "言い直しました"
+    assert sts.startswith("言い直しました")
+    assert "[warning]" in sts or "DummySTTBackend" in sts
 
 
 def test_run_simple_stream_yields_intermediate_statuses(tmp_path):
@@ -72,7 +74,7 @@ def test_run_simple_filepath_tuple_input(tmp_path):
     results = list(gen)
     assert len(results) >= 1
     last = results[-1]
-    assert last[3] == "言い直しました"
+    assert last[3].startswith("言い直しました")
 
 
 def test_run_simple_dict_input(tmp_path):
@@ -83,7 +85,7 @@ def test_run_simple_dict_input(tmp_path):
     results = list(gen)
     assert len(results) >= 1
     last = results[-1]
-    assert last[3] == "言い直しました"
+    assert last[3].startswith("言い直しました")
 
 
 def test_run_simple_pipeline_exception_updates_status(tmp_path) -> None:

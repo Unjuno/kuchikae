@@ -31,12 +31,12 @@ class STTBackend:
 class DummySTTBackend(STTBackend):
 
     def transcribe(self, audio_path: str) -> str:
-        return "明日までに資料を送って"
+        return "[DUMMY_STT_OUTPUT] 実音声は認識されていません"
 
     def transcribe_stream(self, audio_path: str) -> Generator[str, None, None]:
-        yield "明日までに"
-        yield "明日までに資料を"
-        yield "明日までに資料を送って"
+        yield "[DUMMY_STT_OUTPUT]"
+        yield "[DUMMY_STT_OUTPUT] 実音声は"
+        yield "[DUMMY_STT_OUTPUT] 実音声は認識されていません"
 
 
 class StreamingSTTBackend(ABC):
@@ -59,8 +59,8 @@ class DummyStreamingSTTBackend(StreamingSTTBackend):
 
     def __init__(self) -> None:
         self._pushed: dict[str, int] = {}
-        self._final_text = "明日までに資料を送ってください"
-        self._chunks = self._final_text.split("、")
+        self._final_text = "[DUMMY_STT_OUTPUT] 実音声は認識されていません"
+        self._chunks = ["[DUMMY_STT_OUTPUT]", "実音声は認識されていません"]
 
     def push_audio(self, chunk: AudioChunk) -> STTPartial:
         sid = chunk.session_id
