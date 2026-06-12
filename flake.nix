@@ -15,6 +15,7 @@
         paths = with pkgs; [
           python311
           uv
+          ollama
           ffmpeg
           sox
           libsndfile
@@ -38,6 +39,7 @@
         packages = with pkgs; [
           python311
           uv
+          ollama
           ffmpeg
           sox
           libsndfile
