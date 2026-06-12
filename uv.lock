@@ -1044,6 +1044,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "gradio", marker = "sys_platform == 'darwin'" },
+    { name = "httpx", marker = "sys_platform == 'darwin'" },
     { name = "numpy", marker = "sys_platform == 'darwin'" },
     { name = "pyyaml", marker = "sys_platform == 'darwin'" },
     { name = "soundfile", marker = "sys_platform == 'darwin'" },
@@ -1086,6 +1087,7 @@ dev = [
 requires-dist = [
     { name = "faster-whisper", marker = "extra == 'stt'" },
     { name = "gradio" },
+    { name = "httpx" },
     { name = "irodori-tts", marker = "extra == 'tts'", git = "https://github.com/Aratako/Irodori-TTS.git" },
     { name = "kuchikae", extras = ["stt", "tts"], marker = "extra == 'real'", editable = "." },
     { name = "nemo-toolkit", extras = ["asr"], marker = "extra == 'nemo-stt'" },
