@@ -264,9 +264,9 @@ def run(
         )
         return
 
-    if template_name == "カスタム" and custom_prompt.strip():
-        prompt_text = custom_prompt
-    elif template_name in TEMPLATES:
+    if custom_prompt and custom_prompt.strip():
+        prompt_text = custom_prompt.strip()
+    elif template_name in TEMPLATES and TEMPLATES[template_name].strip():
         prompt_text = TEMPLATES[template_name]
     else:
         prompt_text = TEMPLATES["自然に"]

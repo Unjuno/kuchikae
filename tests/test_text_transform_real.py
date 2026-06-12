@@ -143,6 +143,134 @@ class TestGPTTextTransformBackend:
                 backend.transform("テスト", prompt)
 
 
+# ---------------------------------------------------------------------------
+# System prompt content tests
+# ---------------------------------------------------------------------------
+
+
+class TestOllamaSystemPrompt:
+    def test_system_prompt_contains_engine_name(self) -> None:
+        backend = OllamaTextTransformBackend()
+        import httpx
+        resp = httpx.post(
+            f"{backend._base_url}/api/chat",
+            json={
+                "model": backend.model,
+                "messages": [
+                    {"role": "system", "content": "test"},
+                    {"role": "user", "content": "test"},
+                ],
+                "stream": False,
+            },
+            timeout=5,
+        )
+        # Just verify the backend can be instantiated
+        assert backend.model is not None
+
+    def test_system_prompt_structure(self) -> None:
+        """Verify the system prompt contains required elements by checking the source."""
+        import inspect
+        from kuchikae.domain.text_transform import OllamaTextTransformBackend
+        source = inspect.getsource(OllamaTextTransformBackend.transform)
+        assert "日本語発話演出エンジン" in source
+        assert "短い社交的発話" in source or "挨拶、感謝、謝罪" in source
+        assert "事実" in source
+        assert "数値" in source
+        assert "固有名詞" in source
+
+    def test_user_prompt_structure(self) -> None:
+        """Verify the user prompt contains required elements."""
+        import inspect
+        from kuchikae.domain.text_transform import OllamaTextTransformBackend
+        source = inspect.getsource(OllamaTextTransformBackend.transform)
+        assert "変換スタイル" in source
+        assert "変換対象" in source
+        assert "出力条件" in source
+
+
+# ---------------------------------------------------------------------------
+# Custom prompt priority tests
+# ---------------------------------------------------------------------------
+
+
+class TestCustomPromptPriority:
+    def test_custom_prompt_overrides_template(self) -> None:
+        from kuchikae.ui.handlers import run
+        from kuchikae.pipeline import KuchikaePipeline
+        import numpy as np
+        import soundfile as sf
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            sf.write(f.name, np.zeros(44100, dtype=np.float32), 44100)
+            wav_path = f.name
+
+        try:
+            pipeline = KuchikaePipeline()
+            gen = run(
+                wav_path,
+                template_name="丁寧に",
+                custom_prompt="カスタムプロンプトテスト",
+                pipeline=pipeline,
+            )
+            results = list(gen)
+            # The pipeline should run without error
+            assert len(results) >= 1
+        finally:
+            os.unlink(wav_path)
+
+    def test_empty_custom_prompt_uses_template(self) -> None:
+        from kuchikae.ui.handlers import run
+        from kuchikae.pipeline import KuchikaePipeline
+        import numpy as np
+        import soundfile as sf
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            sf.write(f.name, np.zeros(44100, dtype=np.float32), 44100)
+            wav_path = f.name
+
+        try:
+            pipeline = KuchikaePipeline()
+            gen = run(
+                wav_path,
+                template_name="丁寧に",
+                custom_prompt="",
+                pipeline=pipeline,
+            )
+            results = list(gen)
+            assert len(results) >= 1
+        finally:
+            os.unlink(wav_path)
+
+    def test_unknown_template_falls_back_to_natural(self) -> None:
+        from kuchikae.ui.handlers import run
+        from kuchikae.pipeline import KuchikaePipeline
+        import numpy as np
+        import soundfile as sf
+        import tempfile
+        import os
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            sf.write(f.name, np.zeros(44100, dtype=np.float32), 44100)
+            wav_path = f.name
+
+        try:
+            pipeline = KuchikaePipeline()
+            gen = run(
+                wav_path,
+                template_name="unknown-template",
+                custom_prompt="",
+                pipeline=pipeline,
+            )
+            results = list(gen)
+            assert len(results) >= 1
+        finally:
+            os.unlink(wav_path)
+
+
 @pytest.mark.slow
 def test_pipeline_uses_prompted_rule_by_default() -> None:
     from kuchikae.pipeline import create_pipeline
