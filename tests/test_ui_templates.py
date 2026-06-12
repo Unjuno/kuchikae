@@ -30,6 +30,14 @@ def test_templates_include_expected_keys() -> None:
         "実験: 皮肉っぽく",
         "実験: 外国人っぽく",
         "実験: 特定キャラっぽく",
+        "実験強: 関西弁",
+        "実験強: ギャルっぽく",
+        "実験強: 赤ちゃんっぽく",
+        "実験強: 武士っぽく",
+        "実験強: 毒舌",
+        "実験強: 皮肉っぽく",
+        "実験強: 外国人っぽく",
+        "実験強: 特定キャラっぽく",
         "カスタム",
     }
     assert expected.issubset(TEMPLATES.keys())
@@ -90,3 +98,24 @@ def test_experimental_candidate_templates_exist() -> None:
     ]
     for template in experimental_candidates:
         assert template in TEMPLATES, f"Experimental candidate template '{template}' not found"
+
+
+def test_strong_experimental_candidate_templates_exist() -> None:
+    strong_experimental_candidates = [
+        "実験強: 関西弁",
+        "実験強: ギャルっぽく",
+        "実験強: 赤ちゃんっぽく",
+        "実験強: 武士っぽく",
+        "実験強: 毒舌",
+        "実験強: 皮肉っぽく",
+        "実験強: 外国人っぽく",
+        "実験強: 特定キャラっぽく",
+    ]
+    for template in strong_experimental_candidates:
+        assert template in TEMPLATES, f"Strong experimental candidate template '{template}' not found"
+
+
+def test_experimental_templates_have_style_template_markers() -> None:
+    for name in TEMPLATES:
+        if name.startswith("実験: ") or name.startswith("実験強: "):
+            assert "[STYLE_TEMPLATE: " in TEMPLATES[name], f"Template '{name}' missing [STYLE_TEMPLATE: ...] marker"

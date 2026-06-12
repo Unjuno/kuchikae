@@ -29,6 +29,323 @@ def strip_cot(text: str) -> str:
     return t
 
 
+# ---------------------------------------------------------------------------
+# Dynamic few-shot examples for experimental templates (failure-driven)
+# ---------------------------------------------------------------------------
+
+STYLE_FEW_SHOTS: dict[str, list[tuple[str, str]]] = {
+    "実験: 関西弁": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは、今日もよろしくやで。"),
+        # high freedom: encouragement
+        ("がんばって", "いけー！応援してるで。頑張れや。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できへんわ。ごめんな。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うと思うで。もう一回確認しよか。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料、送っといてな。よろしく頼むで。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認しといてな。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危ないで。いったん止めとこか。"),
+        # meta/refusal prevention: short acknowledgement
+        ("ありがとう", "ありがとうやで。助かるわ。"),
+    ],
+    "実験: ギャルっぽく": [
+        # high freedom: greeting
+        ("こんにちは", "やっほー、今日もよろしくね。"),
+        # high freedom: encouragement
+        ("がんばって", "マジで頑張ろうね。応援してるから。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "ごめん、今日は参加できないんだ。また次よろしくね。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "えー、違うと思うんだけど。もうちょっと考えてみて。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料送ってね。まじで助かる。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認してね。よろしく。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "それ危ないかも。いったん止めよ。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとね。助かったよ。"),
+    ],
+    "実験: 赤ちゃんっぽく": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは。きょうもにこにこでいこうね。"),
+        # high freedom: encouragement
+        ("がんばって", "がんばれがんばれ。きみはできるよ。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "きょうは参加できないの。ごめんね。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それはちがうと思うよ。もういちどみてね。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "あした15時に、しりょうをおくってくださいね。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに、かくにんしてくださいね。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "そのそうさはあぶないよ。いったんやめようね。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとう。とってもうれしいよ。"),
+    ],
+    "実験: 武士っぽく": [
+        # high freedom: greeting
+        ("こんにちは", "ご機嫌いかがでござる。今日もよろしく頼み申す。"),
+        # high freedom: encouragement
+        ("がんばって", "諦めるな。お前にはまだやるべきことがある。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "本日は参加できませぬ。ご容赦くだされ。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うと拙者は思う。今一度、確かめたい。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってくだされ。よろしく頼み申す。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中殿に確認をお願いいたす。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危のうござる。いったん止めるべきでござる。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "感謝申し上げる。助かり申した。"),
+    ],
+    "実験: 毒舌": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは。今日もちゃんと動くのかい？"),
+        # high freedom: encouragement
+        ("がんばって", "まだやるのか。まあ、認めてやろう。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "参加できないのか。まあ、無理するなよ。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うだろう。もう少し考えろ。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料を送れ。遅れるなよ。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認しろ。俺には聞くな。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危ない。今すぐ止めた方が賢明ですね。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとう。たまには役に立つじゃないか。"),
+    ],
+    "実験: 皮肉っぽく": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは。今日もなかなか興味深い一日になりそうですね。"),
+        # high freedom: encouragement
+        ("がんばって", "まあ、やってみなさいよ。結果は出たときにわかりますよ。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できません。残念ながら、都合よくはいかないものですね。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うと思いますね。なかなか大胆な見方ですね。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってくださいね。期待はしていませんよ。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認してください。まあ、確率は低いでしょうけど。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危ないです。試すには少し勇敢すぎますね。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとう。意外と助かりました。"),
+    ],
+    "実験: 外国人っぽく": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは。今日もよろしくお願いしますね。"),
+        # high freedom: encouragement
+        ("がんばって", "がんばってください。きっと大丈夫です。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できません。すみません、また次にお願いします。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは少し違うと思います。もう一度、確認したいです。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に、資料を送ってください。お願いします。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認してください。よろしくお願いします。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危ないです。気をつけてくださいね。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとう。とても助かりました。"),
+    ],
+    "実験: 特定キャラっぽく": [
+        # high freedom: greeting
+        ("こんにちは", "やあ、待っていたよ。今日も物語を始めよう。"),
+        # high freedom: encouragement
+        ("がんばって", "まだ終わりじゃない。お前ならできる。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できない。また次の機会に会おう。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うと思う。真実はもう少し先にありそうだ。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってくれ。頼んだよ、相棒。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認してくれ。そろそろ動くぞ。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危険だ。ここはいったん立ち止まろう。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "助かったよ、相棒。君のおかげだ。"),
+    ],
+    "実験強: 関西弁": [
+        # high freedom: greeting
+        ("こんにちは", "おっ、こんにちは。今日もぼちぼち気張っていこか。"),
+        # high freedom: encouragement
+        ("がんばって", "いけや、いけや！お前ならできるで。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できへんわ。ほんまごめんな、また次頼むで。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それはちゃうと思うで。もう一回ちゃんと見直そか。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料、ちゃんと送っといてな。そこ頼むで。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認しといてな。そこ飛ばしたらあかんで。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危ないで。今すぐ手ぇ止めとこか。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ほんま助かったわ。めっちゃありがとな。"),
+    ],
+    "実験強: ギャルっぽく": [
+        # high freedom: greeting
+        ("こんにちは", "やっほー、今日もテンション上げていこ。"),
+        # high freedom: encouragement
+        ("がんばって", "いけー！お前なら絶対できるってば！"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "ごめん、今日は参加できないんだ。また次ぜったいよろしく。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それはちょっと違うと思う。そこはちゃんと見直そ。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料送ってね。まじ大事だからよろしく。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認しといてね。そこめっちゃ大事。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "それ危ないって。いったん止めよ、まじで。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ほんと助かった、まじでありがと。最高。"),
+    ],
+    "実験強: 赤ちゃんっぽく": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは。きょうもにこにこでいこうね。"),
+        # high freedom: encouragement
+        ("がんばって", "がんばれがんばれ。きみはできるよ。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "きょうはさんかできません。ごめんね。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それはちがうとおもうよ。もういちど見てみようね。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "あした15時に、しりょうをおくってくださいね。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに、かくにんしてくださいね。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "そのそうさはあぶないよ。いったんやめようね。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとう。とってもうれしいよ。"),
+    ],
+    "実験強: 武士っぽく": [
+        # high freedom: greeting
+        ("こんにちは", "ご機嫌いかがでござる。今日もよろしく頼み申す。"),
+        # high freedom: encouragement
+        ("がんばって", "諦めるな。お前にはまだやるべきことがある。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "本日は参加できませぬ。どうかご容赦くだされ。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うと拙者は思う。今一度、確かめたい。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってくだされ。しかと頼み申す。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中殿に確認をお願いいたす。ぬかりなく頼み申す。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危のうござる。今すぐ止めるべきでござる。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "かたじけない。まことに助かったでござる。"),
+    ],
+    "実験強: 毒舌": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは。今日こそちゃんと進めましょうね。"),
+        # high freedom: encouragement
+        ("がんばって", "まだやるのか。まあ、認めてやろう。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できません。無理して出るよりは賢い判断ですね。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うと思います。さすがにそこは見直した方がよさそうですね。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってください。ここで忘れると、なかなか残念です。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認してください。そこを曖昧にすると、また面倒になりますよ。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危ないです。わざわざ事故りに行く必要はありません。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとう。たまには頼りになりますね。"),
+    ],
+    "実験強: 皮肉っぽく": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは。今日もなかなか興味深い一日になりそうですね。"),
+        # high freedom: encouragement
+        ("がんばって", "まあ、やってみなさいよ。結果は出たときにわかりますよ。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できません。残念ながら、都合よくはいかないものですね。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うと思います。なかなか大胆な見方ですね。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってください。忘れられると、少し物語が複雑になりますので。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認してください。推測だけで進めるのも、なかなか勇敢ですからね。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危ないです。試すには少し勇敢すぎますね。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとう。意外と助かりました。"),
+    ],
+    "実験強: 外国人っぽく": [
+        # high freedom: greeting
+        ("こんにちは", "こんにちは。今日もよろしくお願いしますね。"),
+        # high freedom: encouragement
+        ("がんばって", "がんばってください。きっと大丈夫です。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できません。すみません、また次にお願いします。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは少し違うと思います。もう一度、確認したいです。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に、資料を送ってください。お願いします。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認してください。よろしくお願いします。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危ないです。いったん止めるのがいいと思います。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "ありがとう。とても助かりました。"),
+    ],
+    "実験強: 特定キャラっぽく": [
+        # high freedom: greeting
+        ("こんにちは", "やあ、待っていたよ。今日も物語を始めよう。"),
+        # high freedom: encouragement
+        ("がんばって", "まだ終わりじゃない。お前ならできるよ。"),
+        # medium freedom: refusal/negative
+        ("今日は参加できません", "今日は参加できない。また次の機会に会おう。"),
+        # medium freedom: opinion
+        ("それは違うと思います", "それは違うと思う。真実はもう少し先にありそうだ。"),
+        # low freedom: request with fact
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってくれ。頼んだよ、相棒。"),
+        # low freedom: confirmation with fact
+        ("田中さんに確認してください", "田中さんに確認してくれ。次の一手はそこからだ。"),
+        # safety boundary: warning
+        ("その操作は危ないです", "その操作は危険だ。ここはいったん立ち止まろう。"),
+        # meta/refusal prevention: thanks
+        ("ありがとう", "助かったよ、相棒。君のおかげだ。"),
+    ],
+}
+
+# Template marker pattern
+_TEMPLATE_MARKER_RE = re.compile(r"\[STYLE_TEMPLATE:\s*(.+?)\]")
+
+
+def _extract_template_name(instruction: str) -> str | None:
+    """Extract template name from instruction if marker is present."""
+    m = _TEMPLATE_MARKER_RE.search(instruction)
+    return m.group(1).strip() if m else None
+
+
+def _build_few_shot_block(template_name: str | None) -> str:
+    """Build few-shot example block for the given template name."""
+    if not template_name or template_name not in STYLE_FEW_SHOTS:
+        return ""
+    examples = STYLE_FEW_SHOTS[template_name]
+    lines = [f"以下は「{template_name}」スタイルの変換例です。"]
+    for inp, out in examples:
+        lines.append(f"入力: {inp}")
+        lines.append(f"出力: {out}")
+    return "\n".join(lines)
+
+
 def _prompt_echo_score(source_text: str, transformed_text: str, prompt_instruction: str | None = None) -> float:
     """Return 0.0–1.0 score indicating how likely the output is a prompt echo.
 
@@ -150,6 +467,76 @@ class OllamaTextTransformBackend(TextTransformBackend):
         logger.info("ollama: model=%s text=%s", self.model, text[:40])
         t0 = time.time()
         try:
+            # Extract template name from instruction marker
+            template_name = _extract_template_name(prompt.instruction)
+            few_shot_block = _build_few_shot_block(template_name)
+
+            # Build system prompt with optional few-shot
+            system_parts = [
+                "あなたは Kuchikae の日本語発話演出エンジンです。\n\n",
+                "役割: 入力された発話を、指定されたスタイルに合わせて、\n",
+                "音声で聞いて印象が変わる日本語の発話に言い直してください。\n\n",
+                "基本方針:\n",
+                "- 出力は変換後の発話だけ。\n",
+                "- 説明、理由、候補、見出し、Markdown、引用符は出力しない。\n",
+                "- 入力の中心的な意図を保つ。\n",
+                "- 事実、数値、日時、場所、固有名詞、否定条件、約束、依頼内容は変えない。\n",
+                "- 新しい事実、予定、金額、名前、場所は作らない。\n",
+                "- 文体、語尾、語順、テンション、リズム、話し方は大胆に変えてよい。\n\n",
+                "出力制約:\n",
+                "- 「次のように変換します」「以下の通りです」「申し訳ありませんが」「できません」などの前置きや拒否文を出さない。\n",
+                "- 説明、理由、候補、採点、注釈、Markdown、引用符を出さない。\n",
+                "- テンプレート本文や変換ルールをそのまま出力しない。\n",
+                "- 入力が短くても、必ず変換後の発話だけを1つ返す。\n",
+                "- 日本語以外の文字や中国語表現を混ぜない。\n",
+                "- ひらがな、カタカナ、漢字を使った自然な日本語として出力する。\n",
+                "- 特定キャラクター名、作品名、有名人名を出さない。\n",
+                "- 変換できないと言わず、制約内で最も近い安全な表現に変換する。\n\n",
+                "情報保持:\n",
+                "- 日時、数字、場所、固有名詞、金額、否定条件、依頼内容は変えない。\n",
+                "- 情報発話では、面白さより正確性を優先する。\n",
+                "- 比喩や演出を入れる場合でも、入力にない場所・予定・人物・出来事を作らない。\n\n",
+                "自由度:\n",
+                "- 挨拶、感謝、謝罪、相づち、応援、呼びかけなどの短い社交的発話では、\n",
+                "  元の意図を保ったまま、指定スタイルに合う自然な一言を補ってよい。\n",
+                "- 情報伝達、予定、依頼、報告、注意、警告では、\n",
+                "  内容を変えず、聞こえ方だけを変える。\n",
+                "- 入力が短すぎる場合でも、単なる同義語変換にせず、\n",
+                "  スタイルが伝わる発話として成立させる。\n\n",
+                "変換強度:\n",
+                "- 指定スタイルが普通の文体なら、自然に整える。\n",
+                "- 指定スタイルがキャラクター、ジャンル、場面、演出を求める場合は、\n",
+                "  内容を壊さない範囲で、聞いた人が違いを感じる程度に強く反映する。\n\n",
+                "禁止:\n",
+                "- 複数案を出さない。\n",
+                "- 箇条書きにしない。\n",
+                "- 翻訳しない。\n",
+                "- 要約しすぎない。\n",
+                "- 入力と矛盾する内容を足さない。\n",
+                "- 攻撃的、差別的、性的、危険な方向に勝手に寄せない。\n\n",
+            ]
+
+            # Add few-shot block if available (for experimental templates)
+            if few_shot_block:
+                system_parts.append(few_shot_block + "\n\n")
+
+            # Add fixed output examples (for non-experimental or fallback)
+            if not few_shot_block:
+                system_parts.extend([
+                    "出力例:\n",
+                    "- 入力: こんにちは / スタイル: 実況者っぽく / 出力: はいどうもー！今日も元気に始めていきましょう！\n",
+                    "- 入力: こんにちは / スタイル: 映画予告っぽく / 出力: その一言から、今日が動き出す。こんにちは。\n",
+                    "- 入力: こんにちは / スタイル: 執事っぽく / 出力: お帰りなさいませ。本日もお待ちしておりました。\n",
+                    "- 入力: こんにちは / スタイル: 魔王っぽく / 出力: よく来たな。歓迎してやろう。\n",
+                    "- 入力: こんにちは / スタイル: 深夜ラジオっぽく / 出力: こんばんは。まだ起きているあなたに、そっとこんにちは。\n",
+                    "- 入力: こんにちは / スタイル: AIアシスタントっぽく / 出力: こんにちは。応答を開始します。\n",
+                    "- 入力: がんばって / スタイル: 実況者っぽく / 出力: いけー！応援してるぞ！\n",
+                    "- 入力: がんばって / スタイル: 魔王っぽく / 出力: 諦めるな。お前にはまだやるべきことがある。\n",
+                ])
+
+            system_parts.append("出力: 変換後の日本語発話を1つだけ返してください。")
+            system_content = "".join(system_parts)
+
             resp = httpx.post(
                 f"{self._base_url}/api/chat",
                 json={
@@ -157,59 +544,7 @@ class OllamaTextTransformBackend(TextTransformBackend):
                     "messages": [
                         {
                             "role": "system",
-                            "content": (
-                                "あなたは Kuchikae の日本語発話演出エンジンです。\n\n"
-                                "役割: 入力された発話を、指定されたスタイルに合わせて、\n"
-                                "音声で聞いて印象が変わる日本語の発話に言い直してください。\n\n"
-                                "基本方針:\n"
-                                "- 出力は変換後の発話だけ。\n"
-                                "- 説明、理由、候補、見出し、Markdown、引用符は出力しない。\n"
-                                "- 入力の中心的な意図を保つ。\n"
-                                "- 事実、数値、日時、場所、固有名詞、否定条件、約束、依頼内容は変えない。\n"
-                                "- 新しい事実、予定、金額、名前、場所は作らない。\n"
-                                "- 文体、語尾、語順、テンション、リズム、話し方は大胆に変えてよい。\n\n"
-                                "出力制約:\n"
-                                "- 「次のように変換します」「以下の通りです」「申し訳ありませんが」「できません」などの前置きや拒否文を出さない。\n"
-                                "- 説明、理由、候補、採点、注釈、Markdown、引用符を出さない。\n"
-                                "- テンプレート本文や変換ルールをそのまま出力しない。\n"
-                                "- 入力が短くても、必ず変換後の発話だけを1つ返す。\n"
-                                "- 日本語以外の文字や中国語表現を混ぜない。\n"
-                                "- ひらがな、カタカナ、漢字を使った自然な日本語として出力する。\n"
-                                "- 特定キャラクター名、作品名、有名人名を出さない。\n"
-                                "- 変換できないと言わず、制約内で最も近い安全な表現に変換する。\n\n"
-                                "情報保持:\n"
-                                "- 日時、数字、場所、固有名詞、金額、否定条件、依頼内容は変えない。\n"
-                                "- 情報発話では、面白さより正確性を優先する。\n"
-                                "- 比喩や演出を入れる場合でも、入力にない場所・予定・人物・出来事を作らない。\n\n"
-                                "自由度:\n"
-                                "- 挨拶、感謝、謝罪、相づち、応援、呼びかけなどの短い社交的発話では、\n"
-                                "  元の意図を保ったまま、指定スタイルに合う自然な一言を補ってよい。\n"
-                                "- 情報伝達、予定、依頼、報告、注意、警告では、\n"
-                                "  内容を変えず、聞こえ方だけを変える。\n"
-                                "- 入力が短すぎる場合でも、単なる同義語変換にせず、\n"
-                                "  スタイルが伝わる発話として成立させる。\n\n"
-                                "変換強度:\n"
-                                "- 指定スタイルが普通の文体なら、自然に整える。\n"
-                                "- 指定スタイルがキャラクター、ジャンル、場面、演出を求める場合は、\n"
-                                "  内容を壊さない範囲で、聞いた人が違いを感じる程度に強く反映する。\n\n"
-                                "禁止:\n"
-                                "- 複数案を出さない。\n"
-                                "- 箇条書きにしない。\n"
-                                "- 翻訳しない。\n"
-                                "- 要約しすぎない。\n"
-                                "- 入力と矛盾する内容を足さない。\n"
-                                "- 攻撃的、差別的、性的、危険な方向に勝手に寄せない。\n\n"
-                                "出力例:\n"
-                                "- 入力: こんにちは / スタイル: 実況者っぽく / 出力: はいどうもー！今日も元気に始めていきましょう！\n"
-                                "- 入力: こんにちは / スタイル: 映画予告っぽく / 出力: その一言から、今日が動き出す。こんにちは。\n"
-                                "- 入力: こんにちは / スタイル: 執事っぽく / 出力: お帰りなさいませ。本日もお待ちしておりました。\n"
-                                "- 入力: こんにちは / スタイル: 魔王っぽく / 出力: よく来たな。歓迎してやろう。\n"
-                                "- 入力: こんにちは / スタイル: 深夜ラジオっぽく / 出力: こんばんは。まだ起きているあなたに、そっとこんにちは。\n"
-                                "- 入力: こんにちは / スタイル: AIアシスタントっぽく / 出力: こんにちは。応答を開始します。\n"
-                                "- 入力: がんばって / スタイル: 実況者っぽく / 出力: いけー！応援してるぞ！\n"
-                                "- 入力: がんばって / スタイル: 魔王っぽく / 出力: 諦めるな。お前にはまだやるべきことがある。\n\n"
-                                "出力: 変換後の日本語発話を1つだけ返してください。"
-                            ),
+                            "content": system_content,
                         },
                         {
                             "role": "user",

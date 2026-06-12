@@ -34,6 +34,15 @@ def test_create_app_has_two_tabs():
     assert "簡易" in config_str
 
 
+def test_create_app_experimental_warning_present():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    assert "experimental-warning" in config_str
+    assert "なりすまし、詐欺、脅迫、同意のない声の模倣には使用しないでください" in config_str
+
+
 def test_create_app_normal_tab_components():
     pipeline = KuchikaePipeline()
     prompt = TextTransformPrompt(instruction="test")

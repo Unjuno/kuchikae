@@ -28,6 +28,14 @@ def _voice_analysis_pending_html() -> str:
     return '<span id="voice-analysis-label" style="color: #A1A1AA; font-size: 12px;">声の印象: 分析中...</span>'
 
 
+def _experimental_warning_html() -> str:
+    return (
+        '<div id="experimental-warning" style="color: #A1A1AA; font-size: 11px; margin-top: 4px; margin-bottom: 8px;">'
+        '実験テンプレートは検証用です。なりすまし、詐欺、脅迫、同意のない声の模倣には使用しないでください。'
+        '</div>'
+    )
+
+
 def create_app(
     pipeline: KuchikaePipeline,
     default_prompt: TextTransformPrompt,
@@ -52,6 +60,8 @@ def create_app(
                         choices=list(TEMPLATES.keys()),
                         value="自然に",
                     )
+
+                    gr.HTML(_experimental_warning_html())
 
                     audio_input = gr.Audio(
                         elem_id="audio-input-wrap",
@@ -132,6 +142,8 @@ def create_app(
                         choices=list(TEMPLATES.keys()),
                         value="自然に",
                     )
+
+                    gr.HTML(_experimental_warning_html())
 
                     gr.HTML(PTT_HTML, js_on_load=PTT_JS)
 
