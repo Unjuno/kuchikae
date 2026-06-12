@@ -91,6 +91,12 @@ def validate_transform(
     if echo_score >= 0.6:
         logger.warning("validate_transform: prompt echo detected (score=%.2f)", echo_score)
         return False
+    # Reject if output contains simplified Chinese characters (common LLM error)
+    cn_chars = re.findall(r"[\u4e00-\u9fff]", transformed_text)
+    jp_chars = re.findall(r"[\u3040-\u309f\u30a0-\u30ff]", transformed_text)
+    if cn_chars and not jp_chars:
+        logger.warning("validate_transform: simplified Chinese characters detected")
+        return False
     return True
 
 
@@ -160,6 +166,15 @@ class OllamaTextTransformBackend(TextTransformBackend):
                                 "- 要約しすぎない。\n"
                                 "- 入力と矛盾する内容を足さない。\n"
                                 "- 攻撃的、差別的、性的、危険な方向に勝手に寄せない。\n\n"
+                                "出力例:\n"
+                                "- 入力: こんにちは / スタイル: 実況者っぽく / 出力: はいどうもー！今日も元気に始めていきましょう！\n"
+                                "- 入力: こんにちは / スタイル: 映画予告っぽく / 出力: その一言から、今日が動き出す。こんにちは。\n"
+                                "- 入力: こんにちは / スタイル: 執事っぽく / 出力: お帰りなさいませ。本日もお待ちしておりました。\n"
+                                "- 入力: こんにちは / スタイル: 魔王っぽく / 出力: よく来たな。歓迎してやろう。\n"
+                                "- 入力: こんにちは / スタイル: 深夜ラジオっぽく / 出力: こんばんは。まだ起きているあなたに、そっとこんにちは。\n"
+                                "- 入力: こんにちは / スタイル: AIアシスタントっぽく / 出力: こんにちは。応答を開始します。\n"
+                                "- 入力: がんばって / スタイル: 実況者っぽく / 出力: いけー！応援してるぞ！\n"
+                                "- 入力: がんばって / スタイル: 魔王っぽく / 出力: 諦めるな。お前にはまだやるべきことがある。\n\n"
                                 "出力: 変換後の日本語発話を1つだけ返してください。"
                             ),
                         },
@@ -174,9 +189,9 @@ class OllamaTextTransformBackend(TextTransformBackend):
                     ],
                     "stream": False,
                     "options": {
-                        "temperature": 0.3,
+                        "temperature": 1.0,
                         "num_predict": 128,
-                        "top_p": 0.8,
+                        "top_p": 0.9,
                     },
                     "keep_alive": "5m",
                 },

@@ -27,3 +27,6 @@ Thumbs.db
 
 # Screenshots
 *.png
+
+# Diagnostic logs
+logs/
