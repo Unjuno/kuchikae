@@ -13,6 +13,10 @@ from kuchikae.pipeline import create_pipeline
 from kuchikae.ui import CSS, create_app
 
 
+def _truthy(value: str | None) -> bool:
+    return (value or "").lower() in ("1", "true", "yes", "on")
+
+
 def _normalize_audio_path(audio_input: Any) -> str:
     """Normalize audio input to file path with validation.
     
@@ -69,17 +73,22 @@ def build_pipeline_config_from_env(
         real: Use real backends (requires models)
         streaming: Enable streaming STT (None = check env var)
     """
-    streaming_stt = (
+    requested_streaming = (
         bool(streaming)
         if streaming is not None
-        else os.environ.get("KUCHIKAE_STREAMING_STT", "").lower() in ("1", "true", "yes")
+        else _truthy(os.environ.get("KUCHIKAE_STREAMING_STT"))
     )
+    streaming_stt = requested_streaming and real
+    if requested_streaming and not real:
+        logging.getLogger("kuchikae.web").warning(
+            "streaming STT requires --real; disabling streaming for smoke-friendly mode"
+        )
     
     common = {
         "stt_preset": os.environ.get("KUCHIKAE_STT_PRESET", "balanced"),
         "text_transform_model": os.environ.get("KUCHIKAE_TEXT_MODEL"),
         "streaming_stt": streaming_stt,
-        "segmented_stt": os.environ.get("KUCHIKAE_SEGMENTED_STT", "").lower() in ("1", "true", "yes"),
+        "segmented_stt": _truthy(os.environ.get("KUCHIKAE_SEGMENTED_STT")),
     }
     
     if dummy:
@@ -105,7 +114,7 @@ def build_pipeline_config_from_env(
         "stt_backend": os.environ.get("KUCHIKAE_STT_BACKEND", "dummy"),
         "text_transform_backend": os.environ.get("KUCHIKAE_TEXT_BACKEND", "prompted_rule"),
         "voice_output_backend": os.environ.get("KUCHIKAE_VOICE_BACKEND", "dummy"),
-        "allow_dummy_backends": os.environ.get("KUCHIKAE_ALLOW_DUMMY_BACKENDS", "1").lower() in ("1", "true", "yes"),
+        "allow_dummy_backends": _truthy(os.environ.get("KUCHIKAE_ALLOW_DUMMY_BACKENDS", "1")),
     }
 
 
