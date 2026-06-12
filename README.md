@@ -13,24 +13,34 @@ The app takes a short Japanese speech input, uses that audio both as the utteran
 ### Smoke test (dummy backends)
 
 ```bash
-uv run python -m kuchikae.cli serve --dummy
+uv sync --extra test
+uv run kuchikae serve --dummy
 ```
 
-Opens Gradio at `http://127.0.0.1:7860`. Record audio → get dummy output. No models required.
+Opens Gradio at `http://127.0.0.1:7860`. Record audio → get dummy output. No models required. Dummy mode is for smoke testing only; it does not evaluate real STT or voice quality.
 
 ### Real backends
 
 ```bash
 uv sync --extra real
-uv run python -m kuchikae.cli serve --real
+uv run kuchikae serve --real
 ```
 
 Requires: faster-whisper models, Ollama running, Irodori-TTS models.
 
+### Streaming STT
+
+```bash
+uv sync --extra real
+uv run kuchikae serve --real --streaming
+```
+
+Streaming STT is a real-backend mode. Plain `--dummy` remains the recommended fresh-clone smoke path.
+
 ### Doctor (check backend availability)
 
 ```bash
-uv run python -m kuchikae.cli doctor
+uv run kuchikae doctor
 ```
 
 Shows installed backends, Ollama status, environment variables, and missing dependencies.
@@ -45,7 +55,7 @@ kuchikae --help             Show help
 Options:
   --dummy         Use dummy backends for smoke testing
   --real          Use real backends (requires models)
-  --streaming     Enable streaming STT for push-to-talk
+  --streaming     Enable streaming STT with --real
   --port PORT     Server port (default: 7860)
 ```
 
@@ -74,9 +84,9 @@ Backend selection via CLI flags or environment variables:
 
 ```bash
 # CLI flags (recommended)
-uv run python -m kuchikae.cli serve --dummy      # smoke test
-uv run python -m kuchikae.cli serve --real        # real backends
-uv run python -m kuchikae.cli serve --streaming   # streaming STT
+uv run kuchikae serve --dummy              # smoke test
+uv run kuchikae serve --real               # real backends
+uv run kuchikae serve --real --streaming   # real streaming STT
 
 # Environment variables
 export KUCHIKAE_STT_BACKEND=faster_whisper
@@ -95,8 +105,8 @@ export KUCHIKAE_TEXT_MODEL=qwen3:8b
 nix develop    # enter dev shell
 uv sync        # install dependencies
 uv run pytest  # run tests
-uv run python -m kuchikae.cli doctor  # check backends
-uv run python -m kuchikae.cli serve --dummy  # smoke test
+uv run kuchikae doctor  # check backends
+uv run kuchikae serve --dummy  # smoke test
 ```
 
 ## Non-goals for v0.1
@@ -108,8 +118,8 @@ Do not implement:
 - user accounts
 - database
 - sharing
-- real voice cloning inside the initial scaffold
-- heavy model dependencies in the first commit
+- exact voice cloning guarantee
+- heavy model dependencies as required base dependencies
 
 ## Documentation
 
