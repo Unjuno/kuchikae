@@ -102,11 +102,21 @@ def normalize_voice_output_prompt(value) -> VoiceOutputPrompt | None:
 def resolve_voice_style(voice_style: str, custom_prompt: str | None = None) -> VoiceOutputPrompt | None:
     if voice_style == "auto" or not voice_style:
         return None
-    if voice_style == "custom" and custom_prompt and custom_prompt.strip():
-        return VoiceOutputPrompt(instruction=custom_prompt.strip())
     if voice_style in VOICE_STYLE_PRESETS:
         return VoiceOutputPrompt(instruction=VOICE_STYLE_PRESETS[voice_style])
     return None
+
+
+def _voice_analysis_html(pipeline: KuchikaePipeline) -> str:
+    """Generate HTML for voice analysis label showing emotion and applied style."""
+    voice_style = getattr(pipeline, "_last_voice_style", "auto")
+    emotion_mood = getattr(pipeline, "_last_audio_emotion_mood", None) or getattr(pipeline, "_last_audio_emotion", "unknown")
+    return (
+        '<div id="voice-analysis-label" style="font-size: 12px; color: #A1A1AA; padding: 4px 0;">'
+        f'<span style="color: #C4B5FD;">声の印象:</span> {emotion_mood} / '
+        f'<span style="color: #C4B5FD;">適用スタイル:</span> {voice_style}'
+        '</div>'
+    )
 
 
 def _backend_status(pipeline: KuchikaePipeline) -> str:
@@ -289,6 +299,7 @@ def run(
             last_source = src or ""
             last_text = txt or ""
             backend_status = _backend_status(pipeline)
+            voice_analysis = _voice_analysis_html(pipeline)
             logger.info(
                 "[run] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
                 idx,
@@ -300,15 +311,15 @@ def run(
                 txt[:120] if isinstance(txt, str) else txt,
             )
             if status == "DONE":
-                yield aud, src, txt, f"言い直しました | {backend_status}"
+                yield aud, src, txt, f"言い直しました | {backend_status}", voice_analysis
             elif status == "VOX":
-                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}"
+                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}", voice_analysis
             elif status == "TXT":
-                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}"
+                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}", voice_analysis
             elif status == "STT_PARTIAL":
-                yield gr.update(value=None), src, "", f"文字起こし中... | {backend_status}"
+                yield gr.update(value=None), src, "", f"文字起こし中... | {backend_status}", voice_analysis
             else:
-                yield gr.update(value=None), "", "", f"音声認識中... | {backend_status}"
+                yield gr.update(value=None), "", "", f"音声認識中... | {backend_status}", voice_analysis
     except Exception as e:
         logger.exception("[run] inference failed")
         yield (
@@ -316,6 +327,7 @@ def run(
             last_source,
             last_text,
             f"{last_status} 段階で失敗しました: {type(e).__name__}: {e}",
+            _voice_analysis_html(pipeline),
         )
         return
 

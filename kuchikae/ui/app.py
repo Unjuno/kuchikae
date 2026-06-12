@@ -122,7 +122,7 @@ def create_app(
                     run_btn.click(
                         _run_handler,
                         inputs=[audio_input, template, text_prompt, stt_preset, voice_style],
-                        outputs=[output_audio, source_text, transformed_text, status],
+                        outputs=[output_audio, source_text, transformed_text, status, voice_analysis_label],
                     )
 
                 with gr.Tab("簡易"):

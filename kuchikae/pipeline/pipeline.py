@@ -664,6 +664,7 @@ class KuchikaePipeline:
             self._last_voice_style = voice_style
         else:
             self._last_voice_style = "auto"
+        self._last_audio_emotion_mood = emotion_mood or "neutral"
         self._last_audio_emotion = getattr(audio_emotion, "source", "disabled") if audio_emotion is not None else "disabled"
 
         # Emit diagnostics
