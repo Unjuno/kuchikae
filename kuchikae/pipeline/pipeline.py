@@ -49,11 +49,27 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
 
     stt_type = config.get("stt_backend", "faster_whisper")
     use_segmented = config.get("segmented_stt", False)
+    has_faster_whisper = False
     try:
         from faster_whisper import WhisperModel  # noqa: F401
+
         has_faster_whisper = True
     except ImportError:
-        has_faster_whisper = False
+        pass
+    has_transformers = False
+    try:
+        from transformers import AutoProcessor  # noqa: F401
+
+        has_transformers = True
+    except ImportError:
+        pass
+    has_nemo = False
+    try:
+        import nemo.collections.asr  # noqa: F401
+
+        has_nemo = True
+    except ImportError:
+        pass
 
     if stt_type == "faster_whisper" and has_faster_whisper:
         from kuchikae.backends.stt import FasterWhisperSTTBackend
@@ -63,6 +79,34 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
             "faster-whisper is required for the selected STT backend, but it is not "
             "importable in the current uv environment. Run `uv sync --extra real` or "
             "set `allow_dummy_backends=true` for development-only fallback."
+        )
+    elif stt_type == "transformers_japanese" and has_transformers:
+        from kuchikae.backends.stt_transformers import TransformersJapaneseASRBackend
+        inner = TransformersJapaneseASRBackend()
+    elif stt_type == "transformers_japanese" and not allow_dummy_backends:
+        raise RuntimeError(
+            "Transformers Japanese STT backend was requested, but `transformers` is not "
+            "importable in the current uv environment. Run `uv sync --extra real` or "
+            "set `allow_dummy_backends=true` for development-only fallback."
+        )
+    elif stt_type == "transformers_whisper" and has_transformers:
+        from kuchikae.backends.stt_transformers_whisper import (
+            TransformersWhisperJapaneseASRBackend,
+        )
+        inner = TransformersWhisperJapaneseASRBackend()
+    elif stt_type == "transformers_whisper" and not allow_dummy_backends:
+        raise RuntimeError(
+            "Transformers Whisper STT backend was requested, but `transformers` is not "
+            "importable in the current uv environment. Run `uv sync --extra real` or "
+            "set `allow_dummy_backends=true` for development-only fallback."
+        )
+    elif stt_type == "reazonspeech_nemo" and has_nemo:
+        from kuchikae.backends.stt_nemo import ReazonSpeechNemoASRBackend
+        inner = ReazonSpeechNemoASRBackend()
+    elif stt_type == "reazonspeech_nemo" and not allow_dummy_backends:
+        raise RuntimeError(
+            "reazonspeech_nemo was requested, but the required NeMo packages are not "
+            "importable in the current uv environment."
         )
     else:
         inner = DummySTTBackend()
@@ -171,6 +215,10 @@ class KuchikaePipeline:
     def warmup(self) -> None:
         logger.info("warming up...")
 
+        if os.environ.get("KUCHIKAE_SKIP_WARMUP", "").lower() in ("1", "true", "yes"):
+            logger.info("warmup skipped by KUCHIKAE_SKIP_WARMUP")
+            return
+
         if hasattr(self.stt_backend, "_load_model"):
             try:
                 logger.info("warming up STT...")
@@ -197,7 +245,7 @@ class KuchikaePipeline:
                         "stream": False,
                         "keep_alive": "5m",
                     },
-                    timeout=10,
+                    timeout=float(os.environ.get("KUCHIKAE_WARMUP_TIMEOUT", "2.5")),
                 )
             except Exception as e:
                 logger.debug("LLM warmup skipped: %s", e)
@@ -257,6 +305,16 @@ class KuchikaePipeline:
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
+        voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
+        cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        if cached_result is not None:
+            logger.info(
+                "process:full_cache_hit output_audio_path=%s source_len=%d transformed_len=%d",
+                cached_result.output_audio_path,
+                len(cached_result.source_text),
+                len(cached_result.transformed_text),
+            )
+            return cached_result
         logger.info(
             "process:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
             cache_key.path,
@@ -281,7 +339,13 @@ class KuchikaePipeline:
             "process:text:start text_prompt_preview=%r",
             text_transform_prompt.instruction[:160],
         )
-        transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+        cached_text = self.processing_cache.get_text(source_text, text_transform_prompt)
+        if cached_text is not None:
+            transformed_text = cached_text
+            logger.info("process:text:cache_hit transformed_len=%d", len(transformed_text))
+        else:
+            transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+            self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
         text_latency = time.time() - t2
         logger.info(
             "process:text:done latency=%.2fs transformed_len=%d transformed_preview=%r",
@@ -307,13 +371,24 @@ class KuchikaePipeline:
             text_for_voice[:120],
             "set" if voice_output_prompt is not None else "none",
         )
-        output_audio_path = self._step_voice(
-            text_for_voice,
-            audio_path,
-            audio_key,
-            voice_context,
-            voice_output_prompt,
-        )
+        cached_audio = self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
+        if cached_audio is not None and os.path.exists(cached_audio):
+            output_audio_path = cached_audio
+            logger.info("process:voice:cache_hit output_audio_path=%s", output_audio_path)
+        else:
+            output_audio_path = self._step_voice(
+                text_for_voice,
+                audio_path,
+                audio_key,
+                voice_context,
+                voice_output_prompt,
+            )
+            self.processing_cache.set_voice_output(
+                text_for_voice,
+                voice_prompt_text,
+                voice_context,
+                output_audio_path,
+            )
         voice_latency = time.time() - t3
         logger.info(
             "process:voice:done latency=%.2fs output_audio_path=%s",
@@ -348,6 +423,7 @@ class KuchikaePipeline:
             )
             self.latency_logger.log_report(report)
 
+        self.processing_cache.set_result(audio_key, text_transform_prompt.instruction, voice_prompt_text, result)
         return result
 
     def process_stream(
@@ -369,6 +445,15 @@ class KuchikaePipeline:
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
+        voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
+        cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        if cached_result is not None:
+            logger.info("process_stream:full_cache_hit")
+            yield "STT", cached_result.source_text, None, None
+            yield "TXT", cached_result.source_text, cached_result.transformed_text, None
+            yield "VOX", cached_result.source_text, cached_result.transformed_text, None
+            yield "DONE", cached_result.source_text, cached_result.transformed_text, cached_result.output_audio_path
+            return
         logger.info(
             "process_stream:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
             cache_key.path,
@@ -393,7 +478,13 @@ class KuchikaePipeline:
             "process_stream:text:start text_prompt_preview=%r",
             text_transform_prompt.instruction[:160],
         )
-        transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+        cached_text = self.processing_cache.get_text(source_text, text_transform_prompt)
+        if cached_text is not None:
+            transformed_text = cached_text
+            logger.info("process_stream:text:cache_hit transformed_len=%d", len(transformed_text))
+        else:
+            transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+            self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
         logger.info(
             "process_stream:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
             time.time() - t0,
@@ -419,13 +510,24 @@ class KuchikaePipeline:
             text_for_voice[:120],
             "set" if voice_output_prompt is not None else "none",
         )
-        output_audio_path = self._step_voice(
-            text_for_voice,
-            audio_path,
-            audio_key,
-            voice_context,
-            voice_output_prompt,
-        )
+        cached_audio = self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
+        if cached_audio is not None and os.path.exists(cached_audio):
+            output_audio_path = cached_audio
+            logger.info("process_stream:voice:cache_hit output_audio_path=%s", output_audio_path)
+        else:
+            output_audio_path = self._step_voice(
+                text_for_voice,
+                audio_path,
+                audio_key,
+                voice_context,
+                voice_output_prompt,
+            )
+            self.processing_cache.set_voice_output(
+                text_for_voice,
+                voice_prompt_text,
+                voice_context,
+                output_audio_path,
+            )
         logger.info(
             "process_stream:voice:done elapsed=%.2fs output_audio_path=%s",
             time.time() - t0,
@@ -434,6 +536,20 @@ class KuchikaePipeline:
 
         logger.info("process_stream:yield DONE")
         yield "DONE", source_text, transformed_text, output_audio_path
+        self.processing_cache.set_result(
+            audio_key,
+            text_transform_prompt.instruction,
+            voice_prompt_text,
+            PipelineResult(
+                output_audio_path=output_audio_path,
+                source_text=source_text,
+                transformed_text=transformed_text,
+                stt_latency=0.0,
+                text_transform_latency=0.0,
+                voice_output_latency=0.0,
+                total_latency=time.time() - t0,
+            ),
+        )
 
     def process_stream_live(
         self,
@@ -459,6 +575,15 @@ class KuchikaePipeline:
         self.check_audio(audio_path)
         cache_key = AudioCacheKey.from_file(audio_path)
         audio_key = AudioKeyFromCacheKey(cache_key)
+        voice_prompt_text = voice_output_prompt.instruction if voice_output_prompt is not None else ""
+        cached_result = self.processing_cache.get_result(audio_key, text_transform_prompt.instruction, voice_prompt_text)
+        if cached_result is not None:
+            logger.info("process_stream_live:full_cache_hit")
+            yield "STT", cached_result.source_text, None, None
+            yield "TXT", cached_result.source_text, cached_result.transformed_text, None
+            yield "VOX", cached_result.source_text, cached_result.transformed_text, None
+            yield "DONE", cached_result.source_text, cached_result.transformed_text, cached_result.output_audio_path
+            return
         logger.info(
             "process_stream_live:audio_validated cache_key path=%s size=%d mtime=%.6f audio_key=%s",
             cache_key.path,
@@ -519,7 +644,13 @@ class KuchikaePipeline:
             "process_stream_live:text:start text_prompt_preview=%r",
             text_transform_prompt.instruction[:160],
         )
-        transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+        cached_text = self.processing_cache.get_text(source_text, text_transform_prompt)
+        if cached_text is not None:
+            transformed_text = cached_text
+            logger.info("process_stream_live:text:cache_hit transformed_len=%d", len(transformed_text))
+        else:
+            transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+            self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
         logger.info(
             "process_stream_live:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
             time.time() - t0,
@@ -546,13 +677,24 @@ class KuchikaePipeline:
             text_for_voice[:120],
             "set" if voice_output_prompt is not None else "none",
         )
-        output_audio_path = self._step_voice(
-            text_for_voice,
-            audio_path,
-            audio_key,
-            voice_context,
-            voice_output_prompt,
-        )
+        cached_audio = self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
+        if cached_audio is not None and os.path.exists(cached_audio):
+            output_audio_path = cached_audio
+            logger.info("process_stream_live:voice:cache_hit output_audio_path=%s", output_audio_path)
+        else:
+            output_audio_path = self._step_voice(
+                text_for_voice,
+                audio_path,
+                audio_key,
+                voice_context,
+                voice_output_prompt,
+            )
+            self.processing_cache.set_voice_output(
+                text_for_voice,
+                voice_prompt_text,
+                voice_context,
+                output_audio_path,
+            )
         logger.info(
             "process_stream_live:voice:done elapsed=%.2fs output_audio_path=%s",
             time.time() - t0,
@@ -561,3 +703,17 @@ class KuchikaePipeline:
 
         logger.info("process_stream_live:yield DONE")
         yield "DONE", source_text, transformed_text, output_audio_path
+        self.processing_cache.set_result(
+            audio_key,
+            text_transform_prompt.instruction,
+            voice_prompt_text,
+            PipelineResult(
+                output_audio_path=output_audio_path,
+                source_text=source_text,
+                transformed_text=transformed_text,
+                stt_latency=0.0,
+                text_transform_latency=0.0,
+                voice_output_latency=0.0,
+                total_latency=time.time() - t0,
+            ),
+        )

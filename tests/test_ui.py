@@ -71,8 +71,6 @@ def test_create_app_ptt_button():
     config_str = str(demo.config)
     assert "ptt-container" in config_str
     assert "ptt-btn" in config_str
-    assert "pttStart" in config_str
-    assert "pttStop" in config_str
     assert "押して話す" in config_str
 
 

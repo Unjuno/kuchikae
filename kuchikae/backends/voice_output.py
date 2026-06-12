@@ -110,11 +110,67 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         self,
         hf_checkpoint: str = "Aratako/Irodori-TTS-500M-v3",
         codec_repo: str = "Aratako/Semantic-DACVAE-Japanese-32dim",
-        num_steps: int = 10,
+        num_steps: int = 6,
+        cfg_scale_text: float = 2.0,
+        cfg_scale_speaker: float = 3.0,
+        cfg_guidance_mode: str = "independent",
+        cfg_scale: float | None = None,
+        cfg_min_t: float = 0.5,
+        cfg_max_t: float = 1.0,
+        speaker_kv_scale: float | None = None,
+        speaker_kv_min_t: float | None = None,
+        speaker_kv_max_layers: int | None = None,
+        speaker_uncond_mode: str = "mask",
+        t_schedule_mode: str = "linear",
+        sway_coeff: float = -1.0,
+        ref_normalize_db: float = -16.0,
+        ref_ensure_max: bool = True,
+        decode_mode: str = "sequential",
+        duration_scale: float = 1.0,
+        min_seconds: float = 0.5,
+        max_seconds: float = 30.0,
+        max_ref_seconds: float | None = 30.0,
+        max_text_len: int | None = None,
+        max_caption_len: int | None = None,
+        truncation_factor: float | None = None,
+        rescale_k: float | None = None,
+        rescale_sigma: float | None = None,
+        tail_window_size: int = 20,
+        tail_std_threshold: float = 0.05,
+        tail_mean_threshold: float = 0.1,
+        lora_adapter: str | None = None,
     ) -> None:
         self._hf_checkpoint = hf_checkpoint
         self._codec_repo = codec_repo
         self._num_steps = num_steps
+        self._cfg_scale_text = cfg_scale_text
+        self._cfg_scale_speaker = cfg_scale_speaker
+        self._cfg_guidance_mode = cfg_guidance_mode
+        self._cfg_scale = cfg_scale
+        self._cfg_min_t = cfg_min_t
+        self._cfg_max_t = cfg_max_t
+        self._speaker_kv_scale = speaker_kv_scale
+        self._speaker_kv_min_t = speaker_kv_min_t
+        self._speaker_kv_max_layers = speaker_kv_max_layers
+        self._speaker_uncond_mode = speaker_uncond_mode
+        self._t_schedule_mode = t_schedule_mode
+        self._sway_coeff = sway_coeff
+        self._ref_normalize_db = ref_normalize_db
+        self._ref_ensure_max = ref_ensure_max
+        self._decode_mode = decode_mode
+        self._duration_scale = duration_scale
+        self._min_seconds = min_seconds
+        self._max_seconds = max_seconds
+        self._max_ref_seconds = max_ref_seconds
+        self._max_text_len = max_text_len
+        self._max_caption_len = max_caption_len
+        self._truncation_factor = truncation_factor
+        self._rescale_k = rescale_k
+        self._rescale_sigma = rescale_sigma
+        self._tail_window_size = tail_window_size
+        self._tail_std_threshold = tail_std_threshold
+        self._tail_mean_threshold = tail_mean_threshold
+        self._lora_adapter = lora_adapter
         self._runtime: Any = None
 
     def _log(self, msg: str) -> None:
@@ -132,6 +188,47 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         )
 
         device = default_runtime_device()
+        self._hf_checkpoint = os.environ.get("IRODORI_MODEL_ID", self._hf_checkpoint)
+        self._codec_repo = os.environ.get("IRODORI_CODEC_REPO", self._codec_repo)
+        self._num_steps = int(os.environ.get("IRODORI_NUM_STEPS", str(self._num_steps)))
+        self._cfg_scale_text = float(os.environ.get("IRODORI_CFG_SCALE_TEXT", str(self._cfg_scale_text)))
+        self._cfg_scale_speaker = float(os.environ.get("IRODORI_CFG_SCALE_SPEAKER", str(self._cfg_scale_speaker)))
+        self._cfg_guidance_mode = os.environ.get("IRODORI_CFG_GUIDANCE_MODE", self._cfg_guidance_mode)
+        self._cfg_scale = (
+            float(os.environ["IRODORI_CFG_SCALE"]) if os.environ.get("IRODORI_CFG_SCALE") else self._cfg_scale
+        )
+        self._cfg_min_t = float(os.environ.get("IRODORI_CFG_MIN_T", str(self._cfg_min_t)))
+        self._cfg_max_t = float(os.environ.get("IRODORI_CFG_MAX_T", str(self._cfg_max_t)))
+        self._speaker_kv_scale = (
+            float(os.environ["IRODORI_SPEAKER_KV_SCALE"]) if os.environ.get("IRODORI_SPEAKER_KV_SCALE") else self._speaker_kv_scale
+        )
+        self._speaker_kv_min_t = (
+            float(os.environ["IRODORI_SPEAKER_KV_MIN_T"]) if os.environ.get("IRODORI_SPEAKER_KV_MIN_T") else self._speaker_kv_min_t
+        )
+        self._speaker_kv_max_layers = (
+            int(os.environ["IRODORI_SPEAKER_KV_MAX_LAYERS"]) if os.environ.get("IRODORI_SPEAKER_KV_MAX_LAYERS") else self._speaker_kv_max_layers
+        )
+        self._speaker_uncond_mode = os.environ.get("IRODORI_SPEAKER_UNCOND_MODE", self._speaker_uncond_mode)
+        self._t_schedule_mode = os.environ.get("IRODORI_T_SCHEDULE_MODE", self._t_schedule_mode)
+        self._sway_coeff = float(os.environ.get("IRODORI_SWAY_COEFF", str(self._sway_coeff)))
+        self._ref_normalize_db = float(os.environ.get("IRODORI_REF_NORMALIZE_DB", str(self._ref_normalize_db)))
+        self._ref_ensure_max = os.environ.get("IRODORI_REF_ENSURE_MAX", str(int(self._ref_ensure_max))).lower() in ("1", "true", "yes")
+        self._decode_mode = os.environ.get("IRODORI_DECODE_MODE", self._decode_mode)
+        self._duration_scale = float(os.environ.get("IRODORI_DURATION_SCALE", str(self._duration_scale)))
+        self._min_seconds = float(os.environ.get("IRODORI_MIN_SECONDS", str(self._min_seconds)))
+        self._max_seconds = float(os.environ.get("IRODORI_MAX_SECONDS", str(self._max_seconds)))
+        self._max_ref_seconds = (
+            float(os.environ["IRODORI_MAX_REF_SECONDS"]) if os.environ.get("IRODORI_MAX_REF_SECONDS") else self._max_ref_seconds
+        )
+        self._max_text_len = int(os.environ["IRODORI_MAX_TEXT_LEN"]) if os.environ.get("IRODORI_MAX_TEXT_LEN") else self._max_text_len
+        self._max_caption_len = int(os.environ["IRODORI_MAX_CAPTION_LEN"]) if os.environ.get("IRODORI_MAX_CAPTION_LEN") else self._max_caption_len
+        self._truncation_factor = float(os.environ["IRODORI_TRUNCATION_FACTOR"]) if os.environ.get("IRODORI_TRUNCATION_FACTOR") else self._truncation_factor
+        self._rescale_k = float(os.environ["IRODORI_RESCALE_K"]) if os.environ.get("IRODORI_RESCALE_K") else self._rescale_k
+        self._rescale_sigma = float(os.environ["IRODORI_RESCALE_SIGMA"]) if os.environ.get("IRODORI_RESCALE_SIGMA") else self._rescale_sigma
+        self._tail_window_size = int(os.environ.get("IRODORI_TAIL_WINDOW_SIZE", str(self._tail_window_size)))
+        self._tail_std_threshold = float(os.environ.get("IRODORI_TAIL_STD_THRESHOLD", str(self._tail_std_threshold)))
+        self._tail_mean_threshold = float(os.environ.get("IRODORI_TAIL_MEAN_THRESHOLD", str(self._tail_mean_threshold)))
+        self._lora_adapter = os.environ.get("IRODORI_LORA_ADAPTER", self._lora_adapter)
         self._log(f"downloading model {self._hf_checkpoint}...")
         t0 = time.time()
         checkpoint_path = hf_hub_download(
@@ -177,7 +274,10 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         from irodori_tts.inference_runtime import SamplingRequest, save_wav
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
-        output_path = os.path.join(OUTPUT_DIR, "irodori_output.wav")
+        output_path = os.path.join(
+            OUTPUT_DIR,
+            f"irodori_output_{int(time.time() * 1000)}_{os.getpid()}.wav",
+        )
 
         self._log(f"synthesizing ({self._num_steps} steps, linear)...")
         t1 = time.time()
@@ -185,12 +285,38 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
             SamplingRequest(
                 text=stripped,
                 ref_wav=voice_context.reference_audio_path,
+                decode_mode=self._decode_mode,
+                duration_scale=self._duration_scale,
+                min_seconds=self._min_seconds,
+                max_seconds=self._max_seconds,
+                max_ref_seconds=self._max_ref_seconds,
+                max_text_len=self._max_text_len,
+                max_caption_len=self._max_caption_len,
                 num_steps=self._num_steps,
-                t_schedule_mode="linear",
-                cfg_scale_text=2.0,
-                cfg_scale_speaker=3.0,
+                cfg_guidance_mode=self._cfg_guidance_mode,
+                cfg_scale=self._cfg_scale,
+                t_schedule_mode=self._t_schedule_mode,
+                sway_coeff=self._sway_coeff,
+                ref_normalize_db=self._ref_normalize_db,
+                ref_ensure_max=self._ref_ensure_max,
+                cfg_scale_text=self._cfg_scale_text,
+                cfg_scale_caption=self._cfg_scale_text,
+                cfg_scale_speaker=self._cfg_scale_speaker,
+                cfg_min_t=self._cfg_min_t,
+                cfg_max_t=self._cfg_max_t,
+                truncation_factor=self._truncation_factor,
+                rescale_k=self._rescale_k,
+                rescale_sigma=self._rescale_sigma,
                 trim_tail=True,
+                tail_window_size=self._tail_window_size,
+                tail_std_threshold=self._tail_std_threshold,
+                tail_mean_threshold=self._tail_mean_threshold,
                 context_kv_cache=True,
+                speaker_kv_scale=self._speaker_kv_scale,
+                speaker_kv_min_t=self._speaker_kv_min_t,
+                speaker_kv_max_layers=self._speaker_kv_max_layers,
+                speaker_uncond_mode=self._speaker_uncond_mode,
+                lora_adapter=self._lora_adapter,
             )
         )
         self._log(f"inference: {time.time()-t1:.2f}s")

@@ -2,79 +2,105 @@
 
 PTT_HTML = """
 <div id="ptt-container">
-  <button id="ptt-btn"
-    class="ptt-idle"
-    onpointerdown="pttStart(event)"
-    onpointerup="pttStop(event)"
-    onpointercancel="pttStop(event)">
+  <button id="ptt-btn" class="ptt-idle" aria-label="押して話す">
     <span id="ptt-label">押して話す</span>
   </button>
   <div id="ptt-hint">ボタンを押しながら話す、離すと自動変換</div>
 </div>
-<script>
-let pttState = 0;
-let pttTimer = null;
+"""
 
-function findAudioButton(wrap, candidates) {
-  if (!wrap) return null;
-  const buttons = Array.from(wrap.querySelectorAll("button"));
-  return buttons.find((b) => {
-    const haystack = [
-      b.textContent || "",
-      b.getAttribute("aria-label") || "",
-      b.getAttribute("title") || "",
-      b.className || "",
-    ].join(" ").toLowerCase();
-    return candidates.some((c) => haystack.includes(c));
-  }) || null;
-}
+PTT_JS = r"""
+(function () {
+  let pttState = 0;
 
-function pttStart(e) {
-  if (e) e.preventDefault();
-  if (pttState === 1) return;
-  pttState = 1;
-  const btn = document.getElementById('ptt-btn');
-  const label = document.getElementById('ptt-label');
-  btn.className = 'ptt-recording';
-  label.textContent = '話し終えたら離す';
-  document.getElementById('ptt-hint').textContent = '録音中…';
-
-  const wrap = document.getElementById('simple-audio-wrap');
-  const recBtn = findAudioButton(wrap, ["record", "録音", "start", "microphone", "mic"]);
-  if (recBtn) {
-    recBtn.click();
-    return;
+  function setHint(text) {
+    const hint = document.getElementById('ptt-hint');
+    if (hint) hint.textContent = text;
   }
-  const hint = document.getElementById('ptt-hint');
-  if (hint) hint.textContent = '録音ボタンが見つかりません。通常モードで録音してください。';
-  pttState = 0;
-  btn.className = 'ptt-idle';
-  label.textContent = '押して話す';
-}
 
-function pttStop() {
-  if (pttState !== 1) return;
-  pttState = 0;
-  const btn = document.getElementById('ptt-btn');
-  const label = document.getElementById('ptt-label');
-  btn.className = 'ptt-idle';
-  label.textContent = '押して話す';
-  document.getElementById('ptt-hint').textContent = '変換中…';
-
-  const wrap = document.getElementById('simple-audio-wrap');
-  const stopBtn = findAudioButton(wrap, ["stop", "停止", "done", "完了"]);
-  if (stopBtn) {
-    stopBtn.click();
-    return;
+  function setButtonState(recording) {
+    const btn = document.getElementById('ptt-btn');
+    const label = document.getElementById('ptt-label');
+    if (!btn || !label) return;
+    if (recording) {
+      btn.className = 'ptt-recording';
+      btn.setAttribute('aria-label', '録音中');
+      label.textContent = '話し終えたら離す';
+    } else {
+      btn.className = 'ptt-idle';
+      btn.setAttribute('aria-label', '押して話す');
+      label.textContent = '押して話す';
+    }
   }
-  const hint = document.getElementById('ptt-hint');
-  if (hint) hint.textContent = '停止ボタンが見つかりません。通常モードで録音してください。';
 
-  if (pttTimer) clearTimeout(pttTimer);
-  pttTimer = setTimeout(() => {
-    const h = document.getElementById('ptt-hint');
-    if (h) h.textContent = 'ボタンを押しながら話す、離すと自動変換';
-  }, 5000);
-}
-</script>
+  function findAudioWrap() {
+    return document.getElementById('simple-audio-wrap');
+  }
+
+  function findControlButton(wrap, name) {
+    if (!wrap) return null;
+    const target = name.toLowerCase();
+    return Array.from(wrap.querySelectorAll('button')).find((b) => {
+      const text = (b.textContent || '').trim().toLowerCase();
+      const aria = (b.getAttribute('aria-label') || '').toLowerCase();
+      const title = (b.getAttribute('title') || '').toLowerCase();
+      return text === target || text.includes(target) || aria.includes(target) || title.includes(target);
+    }) || null;
+  }
+
+  function clickNativeControl(name) {
+    const wrap = findAudioWrap();
+    const btn = findControlButton(wrap, name);
+    if (!btn) return false;
+    btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+    btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+    btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    return true;
+  }
+
+  function startRecording() {
+    if (pttState === 1) return;
+    pttState = 1;
+    setButtonState(true);
+    setHint('録音中…');
+    if (!clickNativeControl('record')) {
+      pttState = 0;
+      setButtonState(false);
+      setHint('録音ボタンが見つかりませんでした。');
+    }
+  }
+
+  function stopRecording() {
+    if (pttState !== 1) return;
+    pttState = 0;
+    setButtonState(false);
+    setHint('変換中…');
+    if (!clickNativeControl('stop')) {
+      setHint('停止ボタンが見つかりませんでした。');
+      return;
+    }
+  }
+
+  function attachPTTHandlers() {
+    const btn = document.getElementById('ptt-btn');
+    if (!btn || btn.dataset.pttBound === '1') return;
+    btn.dataset.pttBound = '1';
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      startRecording();
+    }, { passive: false });
+    btn.addEventListener('pointerup', (e) => {
+      e.preventDefault();
+      stopRecording();
+    });
+    btn.addEventListener('pointercancel', stopRecording);
+    btn.addEventListener('pointerleave', stopRecording);
+  }
+
+  attachPTTHandlers();
+  setTimeout(attachPTTHandlers, 100);
+  setTimeout(attachPTTHandlers, 500);
+})();
 """
