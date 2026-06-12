@@ -121,9 +121,8 @@ class OllamaTextTransformBackend(TextTransformBackend):
                 result = text
             if not validate_transform(text, result):
                 logger.warning("text_transform.validation_failed model=%s", self.model)
-                return text
-            else:
-                logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
+                return result
+            logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
             return result
         except (httpx.ConnectError, httpx.TimeoutException) as e:
             if self.strict:

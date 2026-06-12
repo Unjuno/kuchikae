@@ -121,3 +121,45 @@ def test_fuse_voice_styles_all_sources() -> None:
     assert "transformed" in result.source
     assert "audio" in result.source
 
+
+def test_fuse_voice_styles_confidence_weighted() -> None:
+    source = VoiceStyle(mood=VoiceMood.URGENT, confidence=0.3, source="rule")
+    transformed = VoiceStyle(mood=VoiceMood.WARM, confidence=0.9, source="rule")
+    result = fuse_voice_styles(source, transformed, None)
+    assert result.mood == VoiceMood.WARM
+
+
+def test_fuse_voice_styles_low_confidence_source_ignored() -> None:
+    source = VoiceStyle(mood=VoiceMood.URGENT, confidence=0.1, source="rule")
+    transformed = VoiceStyle(mood=VoiceMood.WARM, confidence=0.9, source="rule")
+    result = fuse_voice_styles(source, transformed, None)
+    assert result.mood == VoiceMood.WARM
+
+
+def test_fuse_voice_styles_high_confidence_source_wins() -> None:
+    source = VoiceStyle(mood=VoiceMood.URGENT, confidence=0.95, source="rule")
+    transformed = VoiceStyle(mood=VoiceMood.WARM, confidence=0.3, source="rule")
+    result = fuse_voice_styles(source, transformed, None)
+    assert result.mood == VoiceMood.URGENT
+
+
+def test_audio_emotion_mood_anger() -> None:
+    signal = audio_emotion_to_voice_style(AudioEmotion(mood="anger", confidence=0.7))
+    assert signal.mood == VoiceMood.SERIOUS
+    assert signal.speed == VoiceSpeed.NORMAL
+    assert signal.emphasis == VoiceEmphasis.HIGH
+
+
+def test_audio_emotion_mood_calm() -> None:
+    signal = audio_emotion_to_voice_style(AudioEmotion(mood="calm", confidence=0.6))
+    assert signal.mood == VoiceMood.CALM
+    assert signal.speed == VoiceSpeed.SLOW
+    assert signal.emphasis == VoiceEmphasis.MEDIUM
+
+
+def test_audio_emotion_mood_neutral() -> None:
+    signal = audio_emotion_to_voice_style(AudioEmotion(mood="neutral", confidence=0.5))
+    assert signal.mood == VoiceMood.NEUTRAL
+    assert signal.speed == VoiceSpeed.NORMAL
+    assert signal.emphasis == VoiceEmphasis.MEDIUM
+

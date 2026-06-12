@@ -112,13 +112,15 @@ class TransformersAudioEmotionDetector:
     def _map_label(self, label: str) -> tuple[str, str, float, float]:
         label = label.lower()
         if any(k in label for k in ("happy", "joy", "excited")):
-            return "bright", "high", 0.8, 0.7
+            return "happy", "high", 0.8, 0.7
         if any(k in label for k in ("anger", "angry", "ang")):
-            return "serious", "high", 0.85, -0.7
+            return "anger", "high", 0.85, -0.7
         if "sad" in label:
-            return "calm", "low", 0.2, -0.6
-        if any(k in label for k in ("neutral", "calm")):
-            return "neutral", "medium", 0.4, 0.0
+            return "sad", "low", 0.2, -0.6
+        if "calm" in label:
+            return "calm", "medium", 0.4, 0.3
+        if "neutral" in label:
+            return "neutral", "medium", 0.5, 0.0
         return "neutral", "medium", 0.5, 0.0
 
     def detect(self, audio_path: str) -> AudioEmotion:

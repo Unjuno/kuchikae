@@ -20,13 +20,6 @@ from kuchikae.ui.templates import TEMPLATES
 
 logger = logging.getLogger("kuchikae.ui.handlers")
 
-VOICE_STYLE_PRESETS = {
-    "natural": "自然で聞き取りやすく、元話者の声質に近い雰囲気で読んでください。文章内容は変えないでください。",
-    "calm": "落ち着いた声で、自然な速さで、聞き取りやすく読んでください。文章内容は変えないでください。",
-    "bright": "明るく、自然な抑揚で、聞き取りやすく読んでください。文章内容は変えないでください。",
-    "slow_clear": "少しゆっくり、明瞭に、聞き取りやすく読んでください。文章内容は変えないでください。",
-}
-
 
 def normalize_audio_path(audio_input) -> str | None:
     if audio_input is None:

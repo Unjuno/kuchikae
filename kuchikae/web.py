@@ -57,7 +57,72 @@ def _normalize_audio_path(audio_input: Any) -> str:
     return path
 
 
-def serve() -> None:
+def build_pipeline_config_from_env(
+    dummy: bool = False,
+    real: bool = False,
+    streaming: bool | None = None,
+) -> dict:
+    """Build pipeline config from environment variables.
+    
+    Args:
+        dummy: Use dummy backends for smoke testing
+        real: Use real backends (requires models)
+        streaming: Enable streaming STT (None = check env var)
+    """
+    streaming_stt = (
+        bool(streaming)
+        if streaming is not None
+        else os.environ.get("KUCHIKAE_STREAMING_STT", "").lower() in ("1", "true", "yes")
+    )
+    
+    common = {
+        "stt_preset": os.environ.get("KUCHIKAE_STT_PRESET", "balanced"),
+        "text_transform_model": os.environ.get("KUCHIKAE_TEXT_MODEL"),
+        "streaming_stt": streaming_stt,
+        "segmented_stt": os.environ.get("KUCHIKAE_SEGMENTED_STT", "").lower() in ("1", "true", "yes"),
+    }
+    
+    if dummy:
+        return {
+            **common,
+            "stt_backend": "dummy",
+            "text_transform_backend": "prompted_rule",
+            "voice_output_backend": "dummy",
+            "allow_dummy_backends": True,
+        }
+    
+    if real:
+        return {
+            **common,
+            "stt_backend": os.environ.get("KUCHIKAE_STT_BACKEND", "faster_whisper"),
+            "text_transform_backend": os.environ.get("KUCHIKAE_TEXT_BACKEND", "ollama"),
+            "voice_output_backend": os.environ.get("KUCHIKAE_VOICE_BACKEND", "irodori"),
+            "allow_dummy_backends": False,
+        }
+    
+    return {
+        **common,
+        "stt_backend": os.environ.get("KUCHIKAE_STT_BACKEND", "dummy"),
+        "text_transform_backend": os.environ.get("KUCHIKAE_TEXT_BACKEND", "prompted_rule"),
+        "voice_output_backend": os.environ.get("KUCHIKAE_VOICE_BACKEND", "dummy"),
+        "allow_dummy_backends": os.environ.get("KUCHIKAE_ALLOW_DUMMY_BACKENDS", "1").lower() in ("1", "true", "yes"),
+    }
+
+
+def serve(
+    dummy: bool = False,
+    real: bool = False,
+    streaming: bool | None = None,
+    port: int | None = None,
+) -> None:
+    """Start the Kuchikae web server.
+    
+    Args:
+        dummy: Use dummy backends for smoke testing
+        real: Use real backends (requires models)
+        streaming: Enable streaming STT
+        port: Server port (default: 7860)
+    """
     logging.basicConfig(
         stream=sys.stderr,
         level=logging.DEBUG,
@@ -68,28 +133,20 @@ def serve() -> None:
     default_prompt = TextTransformPrompt.from_file()
     default_voice_prompt = VoiceOutputPrompt.from_file()
     
-    # Check for streaming STT config via env var
-    streaming_stt = os.environ.get("KUCHIKAE_STREAMING_STT", "").lower() in ("1", "true", "yes")
-    pipeline = create_pipeline(
-        {
-            "stt_backend": os.environ.get("KUCHIKAE_STT_BACKEND", "faster_whisper"),
-            "stt_preset": os.environ.get("KUCHIKAE_STT_PRESET", "balanced"),
-            "text_transform_backend": os.environ.get("KUCHIKAE_TEXT_BACKEND", "ollama"),
-            "text_transform_model": os.environ.get("KUCHIKAE_TEXT_MODEL"),
-            "voice_output_backend": os.environ.get("KUCHIKAE_VOICE_BACKEND", "irodori"),
-            "streaming_stt": streaming_stt,
-            "segmented_stt": os.environ.get("KUCHIKAE_SEGMENTED_STT", "").lower() in ("1", "true", "yes"),
-            "allow_dummy_backends": os.environ.get("KUCHIKAE_ALLOW_DUMMY_BACKENDS", "").lower() in ("1", "true", "yes"),
-        }
-    )
+    config = build_pipeline_config_from_env(dummy=dummy, real=real, streaming=streaming)
+    pipeline = create_pipeline(config)
     pipeline.warmup()
+    
+    live_streaming = config.get("streaming_stt", False)
     demo = create_app(
         pipeline,
         default_prompt,
         default_voice_prompt,
-        live_streaming=streaming_stt,
+        live_streaming=live_streaming,
     )
-    demo.launch(css=CSS, server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")))
+    
+    server_port = port or int(os.environ.get("GRADIO_SERVER_PORT", "7860"))
+    demo.launch(css=CSS, server_port=server_port)
 
 
 if __name__ == "__main__":

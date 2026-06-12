@@ -96,7 +96,7 @@ def test_transformers_audio_emotion_resamples_and_trims(tmp_path, monkeypatch) -
 
     emotion = detector.detect(str(wav))
 
-    assert emotion.mood == "bright"
+    assert emotion.mood == "happy"
     assert emotion.energy == "high"
     assert emotion.valence > 0
     assert processor.calls

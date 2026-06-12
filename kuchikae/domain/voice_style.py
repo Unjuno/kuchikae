@@ -92,7 +92,11 @@ def audio_emotion_to_voice_style(emotion: AudioEmotion) -> StyleSignal:
         mood = VoiceMood.CALM
         speed = VoiceSpeed.SLOW
         emphasis = VoiceEmphasis.LOW
-    elif any(k in label for k in ("neutral", "calm")):
+    elif "calm" in label:
+        mood = VoiceMood.CALM
+        speed = VoiceSpeed.SLOW
+        emphasis = VoiceEmphasis.MEDIUM
+    elif "neutral" in label:
         mood = VoiceMood.NEUTRAL
         speed = VoiceSpeed.NORMAL
         emphasis = VoiceEmphasis.MEDIUM
@@ -146,9 +150,9 @@ def fuse_voice_styles(
     W_AUDIO = 0.20
 
     mood_scores: dict[VoiceMood, float] = {}
-    mood_scores[transformed_style.mood] = mood_scores.get(transformed_style.mood, 0) + W_TRANSFORMED
+    mood_scores[transformed_style.mood] = mood_scores.get(transformed_style.mood, 0) + W_TRANSFORMED * transformed_style.confidence
     if source_style is not None:
-        mood_scores[source_style.mood] = mood_scores.get(source_style.mood, 0) + W_SOURCE
+        mood_scores[source_style.mood] = mood_scores.get(source_style.mood, 0) + W_SOURCE * source_style.confidence
 
     audio_signal = None
     if audio_emotion is not None and audio_emotion.confidence >= 0.5:
