@@ -16,16 +16,9 @@ import soundfile as sf
 from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.domain.voice_style import VOICE_STYLE_PRESETS
 from kuchikae.pipeline import KuchikaePipeline
+from kuchikae.ui.templates import TEMPLATES
 
 logger = logging.getLogger("kuchikae.ui.handlers")
-
-TEMPLATES = {
-    "自然に": "内容、数字、日時、固有名詞、否定条件は保ちつつ、言い回しを自然な日本語に変換してください。",
-    "丁寧に": "次のテキストを「です・ます」調の丁寧な言葉遣いに変換してください。",
-    "柔らかく": "次のテキストを柔らかく丁寧な表現に変換してください。",
-    "短く": "次のテキストを簡潔に短く要約・変換してください。内容や固有名詞は変えないでください。",
-    "カスタム": "",
-}
 
 VOICE_STYLE_PRESETS = {
     "natural": "自然で聞き取りやすく、元話者の声質に近い雰囲気で読んでください。文章内容は変えないでください。",
@@ -339,5 +332,5 @@ def run(
 def on_template_change(template_name: str):
     if template_name == "カスタム":
         return gr.update()
-    text = TEMPLATES.get(template_name, "")
+    text = TEMPLATES.get(template_name, TEMPLATES["自然に"])
     return gr.update(value=text)

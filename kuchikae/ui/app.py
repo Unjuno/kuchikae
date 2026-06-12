@@ -42,7 +42,7 @@ def create_app(
 
             with gr.Tabs(elem_classes="tabs"):
                 with gr.Tab("通常"):
-                    template = gr.Radio(
+                    template = gr.Dropdown(
                         elem_id="template-select",
                         label="どう言い換える？",
                         choices=list(TEMPLATES.keys()),
