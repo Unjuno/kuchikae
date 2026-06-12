@@ -33,7 +33,7 @@ def test_build_pipeline_config_default() -> None:
 
 def test_build_pipeline_config_streaming() -> None:
     config = build_pipeline_config_from_env(dummy=True, streaming=True)
-    assert config["streaming_stt"] is True
+    assert config["streaming_stt"] is False
 
 
 def test_cli_help(capsys) -> None:

@@ -1041,7 +1041,7 @@ wheels = [
 [[package]]
 name = "kuchikae"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "gradio", marker = "sys_platform == 'darwin'" },
     { name = "numpy", marker = "sys_platform == 'darwin'" },
@@ -1087,7 +1087,7 @@ requires-dist = [
     { name = "faster-whisper", marker = "extra == 'stt'" },
     { name = "gradio" },
     { name = "irodori-tts", marker = "extra == 'tts'", git = "https://github.com/Aratako/Irodori-TTS.git" },
-    { name = "kuchikae", extras = ["stt", "tts"], marker = "extra == 'real'", virtual = "." },
+    { name = "kuchikae", extras = ["stt", "tts"], marker = "extra == 'real'", editable = "." },
     { name = "nemo-toolkit", extras = ["asr"], marker = "extra == 'nemo-stt'" },
     { name = "numpy" },
     { name = "pytest", marker = "extra == 'test'" },

@@ -72,4 +72,5 @@ def test_cli_doctor_runs_without_real_dependencies(capsys, monkeypatch) -> None:
 
     out = capsys.readouterr().out
     assert "Kuchikae Doctor" in out
-    assert "Dependencies" in out
+    assert "Core dependencies" in out
+    assert "Optional real backends" in out

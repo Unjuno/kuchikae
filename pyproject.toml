@@ -33,7 +33,11 @@ real = [
 [project.scripts]
 kuchikae = "kuchikae.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["kuchikae*"]
+
 [tool.uv]
+package = true
 environments = ["sys_platform == 'darwin'"]
 
 [tool.uv.sources]
