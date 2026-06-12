@@ -17,6 +17,11 @@
       "command": ["npx", "-y", "chrome-devtools-mcp@latest", "--autoConnect", "--channel=stable"],
       "enabled": true
     },
+    "huggingface": {
+      "type": "local",
+      "command": ["npx", "-y", "@llmindset/hf-mcp-server"],
+      "enabled": true
+    },
     "deepl": {
       "type": "local",
       "command": ["npx", "deepl-mcp-server"],

@@ -19,7 +19,7 @@ from kuchikae.ui.handlers import (
     run,
     run_simple,
 )
-from kuchikae.ui.js import PTT_HTML
+from kuchikae.ui.js import PTT_HTML, PTT_JS
 
 logger = logging.getLogger("kuchikae.ui.app")
 
@@ -90,7 +90,7 @@ def create_app(
                     )
 
                     def _run_handler(audio_value, template_value, text_prompt_value, voice_prompt_value):
-                        return run(
+                        yield from run(
                             audio_value,
                             template_value,
                             text_prompt_value,
@@ -118,10 +118,7 @@ def create_app(
                         type="filepath",
                     )
 
-                    # NOTE: This is a temporary Gradio Audio stop-event flow.
-                    # It intentionally avoids a DOM fallback click chain and is not
-                    # the final Web Audio API MediaRecorder design.
-                    gr.HTML(PTT_HTML)
+                    gr.HTML(PTT_HTML, js_on_load=PTT_JS)
 
                     simple_voice_prompt = gr.Textbox(
                         elem_id="simple-voice-prompt-box",
@@ -152,7 +149,7 @@ def create_app(
                     )
 
                     def _run_simple_handler(audio_value, voice_prompt_value):
-                        return run_simple(
+                        yield from run_simple(
                             pipeline,
                             audio_value,
                             live_streaming=live_streaming,
@@ -162,6 +159,11 @@ def create_app(
                     simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
 
                     simple_audio.stop(
+                        _run_simple_handler,
+                        inputs=[simple_audio, simple_voice_prompt],
+                        outputs=[simple_output, simple_source, simple_transformed, simple_status],
+                    )
+                    simple_audio.change(
                         _run_simple_handler,
                         inputs=[simple_audio, simple_voice_prompt],
                         outputs=[simple_output, simple_source, simple_transformed, simple_status],

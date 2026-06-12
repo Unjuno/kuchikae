@@ -19,9 +19,12 @@ logger = logging.getLogger(__name__)
 
 class FasterWhisperSTTBackend(STTBackend):
 
-    def __init__(self, model_size: str = "small") -> None:
+    def __init__(self, model_size: str = "tiny") -> None:
         self._model_size = model_size
         self._model = None
+        self._resolved_model_size: str | None = None
+        self._device: str | None = None
+        self._compute_type: str | None = None
         try:
             from faster_whisper import WhisperModel  # noqa: F401
         except ImportError:
@@ -36,9 +39,14 @@ class FasterWhisperSTTBackend(STTBackend):
         from faster_whisper import WhisperModel
 
         model_size = os.environ.get("WHISPER_MODEL_SIZE", self._model_size)
-        logger.info("loading whisper model '%s' (CPU int8)...", model_size)
+        device = os.environ.get("WHISPER_DEVICE", "cpu")
+        compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
+        logger.info("loading whisper model '%s' (device=%s compute_type=%s)...", model_size, device, compute_type)
         t0 = time.time()
-        self._model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        self._model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        self._resolved_model_size = model_size
+        self._device = device
+        self._compute_type = compute_type
         logger.info("whisper model loaded in %.2fs", time.time() - t0)
         return self._model
 
@@ -46,7 +54,14 @@ class FasterWhisperSTTBackend(STTBackend):
         model = self._load_model()
 
         t1 = time.time()
-        segments, info = model.transcribe(audio_path, language="ja")
+        segments, info = model.transcribe(
+            audio_path,
+            language="ja",
+            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", "1")),
+            vad_filter=os.environ.get("WHISPER_VAD_FILTER", "1").lower() in ("1", "true", "yes"),
+            temperature=float(os.environ.get("WHISPER_TEMPERATURE", "0.0")),
+            condition_on_previous_text=os.environ.get("WHISPER_CONDITION_ON_PREVIOUS_TEXT", "0").lower() in ("1", "true", "yes"),
+        )
         logger.info("whisper transcribe: %.2fs", time.time() - t1)
 
         result = " ".join(seg.text for seg in segments)
@@ -57,7 +72,14 @@ class FasterWhisperSTTBackend(STTBackend):
         model = self._load_model()
 
         t1 = time.time()
-        segments, info = model.transcribe(audio_path, language="ja")
+        segments, info = model.transcribe(
+            audio_path,
+            language="ja",
+            beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", "1")),
+            vad_filter=os.environ.get("WHISPER_VAD_FILTER", "1").lower() in ("1", "true", "yes"),
+            temperature=float(os.environ.get("WHISPER_TEMPERATURE", "0.0")),
+            condition_on_previous_text=os.environ.get("WHISPER_CONDITION_ON_PREVIOUS_TEXT", "0").lower() in ("1", "true", "yes"),
+        )
         logger.info("whisper transcribe: %.2fs", time.time() - t1)
 
         accumulated = []
@@ -73,7 +95,7 @@ class StreamingFasterWhisperSTTBackend(FasterWhisperSTTBackend):
     Suitable for showing live transcription during/after recording.
     """
 
-    def __init__(self, model_size: str = "small", chunk_sec: float = 5.0, overlap_sec: float = 1.0) -> None:
+    def __init__(self, model_size: str = "tiny", chunk_sec: float = 5.0, overlap_sec: float = 1.0) -> None:
         super().__init__(model_size)
         self._chunk_sec = chunk_sec
         self._overlap_sec = overlap_sec
@@ -98,7 +120,14 @@ class StreamingFasterWhisperSTTBackend(FasterWhisperSTTBackend):
             
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 sf.write(tmp.name, chunk, sr)
-                segments, _ = model.transcribe(tmp.name, language="ja")
+                segments, _ = model.transcribe(
+                    tmp.name,
+                    language="ja",
+                    beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", "1")),
+                    vad_filter=os.environ.get("WHISPER_VAD_FILTER", "1").lower() in ("1", "true", "yes"),
+                    temperature=float(os.environ.get("WHISPER_TEMPERATURE", "0.0")),
+                    condition_on_previous_text=os.environ.get("WHISPER_CONDITION_ON_PREVIOUS_TEXT", "0").lower() in ("1", "true", "yes"),
+                )
                 os.unlink(tmp.name)
             
             chunk_text = " ".join(seg.text for seg in segments).strip()

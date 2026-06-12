@@ -15,6 +15,10 @@ test = [
 ]
 stt = [
     "faster-whisper",
+    "transformers>=4.39.0",
+]
+nemo-stt = [
+    "nemo_toolkit[asr]",
 ]
 tts = [
     "torch>=2.12.0",

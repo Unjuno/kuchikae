@@ -8,7 +8,7 @@ import numpy as np
 import soundfile as sf
 
 from kuchikae.ui import normalize_audio_path
-from kuchikae.ui.js import PTT_HTML
+from kuchikae.ui.js import PTT_HTML, PTT_JS
 
 
 def test_str_existing_file(tmp_path: str) -> None:
@@ -77,10 +77,8 @@ def test_dict_prefers_path_over_orig_name(tmp_path: str) -> None:
 
 
 def test_ptt_html_uses_find_audio_button_and_no_raw_button_fallback() -> None:
-    assert "findAudioButton" in PTT_HTML
-    assert "function findBtn" not in PTT_HTML
-    assert "querySelector('button')" not in PTT_HTML
-    assert 'querySelectorAll(\'#simple-audio-wrap button' not in PTT_HTML
-    assert "onmouseleave" not in PTT_HTML
-    assert "onpointerdown" in PTT_HTML
-    assert "onpointerup" in PTT_HTML
+    assert "clickNativeControl('record')" in PTT_JS
+    assert "clickNativeControl('stop')" in PTT_JS
+    assert "onpointerdown" not in PTT_HTML
+    assert "onpointerup" not in PTT_HTML
+    assert "addEventListener('pointerdown'" in PTT_JS

@@ -8,6 +8,10 @@ from kuchikae.backends.stt import (
     FasterWhisperSTTBackend,
     StreamingFasterWhisperSTTBackend,
 )
+from kuchikae.backends.stt_ct2 import AnimeWhisperCT2FP16STTBackend, AnimeWhisperCT2STTBackend
+from kuchikae.backends.stt_nemo import ReazonSpeechNemoASRBackend
+from kuchikae.backends.stt_transformers import TransformersJapaneseASRBackend
+from kuchikae.backends.stt_transformers_whisper import TransformersWhisperJapaneseASRBackend
 from kuchikae.backends.voice_output import (
     IrodoriTTSVoiceOutputBackend,
     OpenVoiceOutputBackend,
@@ -15,8 +19,13 @@ from kuchikae.backends.voice_output import (
 
 __all__ = [
     "ChunkedStreamingSTTBackend",
+    "AnimeWhisperCT2FP16STTBackend",
+    "AnimeWhisperCT2STTBackend",
     "FasterWhisperSTTBackend",
     "IrodoriTTSVoiceOutputBackend",
     "OpenVoiceOutputBackend",
+    "ReazonSpeechNemoASRBackend",
+    "TransformersJapaneseASRBackend",
+    "TransformersWhisperJapaneseASRBackend",
     "StreamingFasterWhisperSTTBackend",
 ]

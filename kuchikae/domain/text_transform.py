@@ -95,6 +95,14 @@ class OllamaTextTransformBackend(TextTransformBackend):
             else:
                 logger.info("ollama: %.2fs → %s", time.time() - t0, result[:60])
             return result
+        except (httpx.ConnectError, httpx.TimeoutException) as e:
+            if self.strict:
+                raise RuntimeError(
+                    "Ollama text transform is unavailable. "
+                    "Start the Ollama server and make sure the requested model is pulled."
+                ) from e
+            logger.warning("ollama unavailable, falling back to original text: %s", e)
+            return text
         except Exception as e:
             if self.strict:
                 raise RuntimeError(

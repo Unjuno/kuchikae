@@ -17,9 +17,8 @@ import tempfile
 import time
 from pathlib import Path
 
-import numpy as np
 import pytest
-import soundfile as sf
+from gradio_client import Client, handle_file
 
 
 pytestmark = pytest.mark.skipif(
@@ -34,21 +33,17 @@ def app_url() -> str:
     return url
 
 
-@pytest.fixture(scope="module")
-def dummy_wav() -> str:
-    tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-    sf.write(tmp.name, np.zeros(44100, dtype=np.float32), 44100)
-    yield tmp.name
-    os.unlink(tmp.name)
-
-
 def test_app_loads(page, app_url):
     page.goto(app_url)
-    assert "Kuchikae" in page.title()
+    page.wait_for_load_state("networkidle")
+    page.wait_for_selector("gradio-app")
+    page.wait_for_selector("#title")
+    assert "Kuchikae" in page.content()
 
 
 def test_title_displayed(page, app_url):
     page.goto(app_url)
+    page.wait_for_load_state("networkidle")
     title = page.locator("#title")
     assert title.is_visible()
     assert title.text_content() == "Kuchikae"
@@ -56,6 +51,7 @@ def test_title_displayed(page, app_url):
 
 def test_two_tabs_exist(page, app_url):
     page.goto(app_url)
+    page.wait_for_load_state("networkidle")
     tabs = page.locator("button[role='tab']")
     assert tabs.count() == 2
     assert tabs.nth(0).text_content() == "通常"
@@ -64,17 +60,19 @@ def test_two_tabs_exist(page, app_url):
 
 def test_normal_tab_components(page, app_url):
     page.goto(app_url)
+    page.wait_for_load_state("networkidle")
     assert page.locator("#template-select").is_visible()
     assert page.locator("#audio-input-wrap").is_visible()
     assert page.locator("#run-btn").is_visible()
     assert page.locator("#source-text").is_visible()
     assert page.locator("#transformed-text").is_visible()
     assert page.locator("#output-audio").is_visible()
-    assert page.locator("#run-btn").text_content() == "言い直す"
+    assert page.locator("#run-btn").text_content().strip() == "言い直す"
 
 
 def test_simple_tab_components(page, app_url):
     page.goto(app_url)
+    page.wait_for_load_state("networkidle")
     page.locator("button[role='tab']:has-text('簡易')").click()
     page.wait_for_timeout(500)
     assert page.locator("#simple-audio-wrap").is_visible()
@@ -86,23 +84,40 @@ def test_simple_tab_components(page, app_url):
 
 def test_simple_tab_no_run_button(page, app_url):
     page.goto(app_url)
+    page.wait_for_load_state("networkidle")
     page.locator("button[role='tab']:has-text('簡易')").click()
     page.wait_for_timeout(500)
     assert page.locator("#run-btn").is_hidden() or not page.locator("#run-btn").is_visible()
 
 
-def test_normal_tab_upload_file_and_run(page, app_url, dummy_wav):
+def test_normal_tab_record_and_run(page, app_url):
     page.goto(app_url)
-    file_input = page.locator("#audio-input-wrap input[type='file']")
-    file_input.set_input_files(dummy_wav)
-    page.wait_for_timeout(1000)
-    page.locator("#run-btn").click()
-    page.wait_for_timeout(2000)
+    page.wait_for_load_state("networkidle")
+    outputs = sorted(Path(__file__).resolve().parents[1].glob("outputs/irodori_output_*.wav"))
+    assert outputs, "expected a real Japanese audio fixture under outputs/"
+    sample = outputs[-1]
+    client = Client(app_url)
+    result = client.predict(
+        audio_value=handle_file(str(sample)),
+        template_value="自然に",
+        text_prompt_value="内容、数字、日時、固有名詞、否定条件は保ちつつ、言い回しを丁寧で自然な日本語に変換してください。",
+        voice_prompt_value="入力テキストを自然な日本語の音声として合成してください。\n話者の声質・抑揚・リズムを保ち、聞き取りやすい音声を生成してください。",
+        api_name="/_run_handler",
+    )
+    assert isinstance(result, tuple)
+    assert len(result) == 4
+    output_audio, source_text, transformed_text, status = result
+    assert source_text
+    assert transformed_text
+    assert status == "言い直しました"
+    assert isinstance(output_audio, str)
+    assert Path(output_audio).is_file()
 
 
 def test_simple_tab_upload_does_not_exist(page, app_url):
     """Simple mode should not have an upload button (mic only)."""
     page.goto(app_url)
+    page.wait_for_load_state("networkidle")
     page.locator("button[role='tab']:has-text('簡易')").click()
     page.wait_for_timeout(500)
     upload_btn = page.locator("#simple-audio-wrap button:has-text('Upload')")
@@ -112,6 +127,7 @@ def test_simple_tab_upload_does_not_exist(page, app_url):
 def test_no_contrast_issues(page, app_url):
     """Verify text-dark-on-dark-bg issues in both tabs."""
     page.goto(app_url)
+    page.wait_for_load_state("networkidle")
     body = page.locator("body")
     bg = body.evaluate("el => getComputedStyle(el).backgroundColor")
     color = body.evaluate("el => getComputedStyle(el).color")
