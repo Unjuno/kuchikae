@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import os
 from unittest.mock import patch
 
@@ -490,6 +491,67 @@ def test_audio_emotion_detector_can_timeout_without_failure(tmp_path, monkeypatc
     pipeline = KuchikaePipeline(audio_emotion_detector=SlowDetector(), voice_style_timeout_sec=0.01)
     result = pipeline.process(str(wav), TextTransformPrompt(instruction="テスト"), None)
     assert isinstance(result.output_audio_path, str)
+
+
+@pytest.mark.parametrize("method_name", ["process", "process_stream", "process_stream_live"])
+def test_audio_emotion_starts_before_stt_work(tmp_path, method_name) -> None:
+    class BlockingDetector:
+        def __init__(self) -> None:
+            self.started = threading.Event()
+            self.release = threading.Event()
+
+        def detect(self, audio_path: str) -> AudioEmotion:
+            self.started.set()
+            self.release.wait(timeout=1.0)
+            return AudioEmotion()
+
+    class GuardedSTTBackend(CountingSTTBackend):
+        def __init__(self, detector: BlockingDetector) -> None:
+            super().__init__()
+            self.detector = detector
+
+        def transcribe(self, audio_path: str) -> str:
+            assert self.detector.started.wait(timeout=0.5), "audio emotion should start before STT work"
+            return super().transcribe(audio_path)
+
+    wav = tmp_path / f"{method_name}.wav"
+    _write_wav(str(wav))
+    detector = BlockingDetector()
+    pipeline = KuchikaePipeline(
+        stt_backend=GuardedSTTBackend(detector),
+        audio_emotion_detector=detector,
+        voice_style_timeout_sec=0.01,
+    )
+    prompt = TextTransformPrompt(instruction="テスト")
+
+    try:
+        if method_name == "process":
+            pipeline.process(str(wav), prompt, None)
+        elif method_name == "process_stream":
+            list(pipeline.process_stream(str(wav), prompt))
+        else:
+            list(pipeline.process_stream_live(str(wav), prompt))
+    finally:
+        detector.release.set()
+
+
+def test_disabled_audio_emotion_detector_emits_no_start_event(tmp_path) -> None:
+    from kuchikae.pipeline import create_pipeline
+
+    wav = tmp_path / "disabled_audio_emotion.wav"
+    _write_wav(str(wav))
+    diagnostics = DiagnosticRecorder(max_events=50)
+    pipeline = create_pipeline(
+        {
+            "allow_dummy_backends": True,
+            "audio_emotion_detector": "disabled",
+        }
+    )
+    pipeline.diagnostics = diagnostics
+    pipeline.process(str(wav), TextTransformPrompt(instruction="テスト"), None)
+
+    names = [event.name for event in diagnostics.events()]
+    assert "audio_emotion.detect.start" not in names
 
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,13 @@ class DummyAudioEmotionDetector:
         return AudioEmotion()
 
 
+class DisabledAudioEmotionDetector:
+    disabled = True
+
+    def detect(self, audio_path: str) -> AudioEmotion:
+        return AudioEmotion(source="disabled")
+
+
 class TransformersAudioEmotionDetector:
     """Lazy-loaded audio emotion detector using Hugging Face Transformers.
 
@@ -49,9 +56,9 @@ class TransformersAudioEmotionDetector:
         if self._processor is not None and self._model is not None:
             return
         try:
-            from transformers import AutoProcessor, AutoModelForAudioClassification  # type: ignore
+            from transformers import AutoFeatureExtractor, AutoModelForAudioClassification  # type: ignore
 
-            self._processor = AutoProcessor.from_pretrained(self.model_id)
+            self._processor = AutoFeatureExtractor.from_pretrained(self.model_id)
             self._model = AutoModelForAudioClassification.from_pretrained(self.model_id)
         except Exception as e:
             if self.strict:

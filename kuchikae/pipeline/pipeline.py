@@ -25,6 +25,7 @@ from kuchikae.domain.processing_cache import ProcessingCache
 from kuchikae.domain.audio_emotion import (
     AudioEmotion,
     AudioEmotionDetector,
+    DisabledAudioEmotionDetector,
     DummyAudioEmotionDetector,
     TransformersAudioEmotionDetector,
 )
@@ -218,7 +219,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
             strict=bool(config.get("audio_emotion_strict", False)),
         )
     elif audio_emotion_detector_type == "disabled":
-        audio_emotion_detector = None
+        audio_emotion_detector = DisabledAudioEmotionDetector()
     else:
         audio_emotion_detector = DummyAudioEmotionDetector()
 
@@ -542,9 +543,51 @@ class KuchikaePipeline:
         return voice_context
 
     def _detect_audio_emotion_async(self, audio_path: str):
+        if self.audio_emotion_detector is None or getattr(self.audio_emotion_detector, "disabled", False):
+            return None, None
         executor = ThreadPoolExecutor(max_workers=1)
+        self._emit(
+            "audio_emotion.detect.start",
+            "Audio emotion detection started.",
+            "audio_emotion",
+            backend=type(self.audio_emotion_detector).__name__,
+        )
         future = executor.submit(self.audio_emotion_detector.detect, audio_path)
         return future, executor
+
+    def _collect_audio_emotion(self, audio_future, audio_executor):
+        audio_emotion = None
+        if audio_future is None:
+            return None
+        try:
+            audio_emotion = audio_future.result(timeout=self.voice_style_timeout_sec)
+            self._emit(
+                "audio_emotion.detect.done",
+                "Audio emotion detection finished.",
+                "audio_emotion",
+                backend=type(self.audio_emotion_detector).__name__ if self.audio_emotion_detector is not None else "disabled",
+                data=asdict(audio_emotion),
+            )
+        except FuturesTimeoutError:
+            self._emit(
+                "audio_emotion.detect.timeout",
+                "Audio emotion detection timed out.",
+                "audio_emotion",
+                level=EventLevel.WARNING,
+                backend=type(self.audio_emotion_detector).__name__ if self.audio_emotion_detector is not None else "disabled",
+            )
+        except Exception as e:
+            self._emit(
+                "audio_emotion.detect.failed",
+                f"{type(e).__name__}: {e}",
+                "audio_emotion",
+                level=EventLevel.WARNING,
+                backend=type(self.audio_emotion_detector).__name__ if self.audio_emotion_detector is not None else "disabled",
+            )
+        finally:
+            if audio_executor is not None:
+                audio_executor.shutdown(wait=False, cancel_futures=True)
+        return audio_emotion
 
     def _detect_voice_style(self, text: str) -> VoiceStyle:
         self._emit_style("voice_style.detect.start", "voice_style", {})
@@ -656,6 +699,7 @@ class KuchikaePipeline:
             cache_key.mtime,
             audio_key,
         )
+        audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
 
         t1 = time.time()
         self._emit(
@@ -799,50 +843,8 @@ class KuchikaePipeline:
             voice_context.speaker_embedding is not None,
             voice_context.prosody_profile is not None,
         )
-        audio_future = None
-        audio_executor = None
-        try:
-            audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
-        except Exception:
-            pass
         text_for_voice = transformed_text.strip() or source_text
-        audio_emotion = None
-        if audio_future is not None:
-            try:
-                self._emit(
-                    "audio_emotion.detect.start",
-                    "Audio emotion detection started.",
-                    "audio_emotion",
-                    backend=type(self.audio_emotion_detector).__name__,
-                )
-                audio_emotion = audio_future.result(timeout=self.voice_style_timeout_sec)
-                self._emit(
-                    "audio_emotion.detect.done",
-                    "Audio emotion detection finished.",
-                    "audio_emotion",
-                    backend=type(self.audio_emotion_detector).__name__,
-                    data=asdict(audio_emotion),
-                )
-            except FuturesTimeoutError:
-                self._emit(
-                    "audio_emotion.detect.timeout",
-                    "Audio emotion detection timed out.",
-                    "audio_emotion",
-                    level=EventLevel.WARNING,
-                    backend=type(self.audio_emotion_detector).__name__,
-                )
-                audio_emotion = None
-            except Exception as e:
-                self._emit(
-                    "audio_emotion.detect.failed",
-                    f"{type(e).__name__}: {e}",
-                    "audio_emotion",
-                    level=EventLevel.WARNING,
-                    backend=type(self.audio_emotion_detector).__name__,
-                )
-                audio_emotion = None
-            finally:
-                audio_executor.shutdown(wait=False, cancel_futures=True)
+        audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
         voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
@@ -994,6 +996,7 @@ class KuchikaePipeline:
             cache_key.mtime,
             audio_key,
         )
+        audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
 
         logger.info("process_stream:yield STT")
         yield "STT", None, None, None
@@ -1041,26 +1044,8 @@ class KuchikaePipeline:
             voice_context.speaker_embedding is not None,
             voice_context.prosody_profile is not None,
         )
-        audio_future = None
-        audio_executor = None
-        try:
-            audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
-        except Exception:
-            pass
         text_for_voice = transformed_text.strip() or source_text
-        audio_emotion = None
-        if audio_future is not None:
-            try:
-                self._emit("audio_emotion.detect.start", "Audio emotion detection started.", "audio_emotion", backend=type(self.audio_emotion_detector).__name__)
-                audio_emotion = audio_future.result(timeout=self.voice_style_timeout_sec)
-                self._emit("audio_emotion.detect.done", "Audio emotion detection finished.", "audio_emotion", backend=type(self.audio_emotion_detector).__name__, data=asdict(audio_emotion))
-            except FuturesTimeoutError:
-                self._emit("audio_emotion.detect.timeout", "Audio emotion detection timed out.", "audio_emotion", level=EventLevel.WARNING, backend=type(self.audio_emotion_detector).__name__)
-            except Exception as e:
-                self._emit("audio_emotion.detect.failed", f"{type(e).__name__}: {e}", "audio_emotion", level=EventLevel.WARNING, backend=type(self.audio_emotion_detector).__name__)
-            finally:
-                if audio_executor is not None:
-                    audio_executor.shutdown(wait=False, cancel_futures=True)
+        audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
         voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
@@ -1165,6 +1150,7 @@ class KuchikaePipeline:
             cache_key.mtime,
             audio_key,
         )
+        audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
 
         # Check cache first
         cached_stt = None if self.disable_processing_cache else self.processing_cache.get_stt(audio_key)
@@ -1290,26 +1276,8 @@ class KuchikaePipeline:
             voice_context.speaker_embedding is not None,
             voice_context.prosody_profile is not None,
         )
-        audio_future = None
-        audio_executor = None
-        try:
-            audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
-        except Exception:
-            pass
         text_for_voice = transformed_text.strip() or source_text
-        audio_emotion = None
-        if audio_future is not None:
-            try:
-                self._emit("audio_emotion.detect.start", "Audio emotion detection started.", "audio_emotion", backend=type(self.audio_emotion_detector).__name__)
-                audio_emotion = audio_future.result(timeout=self.voice_style_timeout_sec)
-                self._emit("audio_emotion.detect.done", "Audio emotion detection finished.", "audio_emotion", backend=type(self.audio_emotion_detector).__name__, data=asdict(audio_emotion))
-            except FuturesTimeoutError:
-                self._emit("audio_emotion.detect.timeout", "Audio emotion detection timed out.", "audio_emotion", level=EventLevel.WARNING, backend=type(self.audio_emotion_detector).__name__)
-            except Exception as e:
-                self._emit("audio_emotion.detect.failed", f"{type(e).__name__}: {e}", "audio_emotion", level=EventLevel.WARNING, backend=type(self.audio_emotion_detector).__name__)
-            finally:
-                if audio_executor is not None:
-                    audio_executor.shutdown(wait=False, cancel_futures=True)
+        audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
         voice_output_prompt = self._build_voice_prompt(text_for_voice, audio_emotion, voice_output_prompt)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
