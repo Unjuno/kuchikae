@@ -22,6 +22,10 @@ def main() -> None:
         cmd_doctor(args[1:])
         return
 
+    if args[0] == "setup-models":
+        cmd_setup_models(args[1:])
+        return
+
     # Backward compatibility: bare --streaming is a compatibility alias
     # for serve --real --streaming (will fail if real deps are missing)
     if "--streaming" in args:
@@ -40,9 +44,10 @@ def print_help() -> None:
     print("""Kuchikae - Prompt-conditioned speech transformation
 
 Usage:
-  kuchikae serve [options]    Start the web server
-  kuchikae doctor             Check backend availability
-  kuchikae --help             Show this help
+  kuchikae serve [options]          Start the web server
+  kuchikae doctor [--fix]           Check backend availability
+  kuchikae setup-models [options]   Download required model weights
+  kuchikae --help                   Show this help
 
 Options:
   --dummy         Use dummy backends for smoke testing
@@ -50,12 +55,25 @@ Options:
   --streaming     Enable streaming STT with --real
   --port PORT     Server port (default: 7860)
 
+Setup:
+  setup-models               Download all required models
+  setup-models --all         Download all models (including optional)
+  setup-models --stt         Download STT model only
+  setup-models --tts         Download TTS model only
+  setup-models --emotion     Download audio emotion model only
+  setup-models --all --repair  Re-download (force) all models
+
+Doctor:
+  doctor              Check backend and model status
+  doctor --fix        Attempt to repair missing/broken models
+  doctor --strict     Exit with non-zero status on errors
+
 Examples:
   kuchikae serve --dummy              # Smoke test with dummy backends
+  kuchikae setup-models --all         # Download all models
+  kuchikae doctor --fix               # Check and repair models
   kuchikae serve --real               # Use real STT/TTS backends
-  kuchikae serve --real --streaming   # Enable streaming STT
-  kuchikae serve --port 8080          # Use custom port
-  kuchikae doctor                     # Check backend availability""")
+  kuchikae serve --port 8080          # Use custom port""")
 
     print(f"\nWeb UI will be available at http://127.0.0.1:{port}")
 
@@ -82,8 +100,62 @@ def cmd_serve(args: list[str]) -> None:
     serve(dummy=dummy, real=real, streaming=streaming, port=port)
 
 
+def cmd_setup_models(args: list[str]) -> None:
+    if "--help" in args or "-h" in args:
+        print_setup_models_help()
+        return
+
+    all_models = "--all" in args
+    repair = "--repair" in args
+    category = None
+
+    if "--stt" in args:
+        category = "stt"
+    elif "--tts" in args:
+        category = "tts"
+    elif "--emotion" in args:
+        category = "emotion"
+    elif not all_models:
+        # Default: required models only (stt + tts)
+        category = None
+
+    from kuchikae.models import setup_models, print_setup_report
+
+    if all_models:
+        # Include optional models too
+        report = setup_models(category=None, repair=repair)
+    else:
+        report = setup_models(category=category, repair=repair)
+
+    print_setup_report(report, title="Setup Results")
+
+    if report.errors:
+        sys.exit(1)
+
+
+def print_setup_models_help() -> None:
+    print("""Usage: kuchikae setup-models [options]
+
+Download required model weights for Kuchikae's real backends.
+
+Options:
+  --all       Download all models (including optional audio emotion)
+  --stt       Download STT model only (FasterWhisper)
+  --tts       Download TTS models only (Irodori-TTS + codec)
+  --emotion   Download audio emotion model only (optional)
+  --repair    Force re-download even if cached
+  --help      Show this help
+
+Examples:
+  kuchikae setup-models           # Download required models (stt + tts)
+  kuchikae setup-models --all     # Download all models
+  kuchikae setup-models --stt     # Download STT model only
+  kuchikae setup-models --repair  # Re-download all models""")
+
+
 def cmd_doctor(args: list[str]) -> None:
     strict = "--strict" in args
+    fix = "--fix" in args
 
     print("Kuchikae Doctor")
     print("=" * 40)
@@ -164,6 +236,34 @@ def cmd_doctor(args: list[str]) -> None:
     except Exception as e:
         print(f"  Status: Not reachable ({type(e).__name__})")
 
+    # Model status
+    print("\nModels:")
+    try:
+        from kuchikae.models import check_models, print_model_status
+        model_statuses = check_models()
+        any_missing = False
+        any_error = False
+        for status in model_statuses:
+            print_model_status(status)
+            if status.status == "missing":
+                any_missing = True
+            if status.status == "error":
+                any_error = True
+
+        # Fix mode: attempt repair
+        if fix and (any_missing or any_error):
+            print("\nAttempting repair...")
+            from kuchikae.models import repair_models
+            repair_report = repair_models()
+            for status in repair_report.models:
+                print_model_status(status)
+            if repair_report.errors:
+                print("\nRepair completed with errors:")
+                for err in repair_report.errors:
+                    print(f"  - {err}")
+    except Exception as e:
+        print(f"  Status: Check failed ({type(e).__name__}: {e})")
+
     print("\n" + "=" * 40)
     if core_ok:
         print("Core dependencies OK. Real backends are optional.")
@@ -171,7 +271,7 @@ def cmd_doctor(args: list[str]) -> None:
         print("Some core dependencies missing. Run 'uv sync --extra test' for basic setup.")
         print("Run 'uv sync --extra real' for full setup with real backends.")
 
-    if strict and not core_ok:
+    if strict and (not core_ok):
         sys.exit(1)
 
 

@@ -23,10 +23,24 @@ Opens Gradio at `http://127.0.0.1:7860`. Record audio → get dummy output. No m
 
 ```bash
 uv sync --extra real
+uv run kuchikae setup-models --all
+uv run kuchikae doctor --strict
 uv run kuchikae serve --real
 ```
 
-Requires: faster-whisper models, Ollama running, Irodori-TTS models.
+Models are downloaded to the standard Hugging Face cache directory (`~/.cache/huggingface/`). They are not bundled in this repository.
+
+### Repairing broken models
+
+If model weights are missing or corrupted:
+
+```bash
+uv run kuchikae doctor --fix
+# or
+uv run kuchikae setup-models --all --repair
+```
+
+This re-downloads models with `force_download=True` without deleting the entire cache directory.
 
 ### Streaming STT
 
@@ -48,15 +62,29 @@ Shows installed backends, Ollama status, environment variables, and missing depe
 ## CLI usage
 
 ```
-kuchikae serve [options]    Start the web server
-kuchikae doctor             Check backend availability
-kuchikae --help             Show help
+kuchikae serve [options]          Start the web server
+kuchikae doctor [--fix]           Check backend availability
+kuchikae setup-models [options]   Download required model weights
+kuchikae --help                   Show help
 
 Options:
   --dummy         Use dummy backends for smoke testing
   --real          Use real backends (requires models)
   --streaming     Enable streaming STT with --real
   --port PORT     Server port (default: 7860)
+
+Setup:
+  setup-models               Download all required models
+  setup-models --all         Download all models (including optional)
+  setup-models --stt         Download STT model only
+  setup-models --tts         Download TTS model only
+  setup-models --emotion     Download audio emotion model only
+  setup-models --all --repair  Re-download (force) all models
+
+Doctor:
+  doctor              Check backend and model status
+  doctor --fix        Attempt to repair missing/broken models
+  doctor --strict     Exit with non-zero status on errors
 ```
 
 ## Fixed v0.1 scope
