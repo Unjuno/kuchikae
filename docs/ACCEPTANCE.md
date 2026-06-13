@@ -1,29 +1,20 @@
 # Kuchikae v0.1 Acceptance Criteria
 
-This document defines how to accept or reject the initial implementation.
+This document defines how to accept or reject the v0.1 implementation.
 
 ## 1. Required command flow
 
 The implementation is accepted only if the following command flow is valid from a fresh local clone:
 
 ```bash
-git clone git@github.com:Unjuno/kuchikae.git
-cd kuchikae
-nix develop
-uv sync
-uv run pytest
-uv run python app.py
-```
-
-If SSH is not configured, HTTPS clone is acceptable:
-
-```bash
 git clone https://github.com/Unjuno/kuchikae.git
 cd kuchikae
-nix develop
-uv sync
-uv run pytest
-uv run python app.py
+uv sync --extra test
+uv run pytest -q -m "not slow and not e2e"
+uv run python -m compileall kuchikae
+uv run kuchikae --help
+uv run kuchikae doctor
+uv run kuchikae serve --dummy
 ```
 
 If the implementation requires global pip, Homebrew-only setup, manually activated Python environments, or undocumented external models, reject it.
@@ -36,35 +27,34 @@ The implementation must match this product shape:
 Audio input
   -> VoiceContext
   -> STT
-  -> TextTransformPrompt-driven text transform
-  -> VoiceOutputPrompt + VoiceContext-driven audio output
+  -> Text transform (template or free-form prompt)
+  -> VoiceOutputPrompt (internally generated from emotion analysis)
+  -> VoiceOutputBackend + VoiceContext -> output audio
 ```
 
 The implementation is accepted if:
 
-- The main UI has an audio input.
-- The main UI has a free-form Text Transform Prompt input.
-- The main UI has a free-form Voice Output Prompt input.
+- The main UI has an audio input (microphone or upload).
+- The main UI has a template dropdown with 通常/正式/実験/実験強/カスタム categories.
+- The main UI has a free-form prompt textbox (Normal mode).
+- The main UI has a PTT button (Simple mode).
 - The main UI returns source transcript.
 - The main UI returns transformed text.
 - The main UI returns output audio.
-- The main UI returns voice context readiness.
-- The main UI returns latency report.
+- The main UI displays voice impression label (声の印象).
+- Experimental templates display a safety warning.
 
 ## 3. Immediate rejection conditions
 
 Reject the implementation immediately if any of these are true:
 
-1. The primary UI is a fixed style dropdown.
-2. The app is framed as a polite-only rewriting app.
-3. The app uses `polite/casual/rpg` choices as the main control instead of free-form prompts.
-4. `VoiceOutputBackend.synthesize()` does not require `VoiceContext`.
-5. `VoiceOutputBackend.synthesize()` does not require `VoiceOutputPrompt`.
-6. The pipeline directly calls generic TTS without the `VoiceOutputBackend` abstraction.
-7. Heavy ML packages are added in the first scaffold.
-8. External model repositories are copied into this repository.
-9. Generated outputs, model files, runs, or caches are tracked by Git.
-10. Implementation introduces translation, streaming, database, authentication, or sharing.
+1. `VoiceOutputPrompt` is exposed as a user-facing textbox in the UI.
+2. Heavy ML packages are required base dependencies (not optional).
+3. External model repositories are copied into this repository.
+4. Generated outputs, model files, runs, or caches are tracked by Git.
+5. The app has no dummy mode for smoke testing.
+6. Experimental templates are hidden from the UI.
+7. The safety warning is removed from experimental templates.
 
 ## 4. Architecture acceptance
 
@@ -73,57 +63,47 @@ Reject the implementation immediately if any of these are true:
 The following files must exist:
 
 ```text
-app.py
-flake.nix
 pyproject.toml
 README.md
+LICENSE
 .gitignore
-kuchikae/types.py
-kuchikae/audio_cache.py
-kuchikae/voice_context.py
-kuchikae/stt.py
-kuchikae/text_transform.py
-kuchikae/voice_output.py
-kuchikae/pipeline.py
-kuchikae/timing.py
+kuchikae/__init__.py
+kuchikae/cli.py
+kuchikae/ui/app.py
+kuchikae/ui/css.py
+kuchikae/ui/js.py
+kuchikae/ui/handlers.py
+kuchikae/ui/templates.py
+kuchikae/domain/types.py
+kuchikae/domain/text_transform.py
+kuchikae/domain/voice_output.py
+kuchikae/domain/voice_prompt.py
+kuchikae/pipeline/pipeline.py
 ```
 
 ### 4.2 Required tests
 
-The following test files must exist:
+Test files must include coverage for:
 
-```text
-tests/test_audio_cache.py
-tests/test_voice_context.py
-tests/test_text_transform_dummy.py
-tests/test_voice_output_dummy.py
-tests/test_pipeline_dummy.py
-```
-
-### 4.3 Required prompt files
-
-```text
-prompts/text_transform_default.txt
-prompts/voice_output_default.txt
-```
+- UI structure (create_app, template presence, warning presence)
+- Template keys (all categories present)
+- Text transform validation (echo detection, CJK detection, meta prefix rejection)
+- Voice prompt generation (emotion-to-prompt mapping)
+- Pipeline dummy mode
 
 ## 5. Data model acceptance
 
-`kuchikae/types.py` must define:
+`kuchikae/domain/types.py` must define:
 
-- `ProsodyProfile`
-- `VoiceContext`
 - `TextTransformPrompt`
 - `VoiceOutputPrompt`
-- `LatencyReport`
+- `VoiceContext`
 - `PipelineResult`
 
 Reject if:
 
-- `TextTransformPrompt` is replaced by a fixed enum style.
 - `VoiceOutputPrompt` is missing.
-- `VoiceContext` is optional in the voice output path.
-- `PipelineResult` uses only `styled_text` and fixed `style` semantics instead of `transformed_text` and prompt fields.
+- `VoiceOutputPrompt` is required as a user-facing input.
 
 ## 6. Backend interface acceptance
 
@@ -145,15 +125,6 @@ def transform(self, text: str, prompt: TextTransformPrompt) -> str:
     ...
 ```
 
-Reject if it uses only:
-
-```python
-def transform(self, text: str, style: str) -> str:
-    ...
-```
-
-as the primary interface.
-
 ### 6.3 VoiceOutputBackend
 
 Must expose:
@@ -167,8 +138,6 @@ def synthesize(
 ) -> str:
     ...
 ```
-
-Reject if `voice_context` or `prompt` is optional or missing.
 
 ## 7. Dummy backend acceptance
 
@@ -188,25 +157,41 @@ Rejected dummy behavior:
 
 ## 8. UI acceptance
 
+### 8.1 Normal mode (通常)
+
 The Gradio app must include:
 
 Inputs:
 
-- audio input
+- audio input (microphone + upload)
+- template dropdown
 - text transform prompt textbox
-- voice output prompt textbox
+- voice style radio (auto/natural/calm/bright/slow_clear)
+- run button ("言い直す")
 
 Outputs:
 
 - source transcript
 - transformed text
 - output audio
-- voice context status
-- latency report
+- voice impression label (声の印象)
 
-Reject if the main UI uses a style dropdown as the primary control.
+### 8.2 Simple mode (簡易)
 
-Prompt presets may be added later, but they must not replace the free-form prompt inputs.
+The Gradio app must include:
+
+- template dropdown
+- PTT button ("押して話す")
+- hidden audio component (CSS offscreen hidden, visible in DOM)
+- source transcript
+- transformed text
+- output audio
+
+Reject if:
+
+- The PTT button uses `transform: scale()` in recording state.
+- The hidden audio component uses `display: none`.
+- Simple mode layout shifts during recording.
 
 ## 9. Dependency acceptance
 
@@ -216,31 +201,15 @@ Initial dependencies may include:
 - numpy
 - soundfile
 - pyyaml
-- pytest
+- httpx
+- pytest (test extra)
 
-Initial Nix dev shell may include:
+Heavy dependencies must be optional extras:
 
-- python311
-- uv
-- ffmpeg
-- sox
-- libsndfile
-- portaudio
-- git
+- faster-whisper (stt extra)
+- torch, torchaudio, irodori-tts, silentcipher (tts extra)
 
-Reject if first scaffold adds:
-
-- torch
-- transformers
-- faster-whisper
-- OpenVoice
-- GPT-SoVITS
-- CosyVoice
-- F5-TTS
-- RVC
-- any heavy model dependency
-
-These can be added later through separate explicit backend integration work.
+Reject if first scaffold adds heavy dependencies as required base dependencies.
 
 ## 10. Git hygiene acceptance
 
@@ -250,44 +219,44 @@ These can be added later through separate explicit backend integration work.
 .venv/
 __pycache__/
 *.pyc
-outputs/*
-!outputs/.gitkeep
-runs/
+*.egg-info/
+dist/
+build/
 models/
+checkpoints/
 .cache/
-.DS_Store
+*.safetensors
+*.bin
+*.onnx
+*.pt
+*.pth
+*.ckpt
+outputs/*.wav
+logs/
+artifacts/
 ```
 
 Reject if model weights, generated audio, large caches, or run directories are committed.
 
-## 11. Latency reporting acceptance
+## 11. Review checklist
 
-`PipelineResult` must include a `LatencyReport` with:
+Before accepting the implementation, check:
 
-- `stt_seconds`
-- `text_transform_seconds`
-- `voice_output_seconds`
-- `total_seconds`
-
-All values must be non-negative floats.
-
-## 12. Review checklist
-
-Before accepting Claude's implementation, check:
-
-- [ ] Does a fresh `git clone` work?
-- [ ] Does `nix develop` enter the dev shell?
-- [ ] Does `uv sync` complete?
-- [ ] Does `uv run pytest` pass?
-- [ ] Does `uv run python app.py` start the Gradio app?
-- [ ] Is the main UI prompt-based rather than dropdown-based?
-- [ ] Is `VoiceContext` required by voice output?
-- [ ] Is `VoiceOutputPrompt` required by voice output?
+- [ ] Does a fresh `git clone` + `uv sync --extra test` work?
+- [ ] Does `uv run pytest -q -m "not slow and not e2e"` pass?
+- [ ] Does `uv run python -m compileall kuchikae` succeed?
+- [ ] Does `uv run kuchikae --help` show help?
+- [ ] Does `uv run kuchikae doctor` show backend status?
+- [ ] Does `uv run kuchikae serve --dummy` start the Gradio app?
+- [ ] Is the main UI template-based with prompt override?
+- [ ] Are experimental templates visible with safety warnings?
+- [ ] Is `VoiceOutputPrompt` internal (not user-facing)?
 - [ ] Does dummy voice output create a real WAV file?
-- [ ] Are heavy model dependencies absent?
+- [ ] Are heavy model dependencies absent from base install?
 - [ ] Is the repository clean of outputs/models/runs?
+- [ ] Is LICENSE present with correct copyright?
 
-## 13. Acceptance verdict format
+## 12. Acceptance verdict format
 
 Use this format after reviewing an implementation:
 

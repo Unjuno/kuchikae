@@ -121,6 +121,26 @@ Do not implement:
 - exact voice cloning guarantee
 - heavy model dependencies as required base dependencies
 
+## Safety and consent
+
+Kuchikae is a research and prototype tool for exploring prompt-conditioned voice transformation.
+
+**You must:**
+
+- Use only your own audio, or audio for which you have explicit permission from the speaker.
+- Use the tool in compliance with all applicable laws and regulations.
+
+**Do not use Kuchikae for:**
+
+- Impersonation, fraud, or phishing.
+- Harassment, threats, or bullying.
+- Political deception or disinformation campaigns.
+- Non-consensual voice imitation or deepfake creation.
+
+**Experimental templates** (`実験:`, `実験強:`) are provided for red-team testing, demo purposes, and safety evaluation. They are not intended for production use or abuse.
+
+The developers assume no liability for misuse of this tool. Users are solely responsible for ensuring their use complies with ethical and legal standards.
+
 ## Documentation
 
 1. [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md) — clone, Nix, and uv workflow.

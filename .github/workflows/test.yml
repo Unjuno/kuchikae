@@ -36,3 +36,36 @@ jobs:
 
       - name: Run lightweight tests
         run: uv run pytest -q -m "not slow and not e2e"
+
+  smoke:
+    name: release smoke
+    runs-on: macos-latest
+    timeout-minutes: 15
+    needs: unit
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --extra test
+
+      - name: Compile all modules
+        run: uv run python -m compileall kuchikae
+
+      - name: Check CLI help
+        run: uv run kuchikae --help
+
+      - name: Run doctor
+        run: uv run kuchikae doctor
+
+      - name: Build package
+        run: uv build

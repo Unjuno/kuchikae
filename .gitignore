@@ -33,3 +33,25 @@ logs/
 
 # Evaluation artifacts
 artifacts/
+
+# Model weights and checkpoints
+*.safetensors
+*.bin
+*.onnx
+*.pt
+*.pth
+*.ckpt
+models/
+checkpoints/
+
+# HuggingFace / torch cache
+.cache/
+.cache/huggingface/
+.cache/torch/
+
+# Audio scratch files
+*.tmp.wav
+*.scratch.wav
+
+# Keep test fixtures
+!tests/fixtures/*.wav
