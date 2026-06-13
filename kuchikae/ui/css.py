@@ -272,14 +272,6 @@ gradio-app, .gradio-app {
   margin-top: 4px;
 }
 
-#simple-status {
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-  min-height: 16px;
-  margin-top: 4px;
-}
-
 #prompt-box textarea {
   border-radius: 8px;
   border: 1px solid var(--border-color);
@@ -297,28 +289,18 @@ gradio-app, .gradio-app {
 }
 
 #simple-audio-wrap {
-  background: var(--bg-tertiary);
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 8px;
-  border: 1px solid var(--border-color);
-  position: relative;
-}
-
-#simple-audio-wrap .block {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-#simple-audio-wrap label {
-  color: var(--text-muted) !important;
-}
-
-#simple-audio-wrap .record-button {
-  background: #2D1B4E !important;
-  color: var(--accent-light) !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: 8px !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: auto !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 1px !important;
+  min-height: 1px !important;
+  max-width: 1px !important;
+  max-height: 1px !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 #simple-template-select {
@@ -399,6 +381,7 @@ gradio-app, .gradio-app {
 
 #simple-output-audio {
   margin-top: 12px;
+  min-height: 72px;
   border: 1px solid rgba(124, 58, 237, 0.3);
   border-radius: 12px;
   padding: 16px;
@@ -458,7 +441,6 @@ gradio-app, .gradio-app {
 }
 
 #ptt-btn.ptt-recording {
-  transform: scale(0.96);
   background: radial-gradient(circle at 30% 30%, #EF4444, #DC2626 70%, #991B1B 100%);
   border-color: #EF4444;
   box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4), 0 0 0 4px rgba(239, 68, 68, 0.2);
@@ -492,12 +474,20 @@ gradio-app, .gradio-app {
   font-size: 12px;
   color: var(--text-muted);
   text-align: center;
-  min-height: 20px;
+  min-height: 28px;
   margin-top: 8px;
   padding: 8px 12px;
   background: rgba(124, 58, 237, 0.08);
   border-radius: 8px;
-  transition: all 0.2s ease;
+  transition: none !important;
+}
+
+#simple-text-compare {
+  min-height: 160px;
+}
+
+#simple-status, #simple-text-compare, #simple-output-audio {
+  transition: none !important;
 }
 
 #simple-status.processing {

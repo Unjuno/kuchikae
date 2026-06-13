@@ -116,9 +116,9 @@ STYLE_FEW_SHOTS: dict[str, list[tuple[str, str]]] = {
         # medium freedom: opinion
         ("それは違うと思います", "それは違うだろう。もう少し考えろ。"),
         # low freedom: request with fact
-        ("明日15時に資料を送ってください", "明日15時に資料を送れ。遅れるなよ。"),
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってください。ここで忘れると、なかなか残念です。"),
         # low freedom: confirmation with fact
-        ("田中さんに確認してください", "田中さんに確認しろ。俺には聞くな。"),
+        ("田中さんに確認してください", "田中さんに確認してください。そこを曖昧にすると、また面倒になりますよ。"),
         # safety boundary: warning
         ("その操作は危ないです", "その操作は危ない。今すぐ止めた方が賢明ですね。"),
         # meta/refusal prevention: thanks
@@ -134,9 +134,9 @@ STYLE_FEW_SHOTS: dict[str, list[tuple[str, str]]] = {
         # medium freedom: opinion
         ("それは違うと思います", "それは違うと思いますね。なかなか大胆な見方ですね。"),
         # low freedom: request with fact
-        ("明日15時に資料を送ってください", "明日15時に資料を送ってくださいね。期待はしていませんよ。"),
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってください。忘れられると、少し物語が複雑になりますので。"),
         # low freedom: confirmation with fact
-        ("田中さんに確認してください", "田中さんに確認してください。まあ、確率は低いでしょうけど。"),
+        ("田中さんに確認してください", "田中さんに確認してください。推測だけで進めるのも、なかなか勇敢ですからね。"),
         # safety boundary: warning
         ("その操作は危ないです", "その操作は危ないです。試すには少し勇敢すぎますね。"),
         # meta/refusal prevention: thanks
@@ -260,9 +260,9 @@ STYLE_FEW_SHOTS: dict[str, list[tuple[str, str]]] = {
         # medium freedom: opinion
         ("それは違うと思います", "それは違うと思います。さすがにそこは見直した方がよさそうですね。"),
         # low freedom: request with fact
-        ("明日15時に資料を送ってください", "明日15時に資料を送ってください。ここで忘れると、なかなか残念です。"),
+        ("明日15時に資料を送ってください", "明日15時に資料を送れ。遅れるなよ。"),
         # low freedom: confirmation with fact
-        ("田中さんに確認してください", "田中さんに確認してください。そこを曖昧にすると、また面倒になりますよ。"),
+        ("田中さんに確認してください", "田中さんに確認しろ。俺には聞くな。"),
         # safety boundary: warning
         ("その操作は危ないです", "その操作は危ないです。わざわざ事故りに行く必要はありません。"),
         # meta/refusal prevention: thanks
@@ -278,9 +278,9 @@ STYLE_FEW_SHOTS: dict[str, list[tuple[str, str]]] = {
         # medium freedom: opinion
         ("それは違うと思います", "それは違うと思います。なかなか大胆な見方ですね。"),
         # low freedom: request with fact
-        ("明日15時に資料を送ってください", "明日15時に資料を送ってください。忘れられると、少し物語が複雑になりますので。"),
+        ("明日15時に資料を送ってください", "明日15時に資料を送ってくださいね。期待はしていませんよ。"),
         # low freedom: confirmation with fact
-        ("田中さんに確認してください", "田中さんに確認してください。推測だけで進めるのも、なかなか勇敢ですからね。"),
+        ("田中さんに確認してください", "田中さんに確認してください。まあ、確率は低いでしょうけど。"),
         # safety boundary: warning
         ("その操作は危ないです", "その操作は危ないです。試すには少し勇敢すぎますね。"),
         # meta/refusal prevention: thanks
@@ -330,6 +330,8 @@ _TEMPLATE_MARKER_RE = re.compile(r"\[STYLE_TEMPLATE:\s*(.+?)\]")
 
 def _extract_template_name(instruction: str) -> str | None:
     """Extract template name from instruction if marker is present."""
+    if not instruction:
+        return None
     m = _TEMPLATE_MARKER_RE.search(instruction)
     return m.group(1).strip() if m else None
 

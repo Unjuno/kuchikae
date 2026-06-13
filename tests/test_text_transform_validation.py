@@ -78,3 +78,70 @@ def test_ollama_transform_uses_content_not_thinking(monkeypatch) -> None:
         out = backend.transform("hello", TextTransformPrompt(instruction="polite"))
     assert out == "ok"
 
+
+def test_extract_template_name_with_experimental_marker():
+    from kuchikae.domain.text_transform import _extract_template_name
+    assert _extract_template_name("[STYLE_TEMPLATE: 実験: 関西弁]") == "実験: 関西弁"
+    assert _extract_template_name("[STYLE_TEMPLATE: 実験: 毒舌]") == "実験: 毒舌"
+    assert _extract_template_name("[STYLE_TEMPLATE: 実験強: 関西弁]") == "実験強: 関西弁"
+    assert _extract_template_name("[STYLE_TEMPLATE: 実験強: 毒舌]") == "実験強: 毒舌"
+
+
+def test_extract_template_name_without_marker():
+    from kuchikae.domain.text_transform import _extract_template_name
+    assert _extract_template_name("普通のテンプレート") is None
+    assert _extract_template_name("") is None
+    assert _extract_template_name(None) is None
+
+
+def test_build_few_shot_block_returns_content_for_known_template():
+    from kuchikae.domain.text_transform import _build_few_shot_block
+    block = _build_few_shot_block("実験強: 関西弁")
+    assert block
+    assert "関西弁" in block
+    assert "入力:" in block
+    assert "出力:" in block
+
+
+def test_build_few_shot_block_returns_empty_for_none():
+    from kuchikae.domain.text_transform import _build_few_shot_block
+    assert _build_few_shot_block(None) == ""
+
+
+def test_build_few_shot_block_returns_empty_for_unknown():
+    from kuchikae.domain.text_transform import _build_few_shot_block
+    assert _build_few_shot_block("存在しないテンプレート") == ""
+
+
+def test_experimental_dokuji_few_shot_no_aggressive_commands():
+    from kuchikae.domain.text_transform import STYLE_FEW_SHOTS
+    examples = STYLE_FEW_SHOTS["実験: 毒舌"]
+    for inp, out in examples:
+        if "資料を送ってください" in inp:
+            assert "送れ" not in out, f"実験: 毒舌 should not have aggressive command: {out}"
+            assert "遅れるな" not in out, f"実験: 毒舌 should not have aggressive command: {out}"
+        if "田中さんに確認してください" in inp:
+            assert "しろ" not in out, f"実験: 毒舌 should not have aggressive command: {out}"
+            assert "俺には聞くな" not in out, f"実験: 毒舌 should not have aggressive command: {out}"
+
+
+def test_experimental_hinniku_few_shot_no_overly_strong():
+    from kuchikae.domain.text_transform import STYLE_FEW_SHOTS
+    examples = STYLE_FEW_SHOTS["実験: 皮肉っぽく"]
+    for inp, out in examples:
+        if "資料を送ってください" in inp:
+            assert "期待はしていません" not in out, f"実験: 皮肉っぽく should not be overly strong: {out}"
+        if "田中さんに確認してください" in inp:
+            assert "確率は低い" not in out, f"実験: 皮肉っぽく should not be overly strong: {out}"
+
+
+def test_strong_experimental_dokuji_few_shot_has_aggressive():
+    from kuchikae.domain.text_transform import STYLE_FEW_SHOTS
+    examples = STYLE_FEW_SHOTS["実験強: 毒舌"]
+    found = False
+    for inp, out in examples:
+        if "資料を送ってください" in inp:
+            found = True
+            assert "送れ" in out or "遅れるな" in out, f"実験強: 毒舌 should have aggressive examples: {out}"
+    assert found, "実験強: 毒舌 should have a 資料送付 example"
+

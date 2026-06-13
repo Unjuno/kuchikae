@@ -132,3 +132,78 @@ def test_normalize_voice_output_prompt_from_string():
 def test_normalize_voice_output_prompt_from_empty():
     assert normalize_voice_output_prompt("   ") is None
     assert normalize_voice_output_prompt(None) is None
+
+
+def test_simple_audio_visible_true():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    assert "'visible': True" in config_str
+    assert "simple-audio-wrap" in config_str
+
+
+def test_simple_audio_wrap_css_offscreen():
+    from kuchikae.ui.css import CSS
+    assert "#simple-audio-wrap" in CSS
+    assert "position: absolute" in CSS
+    assert "left: -9999px" in CSS
+    assert "overflow: hidden" in CSS
+    assert "opacity: 0" in CSS
+    assert "pointer-events: none" in CSS
+    assert "display: none" not in CSS.split("#simple-audio-wrap")[1].split("}")[0]
+
+
+def test_voice_analysis_label_no_id_duplication():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    assert "voice-analysis-label-inner" in config_str
+    assert 'id="voice-analysis-label"' not in config_str
+
+
+def test_experimental_warning_in_normal_tab():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    assert "experimental-warning" in config_str
+    assert "なりすまし、詐欺、脅迫、同意のない声の模倣には使用しないでください" in config_str
+
+
+def test_experimental_warning_in_simple_tab():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    count = config_str.count("experimental-warning")
+    assert count >= 2, f"Expected at least 2 experimental-warning instances, got {count}"
+
+
+def test_template_choices_include_experimental():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    assert "実験: 関西弁" in config_str
+    assert "実験: 毒舌" in config_str
+    assert "実験強: 関西弁" in config_str
+    assert "実験強: 毒舌" in config_str
+
+
+def test_simple_template_choices_include_experimental():
+    pipeline = KuchikaePipeline()
+    prompt = TextTransformPrompt(instruction="test")
+    demo = create_app(pipeline, prompt)
+    config_str = str(demo.config)
+    simple_section = config_str.split("simple-template-select")[1]
+    assert "実験: 関西弁" in simple_section
+    assert "実験強: 関西弁" in simple_section
+
+
+def test_ptt_recording_no_transform_scale():
+    from kuchikae.ui.css import CSS
+    ptt_recording_block = CSS.split("#ptt-btn.ptt-recording")[1].split("}")[0]
+    assert "transform" not in ptt_recording_block, "ptt-recording should not use transform"
+    assert "scale" not in ptt_recording_block, "ptt-recording should not use scale"

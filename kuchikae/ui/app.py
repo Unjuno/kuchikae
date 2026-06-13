@@ -25,7 +25,12 @@ logger = logging.getLogger("kuchikae.ui.app")
 
 
 def _voice_analysis_pending_html() -> str:
-    return '<span id="voice-analysis-label" style="color: #A1A1AA; font-size: 12px;">声の印象: 分析中...</span>'
+    return (
+        '<span class="voice-analysis-label-inner" '
+        'style="color: #A1A1AA; font-size: 12px;">'
+        '声の印象: 分析中...'
+        '</span>'
+    )
 
 
 def _experimental_warning_html() -> str:
@@ -152,7 +157,7 @@ def create_app(
                         label="",
                         sources=["microphone"],
                         type="filepath",
-                        visible=False,
+                        visible=True,
                     )
 
                     simple_status = gr.HTML(elem_id="simple-status", value="", visible=True)
