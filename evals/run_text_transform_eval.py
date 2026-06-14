@@ -400,7 +400,7 @@ Return ONLY a JSON object."""
 # Output
 # ---------------------------------------------------------------------------
 
-def write_jsonl(results: list[EvalResult], output_path: Path, model_name: str = "") -> None:
+def write_jsonl(results: list[EvalResult], output_path: Path, backend_type: str = "prompted_rule", model_name: str = "") -> None:
     """Write results as JSONL."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -412,9 +412,10 @@ def write_jsonl(results: list[EvalResult], output_path: Path, model_name: str = 
                 "input": r.input_text,
                 "output": r.transformed_text,
                 "latency_ms": round(r.latency_ms, 1),
+                "backend": backend_type,
                 "rule_judge": asdict(r.rule_judge),
             }
-            if model_name:
+            if backend_type == "ollama" and model_name:
                 record["model"] = model_name
             if r.llm_judge:
                 record["llm_judge"] = asdict(r.llm_judge)
@@ -520,7 +521,7 @@ def main() -> None:
         ts = time.strftime("%Y%m%d_%H%M%S")
         out_path = RESULTS_DIR / f"{args.backend}_{ts}.jsonl"
 
-    write_jsonl(results, out_path, model_name=args.ollama_model)
+    write_jsonl(results, out_path, backend_type=args.backend, model_name=args.ollama_model)
     logger.info("Results written to %s", out_path)
 
     # Summary
