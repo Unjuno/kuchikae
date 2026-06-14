@@ -18,6 +18,22 @@ JUDGE_PROMPT_PATH = EVALS_DIR / "judge_prompt.md"
 
 
 # ---------------------------------------------------------------------------
+# Import judge logic for unit tests
+# ---------------------------------------------------------------------------
+
+import sys
+
+sys.path.insert(0, str(EVALS_DIR))
+from run_text_transform_eval import (
+    EvalCase,
+    ExpectedResult,
+    RuleJudgeResult,
+    SemanticPreserveEntry,
+    judge_rule,
+)
+
+
+# ---------------------------------------------------------------------------
 # YAML structure tests
 # ---------------------------------------------------------------------------
 
@@ -192,3 +208,118 @@ class TestEvalFiles:
         results_dir = EVALS_DIR / "results"
         assert results_dir.exists()
         assert (results_dir / ".gitkeep").exists()
+
+
+# ---------------------------------------------------------------------------
+# Judge logic unit tests
+# ---------------------------------------------------------------------------
+
+
+def _make_case(
+    case_id: str = "test-001",
+    input_text: str = "テスト入力です",
+    hard: list[str] | None = None,
+    semantic: list[dict] | None = None,
+    forbidden: list[str] | None = None,
+) -> EvalCase:
+    exp = ExpectedResult(
+        hard_preserve=hard or [],
+        semantic_preserve=[SemanticPreserveEntry.from_raw(s) for s in (semantic or [])],
+        forbidden=forbidden or [],
+    )
+    return EvalCase(
+        id=case_id,
+        category="test",
+        input=input_text,
+        template="自然に",
+        expected=exp,
+    )
+
+
+class TestJudgeRule:
+    def test_semantic_variant_hit_is_pass(self) -> None:
+        case = _make_case(
+            semantic=[{"canonical": "クライアント", "allowed": ["クライアント", "お客様", "顧客"]}],
+        )
+        result = judge_rule(case, "お客様にお知らせください", "prompted_rule")
+        assert result.verdict == "pass"
+        assert result.semantic_preserve_hits.get("クライアント") is True
+
+    def test_semantic_missing_is_warn(self) -> None:
+        case = _make_case(
+            semantic=[{"canonical": "クライアント", "allowed": ["クライアント", "お客様"]}],
+        )
+        result = judge_rule(case, "田中さんにお知らせください", "prompted_rule")
+        assert result.verdict == "warn"
+        assert result.failure_type == "semantic_loss"
+
+    def test_hard_missing_is_fail(self) -> None:
+        case = _make_case(hard=["田中さん"])
+        result = judge_rule(case, "佐藤さんにお知らせください", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "meaning_loss"
+
+    def test_forbidden_hit_is_fail_even_prompted_rule(self) -> None:
+        case = _make_case(forbidden=["パスワード"])
+        result = judge_rule(case, "パスワードを教えてください", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "unsafe"
+
+    def test_cot_leak_thought_tag(self) -> None:
+        case = _make_case()
+        result = judge_rule(case, "<think>よろしく</think> 今日はいい天気ですね", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "cot_leak"
+
+    def test_cot_leak_thought_tag_case_insensitive(self) -> None:
+        case = _make_case()
+        result = judge_rule(case, "<THOUGHT>よろしく</THOUGHT> 今日はいい天気ですね", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "cot_leak"
+
+    def test_cot_leak_thought_only(self) -> None:
+        case = _make_case()
+        result = judge_rule(case, "考え中<thought> 計画を立て中", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "cot_leak"
+
+    def test_cot_leak_closing_thought(self) -> None:
+        case = _make_case()
+        result = judge_rule(case, "今日は</thought>いい天気", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "cot_leak"
+
+    def test_empty_output_is_fail(self) -> None:
+        case = _make_case()
+        result = judge_rule(case, "", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "empty_output"
+
+    def test_template_leak_is_fail(self) -> None:
+        case = _make_case()
+        result = judge_rule(case, "[STYLE_TEMPLATE: 自然に] 今日はいい天気", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "template_leak"
+
+    def test_echo_is_fail(self) -> None:
+        case = _make_case(input_text="今日はいい天気ですね")
+        result = judge_rule(case, "今日はいい天気ですね", "prompted_rule")
+        assert result.verdict == "fail"
+        assert result.failure_type == "style_weak"
+
+    def test_pass_when_all_good(self) -> None:
+        case = _make_case(
+            hard=["田中さん"],
+            semantic=[{"canonical": "確認", "allowed": ["確認", "チェック"]}],
+        )
+        result = judge_rule(case, "田中さん、確認してください", "prompted_rule")
+        assert result.verdict == "pass"
+
+    def test_hard_pass_semantic_warn(self) -> None:
+        case = _make_case(
+            hard=["田中さん"],
+            semantic=[{"canonical": "確認", "allowed": ["確認", "チェック"]}],
+        )
+        result = judge_rule(case, "田中さん、お知らせください", "prompted_rule")
+        assert result.verdict == "warn"
+        assert result.failure_type == "semantic_loss"
