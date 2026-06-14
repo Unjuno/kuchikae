@@ -278,7 +278,7 @@ Return ONLY a JSON object."""
         return None
 
 
-def write_jsonl(results: list[EvalResult], output_path: Path) -> None:
+def write_jsonl(results: list[EvalResult], output_path: Path, model_name: str = "") -> None:
     """Write results as JSONL."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
@@ -292,6 +292,8 @@ def write_jsonl(results: list[EvalResult], output_path: Path) -> None:
                 "latency_ms": round(r.latency_ms, 1),
                 "rule_judge": asdict(r.rule_judge),
             }
+            if model_name:
+                record["model"] = model_name
             if r.llm_judge:
                 record["llm_judge"] = asdict(r.llm_judge)
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
@@ -307,8 +309,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--ollama-model",
-        default="qwen2.5-coder:7b",
-        help="Ollama model name (when --backend ollama)",
+        default=None,
+        help="Ollama model name (when --backend ollama). Default: qwen2.5:7b-instruct",
     )
     parser.add_argument(
         "--judge",
@@ -318,8 +320,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--judge-model",
-        default="qwen2.5-coder:7b",
-        help="Ollama model for LLM judge",
+        default=None,
+        help="Ollama model for LLM judge. Default: same as --ollama-model",
     )
     parser.add_argument("--template", default=None, help="Filter to a single template")
     parser.add_argument(
@@ -332,6 +334,14 @@ def main() -> None:
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
+
+    # Resolve default model
+    from kuchikae.domain.text_transform import DEFAULT_OLLAMA_TEXT_MODEL
+
+    if args.ollama_model is None:
+        args.ollama_model = DEFAULT_OLLAMA_TEXT_MODEL
+    if args.judge_model is None:
+        args.judge_model = args.ollama_model
 
     cases = load_cases(template_filter=args.template)
     if not cases:
@@ -381,7 +391,7 @@ def main() -> None:
         ts = time.strftime("%Y%m%d_%H%M%S")
         out_path = RESULTS_DIR / f"{args.backend}_{ts}.jsonl"
 
-    write_jsonl(results, out_path)
+    write_jsonl(results, out_path, model_name=args.ollama_model)
     logger.info("Results written to %s", out_path)
 
     # Summary

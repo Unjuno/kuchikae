@@ -14,6 +14,8 @@ from kuchikae.domain.types import TextTransformPrompt, TransformUpdate
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_OLLAMA_TEXT_MODEL = "qwen2.5:7b-instruct"
+
 PROMPT_FILES = {
     "polite": "text_transform_polite.txt",
     "casual": "text_transform_casual.txt",
@@ -458,7 +460,7 @@ class DummyTextTransformBackend(TextTransformBackend):
 class OllamaTextTransformBackend(TextTransformBackend):
 
     def __init__(self, model: str | None = None, strict: bool = False, on_cot_stripped: callable | None = None) -> None:
-        self.model = model or os.environ.get("KUCHIKAE_TEXT_MODEL", "qwen2.5-coder:7b")
+        self.model = model or os.environ.get("KUCHIKAE_TEXT_MODEL", DEFAULT_OLLAMA_TEXT_MODEL)
         self.strict = strict
         self._base_url = os.environ.get("KUCHIKAE_OLLAMA_URL", "http://localhost:11434")
         self._on_cot_stripped = on_cot_stripped

@@ -124,7 +124,8 @@ export KUCHIKAE_STREAMING_STT=1
 
 # Ollama LLM text transform
 export KUCHIKAE_TEXT_BACKEND=ollama
-export KUCHIKAE_TEXT_MODEL=qwen3:8b
+export KUCHIKAE_TEXT_MODEL=qwen2.5:7b-instruct
+# Run `ollama list` to check available models on your system.
 ```
 
 ## Development

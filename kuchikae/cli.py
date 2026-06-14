@@ -236,6 +236,16 @@ def cmd_doctor(args: list[str]) -> None:
     except Exception as e:
         print(f"  Status: Not reachable ({type(e).__name__})")
 
+    # Text model warning
+    text_model = os.environ.get("KUCHIKAE_TEXT_MODEL", "")
+    if text_model:
+        if "coder" in text_model.lower():
+            print(f"\n  Warning: '{text_model}' is a coder model, not recommended for text transform.")
+            print("  Use an instruct model instead (e.g. qwen2.5:7b-instruct).")
+        if "instruct" not in text_model.lower() and "chat" not in text_model.lower():
+            print(f"\n  Warning: '{text_model}' may not be an instruct model.")
+            print("  Non-instruct models may emit CoT/extra text and respond slowly.")
+
     # Model status
     print("\nModels:")
     try:

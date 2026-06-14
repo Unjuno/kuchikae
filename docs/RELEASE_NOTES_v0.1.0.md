@@ -95,11 +95,16 @@ uv sync --extra real
 
 # Start Ollama
 ollama serve
-ollama pull qwen2.5-coder:7b
+ollama pull qwen2.5:7b-instruct
+# Run `ollama list` to check available models on your system.
 
 # Start Kuchikae with real backends
 uv run kuchikae serve --real
 ```
+
+## Eval results note
+
+Previous eval runs used `qwen2.5-coder:7b` (a coder model). These results are not representative of production quality and should not be used for release judgment. The recommended text transform model is now `qwen2.5:7b-instruct`. Run `ollama list` to verify available models on your system.
 
 ## License
 
