@@ -62,15 +62,17 @@ def test_performance_templates_exist() -> None:
 
 
 def test_on_template_change_custom_returns_empty_update() -> None:
-    update = on_template_change("カスタム")
+    update, warning = on_template_change("カスタム")
     assert isinstance(update, dict)
     assert update.get("__type__") == "update"
+    assert warning == ""
 
 
 def test_on_template_change_unknown_falls_back_to_natural() -> None:
-    update = on_template_change("unknown-template")
+    update, warning = on_template_change("unknown-template")
     assert isinstance(update, dict)
     assert update.get("value") == TEMPLATES["自然に"]
+    assert warning == ""
 
 
 def test_official_candidate_templates_exist() -> None:

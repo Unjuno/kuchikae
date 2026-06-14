@@ -40,7 +40,6 @@ def test_create_app_experimental_warning_present():
     demo = create_app(pipeline, prompt)
     config_str = str(demo.config)
     assert "experimental-warning" in config_str
-    assert "なりすまし、詐欺、脅迫、同意のない声の模倣には使用しないでください" in config_str
 
 
 def test_create_app_normal_tab_components():
@@ -93,8 +92,15 @@ def test_create_app_templates_in_config():
     prompt = TextTransformPrompt(instruction="test")
     demo = create_app(pipeline, prompt)
     config_str = str(demo.config)
-    for name in TEMPLATES:
+    # The dropdown defaults to "標準" category; not all TEMPLATES are present
+    for name in ("自然に", "丁寧に", "親しみやすく", "短く", "力強く", "落ち着いて"):
         assert name in config_str
+    # Category names should be present in the Radio
+    assert "標準" in config_str
+    assert "キャラ" in config_str
+    assert "実験" in config_str
+    assert "実験強" in config_str
+    assert "カスタム" in config_str
 
 
 def test_create_app_has_stt_preset_selector():
@@ -169,7 +175,8 @@ def test_experimental_warning_in_normal_tab():
     demo = create_app(pipeline, prompt)
     config_str = str(demo.config)
     assert "experimental-warning" in config_str
-    assert "なりすまし、詐欺、脅迫、同意のない声の模倣には使用しないでください" in config_str
+    # Default template "自然に" is NOT experimental, so warning text should be absent
+    assert "なりすまし、詐欺、脅迫、同意のない声の模倣には使用しないでください" not in config_str
 
 
 def test_experimental_warning_in_simple_tab():
@@ -186,10 +193,9 @@ def test_template_choices_include_experimental():
     prompt = TextTransformPrompt(instruction="test")
     demo = create_app(pipeline, prompt)
     config_str = str(demo.config)
-    assert "実験: 関西弁" in config_str
-    assert "実験: 毒舌" in config_str
-    assert "実験強: 関西弁" in config_str
-    assert "実験強: 毒舌" in config_str
+    # Category Radio should list "実験" and "実験強"
+    assert '"実験"' in config_str or "'実験'" in config_str
+    assert '"実験強"' in config_str or "'実験強'" in config_str
 
 
 def test_simple_template_choices_include_experimental():
@@ -197,9 +203,10 @@ def test_simple_template_choices_include_experimental():
     prompt = TextTransformPrompt(instruction="test")
     demo = create_app(pipeline, prompt)
     config_str = str(demo.config)
+    # The simple tab dropdown also defaults to "標準" category
     simple_section = config_str.split("simple-template-select")[1]
-    assert "実験: 関西弁" in simple_section
-    assert "実験強: 関西弁" in simple_section
+    assert "自然に" in simple_section
+    assert "実験: 関西弁" not in simple_section  # not in default category
 
 
 def test_ptt_recording_no_transform_scale():
