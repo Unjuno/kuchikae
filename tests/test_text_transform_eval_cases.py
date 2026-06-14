@@ -38,7 +38,7 @@ class TestEvalCasesStructure:
 
     def test_minimum_case_count(self) -> None:
         cases = _load_cases()
-        assert len(cases) >= 60, f"Expected >= 60 cases, got {len(cases)}"
+        assert len(cases) >= 80, f"Expected >= 80 cases, got {len(cases)}"
 
     def test_all_required_fields(self) -> None:
         cases = _load_cases()
@@ -48,11 +48,18 @@ class TestEvalCasesStructure:
             assert "input" in case, f"Case {case['id']} missing 'input'"
             assert "template" in case, f"Case {case['id']} missing 'template'"
             assert "expected" in case, f"Case {case['id']} missing 'expected'"
-            assert "must_preserve" in case["expected"], (
-                f"Case {case['id']} missing 'expected.must_preserve'"
+            # Must have at least one of the new schema fields
+            exp = case["expected"]
+            has_new = any(
+                k in exp
+                for k in ("hard_preserve", "semantic_preserve", "forbidden")
             )
-            assert "should_not_include" in case["expected"], (
-                f"Case {case['id']} missing 'expected.should_not_include'"
+            has_old = any(
+                k in exp
+                for k in ("must_preserve", "should_not_include")
+            )
+            assert has_new or has_old, (
+                f"Case {case['id']} has no preserve/forbidden fields"
             )
 
     def test_unique_ids(self) -> None:
@@ -72,8 +79,26 @@ class TestEvalCasesStructure:
             "strong_experiment_templates",
             "safety_boundary",
             "custom_prompt",
+            "complex",
         }
         assert categories == expected_categories, f"Missing categories: {expected_categories - categories}"
+
+    def test_semantic_preserve_format(self) -> None:
+        """semantic_preserve entries must be str or dict with canonical+allowed."""
+        cases = _load_cases()
+        for case in cases:
+            exp = case.get("expected", {})
+            for entry in exp.get("semantic_preserve", []):
+                if isinstance(entry, dict):
+                    assert "canonical" in entry, (
+                        f"Case {case['id']}: semantic_preserve dict missing 'canonical'"
+                    )
+                    assert "allowed" in entry, (
+                        f"Case {case['id']}: semantic_preserve dict missing 'allowed'"
+                    )
+                    assert isinstance(entry["allowed"], list), (
+                        f"Case {case['id']}: semantic_preserve.allowed must be list"
+                    )
 
 
 # ---------------------------------------------------------------------------
@@ -117,22 +142,35 @@ class TestTemplateReferences:
 
 
 class TestExpectedResults:
-    def test_must_preserve_nonempty_for_fact_cases(self) -> None:
+    def test_preserve_nonempty_for_fact_cases(self) -> None:
         cases = _load_cases()
         for case in cases:
             if case["category"] in ("fact_preservation", "business_request"):
-                assert len(case["expected"]["must_preserve"]) > 0, (
-                    f"Case {case['id']} ({case['category']}) has empty must_preserve"
+                exp = case["expected"]
+                has_preserve = (
+                    len(exp.get("hard_preserve", [])) > 0
+                    or len(exp.get("must_preserve", [])) > 0
+                )
+                assert has_preserve, (
+                    f"Case {case['id']} ({case['category']}) has empty preserve fields"
                 )
 
-    def test_safety_boundary_no_must_preserve(self) -> None:
+    def test_safety_boundary_no_hard_preserve(self) -> None:
         cases = _load_cases()
         for case in cases:
             if case["category"] == "safety_boundary":
-                # Safety cases should not require preserving harmful terms
-                assert len(case["expected"]["must_preserve"]) == 0, (
+                exp = case["expected"]
+                assert len(exp.get("hard_preserve", [])) == 0, (
+                    f"Safety case {case['id']} has non-empty hard_preserve"
+                )
+                assert len(exp.get("must_preserve", [])) == 0, (
                     f"Safety case {case['id']} has non-empty must_preserve"
                 )
+
+    def test_complex_cases_exist(self) -> None:
+        cases = _load_cases()
+        complex_cases = [c for c in cases if c["category"] == "complex"]
+        assert len(complex_cases) >= 4, f"Expected >= 4 complex cases, got {len(complex_cases)}"
 
 
 # ---------------------------------------------------------------------------

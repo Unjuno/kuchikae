@@ -36,9 +36,10 @@ Kuchikae v0.1.0 is the initial public release of a prompt-conditioned, voice-con
 ### CLI
 
 ```
-kuchikae serve [options]    Start the web server
-kuchikae doctor             Check backend availability
-kuchikae --help             Show help
+kuchikae serve [options]       Start the web server
+kuchikae doctor [--fix]        Check backend availability
+kuchikae setup-models [opts]   Download required model weights
+kuchikae --help                Show help
 ```
 
 Options:
@@ -46,6 +47,12 @@ Options:
 - `--real` — real backends (requires Ollama, FasterWhisper, Irodori-TTS)
 - `--streaming` — streaming STT with real backends
 - `--port PORT` — server port (default: 7860)
+
+Setup:
+- `setup-models` — download required models (STT + TTS)
+- `setup-models --all` — download all models (including optional audio emotion)
+- `setup-models --all --repair` — force re-download all models
+- `doctor --fix` — check and repair missing/broken models
 
 ## Safety
 
@@ -92,6 +99,12 @@ uv run kuchikae serve --dummy
 ```bash
 # Install real backend dependencies
 uv sync --extra real
+
+# Download models
+uv run kuchikae setup-models --all
+
+# Check and repair models
+uv run kuchikae doctor --strict
 
 # Start Ollama
 ollama serve

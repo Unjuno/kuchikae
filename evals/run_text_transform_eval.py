@@ -3,7 +3,7 @@
 
 Usage:
   uv run python evals/run_text_transform_eval.py --backend prompted_rule
-  uv run python evals/run_text_transform_eval.py --backend ollama --ollama-model qwen2.5-coder:7b
+  uv run python evals/run_text_transform_eval.py --backend ollama
   uv run python evals/run_text_transform_eval.py --template "実験: 関西弁"
   uv run python evals/run_text_transform_eval.py --backend prompted_rule --out evals/results/smoke.jsonl
 """
@@ -13,11 +13,12 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -29,13 +30,54 @@ JUDGE_PROMPT_PATH = Path(__file__).parent / "judge_prompt.md"
 RESULTS_DIR = Path(__file__).parent / "results"
 
 
+# ---------------------------------------------------------------------------
+# Schema: semantic_preserve entry
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SemanticPreserveEntry:
+    canonical: str
+    allowed: list[str]
+
+    @classmethod
+    def from_raw(cls, raw: str | dict) -> SemanticPreserveEntry:
+        if isinstance(raw, str):
+            return cls(canonical=raw, allowed=[raw])
+        return cls(
+            canonical=raw.get("canonical", ""),
+            allowed=raw.get("allowed", []),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Schema: expected result
+# ---------------------------------------------------------------------------
+
 @dataclass
 class ExpectedResult:
+    hard_preserve: list[str] = field(default_factory=list)
+    semantic_preserve: list[SemanticPreserveEntry] = field(default_factory=list)
+    forbidden: list[str] = field(default_factory=list)
+    blockers: list[str] = field(default_factory=list)
+    style_notes: str = ""
+    # backward compat
     must_preserve: list[str] = field(default_factory=list)
     should_not_include: list[str] = field(default_factory=list)
-    style_notes: str = ""
     failure_blockers: list[str] = field(default_factory=list)
 
+    def normalized_hard(self) -> list[str]:
+        return self.hard_preserve or self.must_preserve
+
+    def normalized_forbidden(self) -> list[str]:
+        return self.forbidden or self.should_not_include
+
+    def normalized_blockers(self) -> list[str]:
+        return self.blockers or self.failure_blockers
+
+
+# ---------------------------------------------------------------------------
+# Eval case
+# ---------------------------------------------------------------------------
 
 @dataclass
 class EvalCase:
@@ -47,13 +89,25 @@ class EvalCase:
     custom_prompt: str = ""
 
 
+# ---------------------------------------------------------------------------
+# Judge results
+# ---------------------------------------------------------------------------
+
+Verdict = Literal["pass", "warn", "fail"]
+
+
 @dataclass
 class RuleJudgeResult:
-    overall_pass: bool
-    failure_type: str | None
-    failure_reason: str
-    must_preserve_hits: dict[str, bool] = field(default_factory=dict)
-    should_not_include_hits: dict[str, bool] = field(default_factory=dict)
+    verdict: Verdict
+    hard_preserve_hits: dict[str, bool] = field(default_factory=dict)
+    semantic_preserve_hits: dict[str, bool] = field(default_factory=dict)
+    forbidden_hits: dict[str, bool] = field(default_factory=dict)
+    failure_type: str | None = None
+    failure_reason: str = ""
+
+    @property
+    def overall_pass(self) -> bool:
+        return self.verdict != "fail"
 
 
 @dataclass
@@ -63,9 +117,13 @@ class LLMJudgeResult:
     naturalness: int = 0
     safety: int = 0
     overreach: int = 0
-    overall_pass: bool = False
+    verdict: Verdict = "pass"
     failure_type: str | None = None
     failure_reason: str = ""
+
+    @property
+    def overall_pass(self) -> bool:
+        return self.verdict != "fail"
 
 
 @dataclass
@@ -80,6 +138,17 @@ class EvalResult:
     llm_judge: LLMJudgeResult | None = None
 
 
+# ---------------------------------------------------------------------------
+# Load
+# ---------------------------------------------------------------------------
+
+def _parse_semantic(raw_list: list) -> list[SemanticPreserveEntry]:
+    entries: list[SemanticPreserveEntry] = []
+    for item in raw_list:
+        entries.append(SemanticPreserveEntry.from_raw(item))
+    return entries
+
+
 def load_cases(template_filter: str | None = None) -> list[EvalCase]:
     """Load evaluation cases from YAML."""
     with open(CASES_PATH, encoding="utf-8") as f:
@@ -89,9 +158,14 @@ def load_cases(template_filter: str | None = None) -> list[EvalCase]:
     for raw in data.get("cases", []):
         exp_raw = raw.get("expected", {})
         expected = ExpectedResult(
+            hard_preserve=exp_raw.get("hard_preserve", []),
+            semantic_preserve=_parse_semantic(exp_raw.get("semantic_preserve", [])),
+            forbidden=exp_raw.get("forbidden", []),
+            blockers=exp_raw.get("blockers", []),
+            style_notes=exp_raw.get("style_notes", ""),
+            # backward compat
             must_preserve=exp_raw.get("must_preserve", []),
             should_not_include=exp_raw.get("should_not_include", []),
-            style_notes=exp_raw.get("style_notes", ""),
             failure_blockers=exp_raw.get("failure_blockers", []),
         )
         case = EvalCase(
@@ -109,17 +183,19 @@ def load_cases(template_filter: str | None = None) -> list[EvalCase]:
     return cases
 
 
+# ---------------------------------------------------------------------------
+# Backends
+# ---------------------------------------------------------------------------
+
 def create_rule_judge() -> Any:
     """Create a PromptedRuleTextTransformBackend for rule-based evaluation."""
     from kuchikae.domain.text_transform import PromptedRuleTextTransformBackend
-
     return PromptedRuleTextTransformBackend()
 
 
 def create_ollama_backend(model: str) -> Any:
     """Create an OllamaTextTransformBackend for LLM-based evaluation."""
     from kuchikae.domain.text_transform import OllamaTextTransformBackend
-
     return OllamaTextTransformBackend(model=model)
 
 
@@ -146,74 +222,113 @@ def run_transform(backend: Any, case: EvalCase, backend_type: str) -> tuple[str,
     return result, elapsed
 
 
+# ---------------------------------------------------------------------------
+# Rule judge — pass / warn / fail
+# ---------------------------------------------------------------------------
+
 def judge_rule(case: EvalCase, output: str, backend_type: str = "prompted_rule") -> RuleJudgeResult:
-    """Apply rule-based judging to a transform result."""
-    # Check empty output
+    """Apply rule-based judging. Returns pass/warn/fail verdict."""
+    exp = case.expected
+    hard = exp.normalized_hard()
+    forbidden = exp.normalized_forbidden()
+    sem_entries = exp.semantic_preserve
+
+    # ── fail: empty output ──
     if not output.strip():
         return RuleJudgeResult(
-            overall_pass=False,
+            verdict="fail",
             failure_type="empty_output",
             failure_reason="Transform produced empty output",
         )
 
-    # Check STYLE_TEMPLATE leak
+    # ── fail: STYLE_TEMPLATE leak ──
     if "[STYLE_TEMPLATE:" in output:
         return RuleJudgeResult(
-            overall_pass=False,
+            verdict="fail",
             failure_type="template_leak",
             failure_reason="Output contains [STYLE_TEMPLATE: ...] marker text",
         )
 
-    # Check must_preserve
-    must_preserve_hits: dict[str, bool] = {}
-    for term in case.expected.must_preserve:
-        must_preserve_hits[term] = term in output
-
-    missing = [t for t, hit in must_preserve_hits.items() if not hit]
-    if missing:
+    # ── fail: <think> leak ──
+    if "<think>" in output or "</thought>" in output:
         return RuleJudgeResult(
-            overall_pass=False,
-            failure_type="meaning_loss",
-            failure_reason=f"Missing required terms: {', '.join(missing)}",
-            must_preserve_hits=must_preserve_hits,
+            verdict="fail",
+            failure_type="cot_leak",
+            failure_reason="Output contains <think> / </thought> tag",
         )
 
-    # Check should_not_include (skip for rule backend - can't do safety filtering)
-    should_not_include_hits: dict[str, bool] = {}
-    if backend_type != "prompted_rule":
-        for term in case.expected.should_not_include:
-            should_not_include_hits[term] = term in output
+    # ── hard_preserve: fail on missing ──
+    hard_hits: dict[str, bool] = {}
+    for term in hard:
+        hard_hits[term] = term in output
+    missing_hard = [t for t, hit in hard_hits.items() if not hit]
+    if missing_hard:
+        return RuleJudgeResult(
+            verdict="fail",
+            failure_type="meaning_loss",
+            failure_reason=f"Missing required terms: {', '.join(missing_hard)}",
+            hard_preserve_hits=hard_hits,
+        )
 
-        found_unwanted = [t for t, hit in should_not_include_hits.items() if hit]
-        if found_unwanted:
+    # ── forbidden: fail on hit (skip for rule backend — can't do safety filtering) ──
+    forbidden_hits: dict[str, bool] = {}
+    if backend_type != "prompted_rule":
+        for term in forbidden:
+            forbidden_hits[term] = term in output
+        found_forbidden = [t for t, hit in forbidden_hits.items() if hit]
+        if found_forbidden:
             return RuleJudgeResult(
-                overall_pass=False,
+                verdict="fail",
                 failure_type="unsafe",
-                failure_reason=f"Contains unwanted terms: {', '.join(found_unwanted)}",
-                should_not_include_hits=should_not_include_hits,
+                failure_reason=f"Contains forbidden terms: {', '.join(found_forbidden)}",
+                forbidden_hits=forbidden_hits,
             )
 
-    # Check echo (output matches input exactly - no transformation)
+    # ── semantic_preserve: warn on missing ──
+    sem_hits: dict[str, bool] = {}
+    sem_warns: list[str] = []
+    for entry in sem_entries:
+        hit = any(a in output for a in entry.allowed)
+        sem_hits[entry.canonical] = hit
+        if not hit:
+            sem_warns.append(entry.canonical)
+
+    # ── echo: no transformation ──
     if output.strip() == case.input.strip():
         return RuleJudgeResult(
-            overall_pass=False,
+            verdict="fail",
             failure_type="style_weak",
             failure_reason="Output is identical to input (no transformation applied)",
-            must_preserve_hits=must_preserve_hits,
-            should_not_include_hits=should_not_include_hits,
+            hard_preserve_hits=hard_hits,
+            semantic_preserve_hits=sem_hits,
+            forbidden_hits=forbidden_hits,
+        )
+
+    # ── verdict ──
+    if sem_warns:
+        return RuleJudgeResult(
+            verdict="warn",
+            failure_type="semantic_loss",
+            failure_reason=f"Semantic terms not found: {', '.join(sem_warns)}",
+            hard_preserve_hits=hard_hits,
+            semantic_preserve_hits=sem_hits,
+            forbidden_hits=forbidden_hits,
         )
 
     return RuleJudgeResult(
-        overall_pass=True,
-        failure_type=None,
-        failure_reason="",
-        must_preserve_hits=must_preserve_hits,
-        should_not_include_hits=should_not_include_hits,
+        verdict="pass",
+        hard_preserve_hits=hard_hits,
+        semantic_preserve_hits=sem_hits,
+        forbidden_hits=forbidden_hits,
     )
 
 
+# ---------------------------------------------------------------------------
+# LLM judge — only for warn / ambiguous semantic cases
+# ---------------------------------------------------------------------------
+
 def judge_llm(case: EvalCase, output: str, ollama_model: str) -> LLMJudgeResult | None:
-    """Apply LLM-based judging using an Ollama model as judge."""
+    """Apply LLM-based judging for semantic/ambiguous cases."""
     try:
         import httpx
     except ImportError:
@@ -254,9 +369,6 @@ Return ONLY a JSON object."""
             data = resp.json()
             content = data.get("message", {}).get("content", "")
 
-            # Extract JSON from response
-            import re
-
             json_match = re.search(r"\{[^{}]*\}", content, re.DOTALL)
             if not json_match:
                 logger.warning("No JSON found in judge response for %s", case.id)
@@ -269,7 +381,7 @@ Return ONLY a JSON object."""
                 naturalness=scores.get("naturalness", 0),
                 safety=scores.get("safety", 0),
                 overreach=scores.get("overreach", 0),
-                overall_pass=scores.get("overall_pass", False),
+                verdict="pass" if scores.get("overall_pass", False) else "warn",
                 failure_type=scores.get("failure_type"),
                 failure_reason=scores.get("failure_reason", ""),
             )
@@ -277,6 +389,10 @@ Return ONLY a JSON object."""
         logger.warning("LLM judge failed for %s: %s", case.id, e)
         return None
 
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
 
 def write_jsonl(results: list[EvalResult], output_path: Path, model_name: str = "") -> None:
     """Write results as JSONL."""
@@ -299,6 +415,10 @@ def write_jsonl(results: list[EvalResult], output_path: Path, model_name: str = 
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run text transform evaluation")
     parser.add_argument(
@@ -316,7 +436,7 @@ def main() -> None:
         "--judge",
         choices=["none", "ollama"],
         default="none",
-        help="LLM judge backend (default: none = rule-only)",
+        help="LLM judge backend (default: none = rule-only). Used for semantic/warn cases.",
     )
     parser.add_argument(
         "--judge-model",
@@ -364,8 +484,10 @@ def main() -> None:
         output, latency = run_transform(backend, case, args.backend)
         rule_result = judge_rule(case, output, args.backend)
 
+        # LLM judge: only for warn verdict (semantic ambiguity)
         llm_result = None
-        if args.judge == "ollama":
+        if args.judge == "ollama" and rule_result.verdict == "warn":
+            logger.info("  -> warn: invoking LLM judge for semantic check")
             llm_result = judge_llm(case, output, args.judge_model)
 
         results.append(
@@ -381,8 +503,9 @@ def main() -> None:
             )
         )
 
-        status = "PASS" if rule_result.overall_pass else f"FAIL({rule_result.failure_type})"
-        logger.info("  -> %s (%.0fms) %s", status, latency, rule_result.failure_reason)
+        verdict = rule_result.verdict.upper()
+        reason = rule_result.failure_reason
+        logger.info("  -> %s (%.0fms) %s", verdict, latency, reason)
 
     # Write results
     if args.out:
@@ -396,14 +519,15 @@ def main() -> None:
 
     # Summary
     total = len(results)
-    passed = sum(1 for r in results if r.rule_judge.overall_pass)
-    failed = total - passed
-    logger.info("Summary: %d/%d passed (%d failed)", passed, total, failed)
+    passed = sum(1 for r in results if r.rule_judge.verdict == "pass")
+    warned = sum(1 for r in results if r.rule_judge.verdict == "warn")
+    failed = sum(1 for r in results if r.rule_judge.verdict == "fail")
+    logger.info("Summary: %d pass, %d warn, %d fail (total %d)", passed, warned, failed, total)
 
     if failed > 0:
         logger.info("Failures:")
         for r in results:
-            if not r.rule_judge.overall_pass:
+            if r.rule_judge.verdict == "fail":
                 logger.info(
                     "  %s: %s - %s",
                     r.rule_judge.failure_type,

@@ -20,6 +20,7 @@ from pathlib import Path
 class SummaryStats:
     total: int = 0
     passed: int = 0
+    warned: int = 0
     failed: int = 0
 
     @property
@@ -42,6 +43,10 @@ def load_results(jsonl_path: Path) -> list[dict]:
     return results
 
 
+def _get_verdict(rule: dict) -> str:
+    return rule.get("verdict", "pass" if rule.get("overall_pass", False) else "fail")
+
+
 def compute_summary(results: list[dict]) -> dict:
     """Compute summary statistics from results."""
     overall = SummaryStats(total=len(results))
@@ -52,18 +57,23 @@ def compute_summary(results: list[dict]) -> dict:
 
     for r in results:
         rule = r.get("rule_judge", {})
-        passed = rule.get("overall_pass", False)
+        verdict = _get_verdict(rule)
         template = r.get("template", "unknown")
         category = r.get("category", "unknown")
         failure_type = rule.get("failure_type")
 
         by_template[template].total += 1
         by_category[category].total += 1
+        overall.total = overall.total  # ensure exists
 
-        if passed:
+        if verdict == "pass":
             overall.passed += 1
             by_template[template].passed += 1
             by_category[category].passed += 1
+        elif verdict == "warn":
+            overall.warned += 1
+            by_template[template].warned += 1
+            by_category[category].warned += 1
         else:
             overall.failed += 1
             by_template[template].failed += 1
@@ -85,6 +95,7 @@ def compute_summary(results: list[dict]) -> dict:
         "overall": {
             "total": overall.total,
             "passed": overall.passed,
+            "warned": overall.warned,
             "failed": overall.failed,
             "pass_rate": round(overall.pass_rate, 1),
         },
@@ -92,6 +103,7 @@ def compute_summary(results: list[dict]) -> dict:
             t: {
                 "total": s.total,
                 "passed": s.passed,
+                "warned": s.warned,
                 "failed": s.failed,
                 "pass_rate": round(s.pass_rate, 1),
             }
@@ -101,6 +113,7 @@ def compute_summary(results: list[dict]) -> dict:
             c: {
                 "total": s.total,
                 "passed": s.passed,
+                "warned": s.warned,
                 "failed": s.failed,
                 "pass_rate": round(s.pass_rate, 1),
             }
@@ -115,18 +128,22 @@ def format_text(summary: dict) -> str:
     """Format summary as plain text."""
     lines = []
     o = summary["overall"]
-    lines.append(f"Overall: {o['passed']}/{o['total']} passed ({o['pass_rate']}%)")
+    lines.append(f"Overall: {o['passed']}/{o['total']} passed ({o['pass_rate']}%), {o['warned']} warned, {o['failed']} failed")
     lines.append("")
 
     lines.append("By Template:")
     for t, s in summary["by_template"].items():
         status = "OK" if s["failed"] == 0 else f"{s['failed']} FAIL"
+        if s["warned"] > 0:
+            status += f" {s['warned']} WARN"
         lines.append(f"  {t}: {s['passed']}/{s['total']} ({s['pass_rate']}%) [{status}]")
     lines.append("")
 
     lines.append("By Category:")
     for c, s in summary["by_category"].items():
         status = "OK" if s["failed"] == 0 else f"{s['failed']} FAIL"
+        if s["warned"] > 0:
+            status += f" {s['warned']} WARN"
         lines.append(f"  {c}: {s['passed']}/{s['total']} ({s['pass_rate']}%) [{status}]")
     lines.append("")
 
@@ -153,27 +170,25 @@ def format_markdown(summary: dict) -> str:
     """Format summary as markdown."""
     lines = []
     o = summary["overall"]
-    lines.append(f"# Text Transform Evaluation Results")
-    lines.append(f"")
-    lines.append(f"**Overall: {o['passed']}/{o['total']} passed ({o['pass_rate']}%)**")
-    lines.append(f"")
+    lines.append("# Text Transform Evaluation Results")
+    lines.append("")
+    lines.append(f"**Overall: {o['passed']}/{o['total']} passed ({o['pass_rate']}%), {o['warned']} warned, {o['failed']} failed**")
+    lines.append("")
 
     lines.append("## By Template")
     lines.append("")
-    lines.append("| Template | Pass | Total | Rate | Status |")
-    lines.append("|----------|------|-------|------|--------|")
+    lines.append("| Template | Pass | Warn | Fail | Total | Rate |")
+    lines.append("|----------|------|------|------|-------|------|")
     for t, s in summary["by_template"].items():
-        status = "OK" if s["failed"] == 0 else f"FAIL ({s['failed']})"
-        lines.append(f"| {t} | {s['passed']} | {s['total']} | {s['pass_rate']}% | {status} |")
+        lines.append(f"| {t} | {s['passed']} | {s['warned']} | {s['failed']} | {s['total']} | {s['pass_rate']}% |")
     lines.append("")
 
     lines.append("## By Category")
     lines.append("")
-    lines.append("| Category | Pass | Total | Rate | Status |")
-    lines.append("|----------|------|-------|------|--------|")
+    lines.append("| Category | Pass | Warn | Fail | Total | Rate |")
+    lines.append("|----------|------|------|------|-------|------|")
     for c, s in summary["by_category"].items():
-        status = "OK" if s["failed"] == 0 else f"FAIL ({s['failed']})"
-        lines.append(f"| {c} | {s['passed']} | {s['total']} | {s['pass_rate']}% | {status} |")
+        lines.append(f"| {c} | {s['passed']} | {s['warned']} | {s['failed']} | {s['total']} | {s['pass_rate']}% |")
     lines.append("")
 
     if summary["failure_types"]:
