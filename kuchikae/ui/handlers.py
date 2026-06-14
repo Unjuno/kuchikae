@@ -16,7 +16,7 @@ import soundfile as sf
 from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.domain.voice_style import VOICE_STYLE_PRESETS
 from kuchikae.pipeline import KuchikaePipeline
-from kuchikae.ui.templates import TEMPLATES
+from kuchikae.ui.templates import TEMPLATES, TEMPLATE_CATEGORIES
 
 logger = logging.getLogger("kuchikae.ui.handlers")
 
@@ -112,9 +112,9 @@ def _voice_analysis_html(pipeline: KuchikaePipeline) -> str:
     voice_style = getattr(pipeline, "_last_voice_style", "auto")
     emotion_mood = getattr(pipeline, "_last_audio_emotion_mood", None) or getattr(pipeline, "_last_audio_emotion", "unknown")
     return (
-        '<div id="voice-analysis-label" style="font-size: 12px; color: #A1A1AA; padding: 4px 0;">'
-        f'<span style="color: #C4B5FD;">声の印象:</span> {emotion_mood} / '
-        f'<span style="color: #C4B5FD;">適用スタイル:</span> {voice_style}'
+        '<div id="voice-analysis-label">'
+        f'<span class="voice-analysis-accent">声の印象:</span> {emotion_mood} / '
+        f'<span class="voice-analysis-accent">適用スタイル:</span> {voice_style}'
         '</div>'
     )
 
@@ -332,8 +332,28 @@ def run(
         return
 
 
+def _is_experimental_template(template_name: str) -> bool:
+    return template_name.startswith("実験:") or template_name.startswith("実験強:")
+
+
+def _experimental_warning_html(template_name: str = "") -> str:
+    if template_name and not _is_experimental_template(template_name):
+        return ""
+    return (
+        '<div id="experimental-warning" class="experimental-warning">'
+        '実験テンプレートは検証用です。なりすまし、詐欺、脅迫、同意のない声の模倣には使用しないでください。'
+        '</div>'
+    )
+
+
 def on_template_change(template_name: str):
     if template_name == "カスタム":
-        return gr.update()
+        return gr.update(), _experimental_warning_html(template_name)
     text = TEMPLATES.get(template_name, TEMPLATES["自然に"])
-    return gr.update(value=text)
+    return gr.update(value=text), _experimental_warning_html(template_name)
+
+
+def on_template_category_change(category: str) -> gr.update:
+    choices = TEMPLATE_CATEGORIES.get(category, TEMPLATE_CATEGORIES["標準"])
+    first = choices[0] if choices else "自然に"
+    return gr.update(choices=choices, value=first)

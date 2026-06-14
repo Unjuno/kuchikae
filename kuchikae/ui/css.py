@@ -79,12 +79,54 @@ gradio-app, .gradio-app {
   justify-content: center;
 }
 
+#template-category, #simple-template-category {
+  margin-bottom: 8px;
+}
+
+#template-category > span, #simple-template-category > span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 6px;
+}
+
+#template-category .wrap, #simple-template-category .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 !important;
+}
+
+#template-category label, #simple-template-category label {
+  padding: 4px 14px !important;
+  min-height: 28px !important;
+  font-size: 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  cursor: pointer;
+  transition: all .15s ease;
+  color: var(--text-muted);
+}
+
+#template-category label.selected, #simple-template-category label.selected {
+  background: #2D1B4E;
+  border-color: var(--accent-primary);
+  color: var(--accent-light);
+  font-weight: 600;
+}
+
+#template-category label input, #simple-template-category label input {
+  display: none;
+}
+
 #template-select {
   margin-bottom: 12px;
 }
 
 #template-select > span {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
   display: block;
@@ -99,9 +141,9 @@ gradio-app, .gradio-app {
 }
 
 #template-select label {
-  padding: 4px 12px !important;
-  min-height: 28px !important;
-  font-size: 12px;
+  padding: 5px 14px !important;
+  min-height: 30px !important;
+  font-size: 13px;
   border-radius: 6px;
   border: 1px solid var(--border-color);
   background: var(--bg-tertiary);
@@ -219,21 +261,21 @@ gradio-app, .gradio-app {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 10px 14px;
+  font-size: 14px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.7;
   resize: none;
 }
 
 #transformed-text textarea {
-  background: var(--bg-accent);
-  border: 1px solid var(--border-color);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(91, 33, 182, 0.12) 100%);
+  border: 1px solid rgba(124, 58, 237, 0.3);
   border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--accent-light);
+  line-height: 1.7;
   resize: none;
 }
 
@@ -272,11 +314,33 @@ gradio-app, .gradio-app {
   margin-top: 4px;
 }
 
+.voice-analysis-label-inner {
+  color: #A1A1AA;
+  font-size: 12px;
+}
+
+#voice-analysis-label {
+  font-size: 12px;
+  color: #A1A1AA;
+  padding: 4px 0;
+}
+
+.voice-analysis-accent {
+  color: #C4B5FD;
+}
+
+.experimental-warning {
+  color: #A1A1AA;
+  font-size: 11px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
 #prompt-box textarea {
   border-radius: 8px;
   border: 1px solid var(--border-color);
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 10px 14px;
+  font-size: 14px;
   color: var(--text-secondary);
   background: var(--bg-tertiary);
 }
@@ -355,10 +419,10 @@ gradio-app, .gradio-app {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   font-size: 14px;
   color: var(--text-primary);
-  line-height: 1.5;
+  line-height: 1.6;
   resize: none;
 }
 
@@ -366,10 +430,10 @@ gradio-app, .gradio-app {
   background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(91, 33, 182, 0.12) 100%);
   border: 1px solid rgba(124, 58, 237, 0.3);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   font-size: 14px;
   color: var(--accent-light);
-  line-height: 1.5;
+  line-height: 1.6;
   resize: none;
 }
 

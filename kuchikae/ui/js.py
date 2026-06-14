@@ -48,54 +48,14 @@ PTT_JS = r"""
     }
   }
 
-  function findAudioWrap() {
-    return document.getElementById('simple-audio-wrap');
-  }
-
   function findRecordButton(wrap) {
     if (!wrap) return null;
-    const buttons = Array.from(wrap.querySelectorAll('button'));
-    for (const btn of buttons) {
-      const svg = btn.querySelector('svg');
-      if (svg) {
-        const paths = Array.from(svg.querySelectorAll('path'));
-        const hasMicPath = paths.some(p => {
-          const d = p.getAttribute('d') || '';
-          return d.includes('M12') && (d.includes('12 14') || d.includes('12 16'));
-        });
-        if (hasMicPath) return btn;
-      }
-    }
-    for (const btn of buttons) {
-      const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
-      const title = (btn.getAttribute('title') || '').toLowerCase();
-      if (aria.includes('record') || aria.includes('録音') || title.includes('record') || title.includes('録音')) {
-        return btn;
-      }
-    }
-    if (buttons.length > 0) return buttons[0];
-    return null;
+    return wrap.querySelector('.record-button');
   }
 
   function findStopButton(wrap) {
     if (!wrap) return null;
-    const buttons = Array.from(wrap.querySelectorAll('button'));
-    for (const btn of buttons) {
-      const svg = btn.querySelector('svg');
-      if (svg) {
-        const rects = Array.from(svg.querySelectorAll('rect'));
-        if (rects.length > 0) return btn;
-      }
-    }
-    for (const btn of buttons) {
-      const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
-      const title = (btn.getAttribute('title') || '').toLowerCase();
-      if (aria.includes('stop') || aria.includes('停止') || title.includes('stop') || title.includes('停止')) {
-        return btn;
-      }
-    }
-    if (buttons.length > 1) return buttons[1];
-    return null;
+    return wrap.querySelector('.stop-button');
   }
 
   function clickButton(btn) {
@@ -114,7 +74,7 @@ PTT_JS = r"""
     setButtonState(true);
     setHint('ボタンを押しながら話す');
     setStatus('録音中...', true);
-    const wrap = findAudioWrap();
+    const wrap = document.getElementById('simple-audio-wrap');
     const btn = findRecordButton(wrap);
     if (!btn || !clickButton(btn)) {
       pttState = 0;
@@ -130,7 +90,7 @@ PTT_JS = r"""
     setButtonState(false);
     setHint('変換処理中...');
     setStatus('変換処理中...', true);
-    const wrap = findAudioWrap();
+    const wrap = document.getElementById('simple-audio-wrap');
     const btn = findStopButton(wrap);
     if (!btn) {
       setHint('ボタンを押しながら話す、離すと自動変換');
