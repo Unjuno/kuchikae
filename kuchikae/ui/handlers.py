@@ -268,6 +268,7 @@ def run(
             "",
             "",
             f"AudioInput 段階で失敗しました: ValueError: 音声を録音してください。必要なら通常モードで録音し直してください。 (audio_input_type={type(audio_input).__name__})",
+            _voice_analysis_html(pipeline),
         )
         return
 

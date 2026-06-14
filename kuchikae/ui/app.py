@@ -155,7 +155,7 @@ def create_app(
 
                     def _run_handler(audio_value, template_value, text_prompt_value, stt_preset_value, voice_style_value):
                         # Disable button during processing
-                        yield (gr.update(interactive=False, value="処理中..."),) + (gr.update(),) * 4
+                        yield (gr.update(interactive=False, value="処理中..."),) + (gr.update(),) * 5
                         for result in run(
                             audio_value,
                             template_value,
