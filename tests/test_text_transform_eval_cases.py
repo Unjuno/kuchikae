@@ -38,7 +38,7 @@ class TestEvalCasesStructure:
 
     def test_minimum_case_count(self) -> None:
         cases = _load_cases()
-        assert len(cases) >= 50, f"Expected >= 50 cases, got {len(cases)}"
+        assert len(cases) >= 60, f"Expected >= 60 cases, got {len(cases)}"
 
     def test_all_required_fields(self) -> None:
         cases = _load_cases()

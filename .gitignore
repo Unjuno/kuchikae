@@ -11,6 +11,7 @@ build/
 # Nix
 result*
 .nix-defexpr
+!evals/results/
 
 # Gradio cache
 gradio-cache/
@@ -33,6 +34,7 @@ logs/
 
 # Evaluation artifacts
 artifacts/
+!evals/results/
 
 # Model weights and checkpoints
 *.safetensors
