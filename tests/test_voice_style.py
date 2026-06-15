@@ -7,7 +7,6 @@ from kuchikae.domain.voice_style import (
     VoiceSpeed,
     VoiceEmphasis,
     VoiceStyle,
-    StyleSignal,
     audio_emotion_to_voice_style,
     fuse_voice_styles,
     merge_voice_style,

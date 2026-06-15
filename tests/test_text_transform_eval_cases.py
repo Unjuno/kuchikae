@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
 from kuchikae.ui.templates import TEMPLATES
@@ -27,7 +26,6 @@ sys.path.insert(0, str(EVALS_DIR))
 from run_text_transform_eval import (
     EvalCase,
     ExpectedResult,
-    RuleJudgeResult,
     SemanticPreserveEntry,
     judge_rule,
 )

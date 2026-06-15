@@ -123,7 +123,6 @@ def _model_specs() -> list[ModelSpec]:
 def _check_whisper_model(spec: ModelSpec) -> ModelStatus:
     model_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
-        from huggingface_hub import try_to_load_from_cache  # type: ignore[import-untyped]
         cache_dir = os.path.join(
             Path.home(), ".cache", "huggingface", "hub",
             f"models--Systran--faster-whisper-{model_id}",
@@ -184,7 +183,6 @@ def _check_hf_file_model(spec: ModelSpec) -> ModelStatus:
 def _check_hf_repo_model(spec: ModelSpec) -> ModelStatus:
     repo_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
-        from huggingface_hub import try_to_load_from_cache  # type: ignore[import-untyped]
         # Check for any cached snapshot of this repo
         repo_cache = os.path.join(
             Path.home(), ".cache", "huggingface", "hub",

@@ -378,7 +378,6 @@ def _prompt_echo_score(source_text: str, transformed_text: str, prompt_instructi
             return phrase_ratio
     # Check if output is nearly identical to source (no transformation)
     if src_stripped and out:
-        shorter = min(len(src_stripped), len(out))
         longer = max(len(src_stripped), len(out))
         common = sum(1 for a, b in zip(src_stripped, out) if a == b)
         similarity = common / longer if longer else 0

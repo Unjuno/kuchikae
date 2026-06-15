@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 
 import numpy as np
-import pytest
 
 from kuchikae.domain.types import VoiceContext
 from kuchikae.domain.voice_output import (

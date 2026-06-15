@@ -268,8 +268,6 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         if not stripped:
             raise RuntimeError("Irodori-TTS requires non-empty text.")
 
-        import torch  # noqa: F811
-
         t0 = time.time()
         runtime = self._ensure_runtime()
         self._log(f"runtime ready: {time.time()-t0:.2f}s")

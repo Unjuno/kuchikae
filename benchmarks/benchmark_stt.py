@@ -28,7 +28,7 @@ from kuchikae.backends.stt_ct2 import AnimeWhisperCT2FP16STTBackend, AnimeWhispe
 from kuchikae.backends.stt_nemo import ReazonSpeechNemoASRBackend
 from kuchikae.backends.stt_transformers import TransformersJapaneseASRBackend
 from kuchikae.backends.stt_transformers_whisper import TransformersWhisperJapaneseASRBackend
-from kuchikae.domain.stt import FasterWhisperConfig, resolve_stt_preset
+from kuchikae.domain.stt import resolve_stt_preset
 
 
 def main() -> int:

@@ -14,7 +14,6 @@ from gradio.themes.utils import colors
 from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.pipeline import KuchikaePipeline
 from kuchikae.ui.handlers import (
-    TEMPLATES,
     _experimental_warning_html,
     on_template_change,
     on_template_category_change,

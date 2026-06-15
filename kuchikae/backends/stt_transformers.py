@@ -82,7 +82,7 @@ class TransformersJapaneseASRBackend(STTBackend):
         samples, sample_rate = sf.read(audio_path, dtype="float32")
         if samples.ndim > 1:
             samples = samples.mean(axis=1)
-        samples = linear_resample(samples.astype(np.float32, copy=False), sample_rate, 16000)
+        samples = linear_resample(samples.astype("float32", copy=False), sample_rate, 16000)
         return processor(samples, sampling_rate=16000, return_tensors="pt")
 
     def transcribe(self, audio_path: str) -> str:

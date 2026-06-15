@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-from pathlib import Path
+from unittest.mock import patch
 
 from kuchikae.models import (
     ModelSpec,

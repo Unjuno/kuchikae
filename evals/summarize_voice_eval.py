@@ -188,8 +188,8 @@ def format_markdown(summary: dict) -> str:
     lines = [
         "## Voice eval summary",
         "",
-        f"| Metric | Value |",
-        f"|--------|-------|",
+        "| Metric | Value |",
+        "|--------|-------|",
         f"| Total | {o['total']} |",
         f"| Pass | {o['passed']} ({o['pass_rate']:.1f}%) |",
         f"| Warn | {o['warned']} |",

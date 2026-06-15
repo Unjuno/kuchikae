@@ -36,17 +36,17 @@ def main() -> int:
         # Dummy.
         dummy = DummySTTBackend()
         result1 = dummy.transcribe(audio_path)
-        print(f"\n--- DummySTTBackend ---")
+        print("\n--- DummySTTBackend ---")
         print(f"  Result: {result1}")
 
         # Faster-whisper (if available).
         try:
             fw = FasterWhisperSTTBackend()
             result2 = fw.transcribe(audio_path)
-            print(f"\n--- FasterWhisperSTTBackend ---")
+            print("\n--- FasterWhisperSTTBackend ---")
             print(f"  Result: {result2}")
         except RuntimeError as e:
-            print(f"\n--- FasterWhisperSTTBackend SKIPPED ---")
+            print("\n--- FasterWhisperSTTBackend SKIPPED ---")
             print(f"  Reason: {e}")
 
         print("\n=== PASS ===")

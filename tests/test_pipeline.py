@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-import os
 from unittest.mock import patch
 
 import numpy as np
@@ -20,7 +19,7 @@ from kuchikae.counting_backends import (
     CountingVoiceOutputBackend,
 )
 from kuchikae.pipeline import KuchikaePipeline, MAX_AUDIO_DURATION, MAX_FILE_SIZE
-from kuchikae.domain.types import TextTransformPrompt, VoiceContext, VoiceOutputPrompt
+from kuchikae.domain.types import TextTransformPrompt, VoiceContext
 
 
 # ---------------------------------------------------------------------------
@@ -33,7 +32,6 @@ def _write_wav(path: str, duration_sec: float = 0.1, samplerate: int = 16000) ->
 
 
 def test_check_audio_unsupported_extension(tmp_path) -> None:
-    path = str(tmp_path / "test.txt")
     path_s = tmp_path / "test.txt"
     path_s.write_text("not audio")
     pipeline = KuchikaePipeline()
@@ -91,12 +89,12 @@ def test_step_voice_does_not_overwrite_text_with_cached_stt(tmp_path) -> None:
     pipeline.processing_cache.set_stt(audio_key, "CACHED STT RESULT")
     pipeline.processing_cache.set_voice_context(audio_key, vc)
 
-    result = pipeline._step_voice(
+    assert pipeline._step_voice(
         text="TRANSFORMED TEXT",
         audio_path=str(wav),
         audio_key=audio_key,
         voice_context=vc,
-    )
+    ) is not None
 
     assert pipeline.voice_output_backend == counting_vo
     last_call_text = counting_vo.last_text
@@ -204,7 +202,6 @@ def test_process_stream_live_yields_correct_sequence(tmp_path) -> None:
 def test_process_stream_live_uses_cached_stt(tmp_path) -> None:
     wav = tmp_path / "live_cache.wav"
     _write_wav(str(wav))
-    audio_key = AudioKey.from_file(str(wav))
 
     counting_stt = CountingSTTBackend()
     pipeline = KuchikaePipeline(stt_backend=counting_stt)

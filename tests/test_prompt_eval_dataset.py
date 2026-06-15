@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 CASES_FILE = FIXTURES_DIR / "prompt_eval_cases.json"

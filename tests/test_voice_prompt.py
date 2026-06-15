@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from kuchikae.domain.voice_prompt import (
     EMOTION_VOICE_PROMPTS,

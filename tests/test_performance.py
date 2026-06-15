@@ -56,11 +56,11 @@ def test_same_audio_different_prompts_calls_stt_once(tmp_path) -> None:
 
     # Run with first prompt (should call all backends)
     prompt1 = TextTransformPrompt(instruction="Prompt 1")
-    result1 = pipeline1.process(audio_path, prompt1)
+    pipeline1.process(audio_path, prompt1)
 
     # Run with second prompt (should use cached results, but different pipeline)
     prompt2 = TextTransformPrompt(instruction="Prompt 2")
-    result2 = pipeline2.process(audio_path, prompt2)
+    pipeline2.process(audio_path, prompt2)
 
     # Verify behavior:
     # - First run: STT should be called once, VoiceContext extraction once
@@ -143,8 +143,6 @@ def test_repeated_run_with_cache(tmp_path) -> None:
     sr = 16000
     data = np.zeros(sr, dtype=np.float32)
     sf.write(audio_path, data, sr)
-
-    audio_key = AudioKey.from_file(audio_path)
 
     # Create pipeline with cache
     cache = ProcessingCache()

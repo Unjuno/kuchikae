@@ -45,7 +45,7 @@ def main() -> int:
             text_transform_prompt=TextTransformPrompt(instruction="確認"),
         )
 
-        print(f"\n--- PipelineResult ---")
+        print("\n--- PipelineResult ---")
         print(f"  Output audio: {result.output_audio_path} ({os.path.getsize(result.output_audio_path)} bytes)")
 
         # Verify output.

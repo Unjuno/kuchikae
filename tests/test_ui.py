@@ -6,7 +6,7 @@ import gradio as gr
 
 from kuchikae.pipeline import KuchikaePipeline
 from kuchikae.domain.types import TextTransformPrompt
-from kuchikae.ui import CSS, create_app
+from kuchikae.ui import create_app
 
 
 

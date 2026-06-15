@@ -54,11 +54,17 @@ markers = [
     "slow: tests that load real models (e.g. Whisper, TTS)",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"benchmarks/*.py" = ["E402"]
+"tests/test_text_transform_eval_cases.py" = ["E402"]
+
 [dependency-groups]
 dev = [
     "playwright",
     "pytest-playwright",
     "pytest",
+    "ruff>=0.15.17",
+    "mypy>=2.1.0",
 ]
 
 [project.urls]

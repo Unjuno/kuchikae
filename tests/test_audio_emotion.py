@@ -6,7 +6,7 @@ import soundfile as sf
 import sys
 import types
 from importlib.machinery import ModuleSpec
-from kuchikae.domain.audio_emotion import AudioEmotion, DummyAudioEmotionDetector, TransformersAudioEmotionDetector
+from kuchikae.domain.audio_emotion import DummyAudioEmotionDetector, TransformersAudioEmotionDetector
 
 
 def _write_wav(path: str, sr: int = 16000, seconds: float = 1.0) -> None:

@@ -15,11 +15,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
 import numpy as np
 import soundfile as sf

@@ -231,7 +231,7 @@ def main() -> None:
     save_jsonl(all_results, jsonl_path)
     save_markdown(all_results, md_path)
 
-    print(f"Results saved to:")
+    print("Results saved to:")
     print(f"  - {jsonl_path}")
     print(f"  - {md_path}")
 

@@ -152,7 +152,7 @@ class TestOllamaSystemPrompt:
     def test_system_prompt_contains_engine_name(self) -> None:
         backend = OllamaTextTransformBackend()
         import httpx
-        resp = httpx.post(
+        httpx.post(
             f"{backend._base_url}/api/chat",
             json={
                 "model": backend.model,
