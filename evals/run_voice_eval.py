@@ -3,7 +3,8 @@
 
 Usage:
   uv run python evals/run_voice_eval.py --dry-run
-  uv run python evals/run_voice_eval.py --backend irodori
+  uv run python evals/run_voice_eval.py --mode tts-only --backend irodori
+  uv run python evals/run_voice_eval.py --mode pipeline --backend irodori
   uv run python evals/run_voice_eval.py --dry-run --out evals/results/voice_eval_smoke.jsonl
 """
 
@@ -35,6 +36,7 @@ Verdict = Literal["pass", "warn", "fail", "skip"]
 # Schema: eval case
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ExpectedVoice:
     emotion: str = "neutral"
@@ -56,6 +58,7 @@ class VoiceEvalCase:
 # Schema: output JSONL row
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class VoiceEvalResult:
     case_id: str
@@ -65,6 +68,7 @@ class VoiceEvalResult:
     input_text: str
     transformed_text: str | None
     voice_backend: str
+    mode: str = "tts-only"
     speaker_similarity: float | None = None
     duration_ratio: float | None = None
     pitch_delta_mean: float | None = None
@@ -78,6 +82,7 @@ class VoiceEvalResult:
 # ---------------------------------------------------------------------------
 # Load cases
 # ---------------------------------------------------------------------------
+
 
 def load_cases() -> list[VoiceEvalCase]:
     """Load voice eval cases from YAML."""
@@ -96,7 +101,7 @@ def load_cases() -> list[VoiceEvalCase]:
             id=raw["id"],
             input_audio=raw["input_audio"],
             input_text=raw["input_text"],
-            template=raw.get("template", "自然に"),
+            template=raw.get("template", u"自然に"),
             expected=expected,
         ))
     return cases
@@ -105,6 +110,7 @@ def load_cases() -> list[VoiceEvalCase]:
 # ---------------------------------------------------------------------------
 # Validate fixtures
 # ---------------------------------------------------------------------------
+
 
 def validate_fixtures(cases: list[VoiceEvalCase]) -> dict[str, str]:
     """Check that fixture files exist. Returns {case_id: error|''}."""
@@ -118,38 +124,55 @@ def validate_fixtures(cases: list[VoiceEvalCase]) -> dict[str, str]:
                 errors[case.id] = f"fixture is empty: {fixture_path}"
     return errors
 
+
 # ---------------------------------------------------------------------------
-# Pipeline helpers
+# Duration helper (sample-rate aware)
 # ---------------------------------------------------------------------------
-
-
-def _build_pipeline(backend: str) -> Any:
-    """Build a KuchikaePipeline for the given backend."""
-    from kuchikae.pipeline import KuchikaePipeline
-    from kuchikae.backends.voice_output import (
-        IrodoriTTSVoiceOutputBackend,
-    )
-
-    if backend == "irodori":
-        voice_backend = IrodoriTTSVoiceOutputBackend()
-    else:
-        raise ValueError(f"unsupported backend for eval: {backend}")
-
-    return KuchikaePipeline(
-        voice_output_backend=voice_backend,
-        disable_processing_cache=True,
-    )
 
 
 def _compute_duration_ratio(input_path: str, output_path: str) -> float | None:
     try:
         import soundfile as sf
-        in_dur = len(sf.read(input_path)[0]) / 16000.0
-        out_dur = len(sf.read(output_path)[0]) / 16000.0
+        in_audio, in_sr = sf.read(input_path)
+        out_audio, out_sr = sf.read(output_path)
+        in_dur = len(in_audio) / in_sr
+        out_dur = len(out_audio) / out_sr
         if in_dur <= 0:
             return None
         return out_dur / in_dur
     except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Text transform helper (for tts-only mode)
+# ---------------------------------------------------------------------------
+
+
+def _apply_text_transform(input_text: str, template_name: str) -> str | None:
+    """Apply PromptedRuleTextTransformBackend to input_text using template_name.
+
+    Returns transformed text, or None on failure.
+    """
+    try:
+        from kuchikae.domain.text_transform import PromptedRuleTextTransformBackend
+        from kuchikae.domain.types import TextTransformPrompt
+        from kuchikae.ui.templates import TEMPLATES
+
+        template_instruction = TEMPLATES.get(template_name, TEMPLATES[u"自然に"])
+        backend = PromptedRuleTextTransformBackend()
+        result = backend.transform(
+            text=input_text,
+            prompt=TextTransformPrompt(instruction=template_instruction),
+        )
+        if isinstance(result, str):
+            return result
+        # Some backends return (status, text) tuples
+        if isinstance(result, tuple) and len(result) >= 2:
+            return str(result[1])
+        return str(result)
+    except Exception:
+        logger.exception("[text-transform] failed for template=%s", template_name)
         return None
 
 
@@ -162,13 +185,22 @@ def process_case(
     case: VoiceEvalCase,
     pipeline: Any,
     backend: str,
+    mode: str = "tts-only",
     dry_run: bool = False,
+    voice_backend: Any = None,
 ) -> VoiceEvalResult:
     """Process a single voice eval case.
 
-    In dry-run mode, skips actual inference and returns a placeholder result.
-    When real audio analysis dependencies are missing, gracefully skips
-    acoustic metric computation.
+    In *tts-only* mode (default), STT is skipped: the ground-truth
+    ``input_text`` is transformed via ``PromptedRuleTextTransformBackend``
+    and fed directly to the voice backend.  The fixture WAV is used as
+    reference audio only.
+
+    In *pipeline* mode, the full E2E pipeline (STT → text-transform → TTS)
+    is exercised.  A warning is emitted if dummy STT is detected.
+
+    In *dry-run* mode, skips actual inference and returns a placeholder
+    result.
     """
     fixture_path = FIXTURES_DIR / case.input_audio
     if not fixture_path.exists():
@@ -180,12 +212,13 @@ def process_case(
             input_text=case.input_text,
             transformed_text=None,
             voice_backend=backend,
+            mode=mode,
             verdict="skip",
             failure_reason=f"fixture not found: {fixture_path}",
         )
 
     if dry_run:
-        logger.info("[dry-run] case=%s template=%s fixture=%s", case.id, case.template, fixture_path)
+        logger.info("[dry-run] case=%s template=%s fixture=%s mode=%s", case.id, case.template, fixture_path, mode)
         return VoiceEvalResult(
             case_id=case.id,
             input_audio=case.input_audio,
@@ -194,81 +227,167 @@ def process_case(
             input_text=case.input_text,
             transformed_text=None,
             voice_backend=backend,
+            mode=mode,
             verdict="skip",
             failure_reason="dry-run (no inference)",
         )
 
     # ── Real inference path ──
     try:
-        from kuchikae.domain.types import TextTransformPrompt
-        from kuchikae.ui.templates import TEMPLATES
-
-        template_text = TEMPLATES.get(case.template, TEMPLATES["自然に"])
-        prompt = TextTransformPrompt(instruction=template_text)
         t0 = time.time()
 
-        # process_stream returns (status, source, transformed, audio)
-        result_gen = pipeline.process_stream(str(fixture_path), prompt, voice_style="auto")
-        last_result: tuple[str, str | None, str | None, str | None] | None = None
-        for result in result_gen:
-            last_result = result
-        elapsed = time.time() - t0
+        if mode == "tts-only":
+            transformed_text = _apply_text_transform(case.input_text, case.template)
+            if transformed_text is None:
+                return VoiceEvalResult(
+                    case_id=case.id,
+                    input_audio=case.input_audio,
+                    output_audio=None,
+                    template=case.template,
+                    input_text=case.input_text,
+                    transformed_text=None,
+                    voice_backend=backend,
+                    mode=mode,
+                    verdict="fail",
+                    failure_reason="text transform failed",
+                )
 
-        if last_result is None:
-            return VoiceEvalResult(
-                case_id=case.id,
-                input_audio=case.input_audio,
-                output_audio=None,
-                template=case.template,
-                input_text=case.input_text,
-                transformed_text=None,
-                voice_backend=backend,
-                verdict="fail",
-                failure_reason="pipeline returned no results",
+            if "[DUMMY_STT_OUTPUT]" in transformed_text:
+                return VoiceEvalResult(
+                    case_id=case.id,
+                    input_audio=case.input_audio,
+                    output_audio=None,
+                    template=case.template,
+                    input_text=case.input_text,
+                    transformed_text=transformed_text,
+                    voice_backend=backend,
+                    mode=mode,
+                    verdict="fail",
+                    failure_reason="transformed_text contains [DUMMY_STT_OUTPUT] (STT leak in tts-only mode)",
+                )
+
+            # ── Direct TTS call ──
+            from kuchikae.domain.types import VoiceContext, VoiceOutputPrompt
+            from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
+
+            _vb = voice_backend if voice_backend is not None else IrodoriTTSVoiceOutputBackend()
+            voice_context = VoiceContext(
+                reference_audio_path=str(fixture_path),
+                ready=True,
+            )
+            voice_prompt = VoiceOutputPrompt(instruction=transformed_text)
+            output_audio = _vb.synthesize(
+                text=transformed_text,
+                voice_context=voice_context,
+                prompt=voice_prompt,
             )
 
-        status, source_text, transformed_text, output_audio = last_result
-        if status != "DONE" or not output_audio:
+            elapsed = time.time() - t0
+            duration_ratio = _compute_duration_ratio(str(fixture_path), str(output_audio))
+
+            logger.info(
+                "[eval] case=%s elapsed=%.1fs trf=%s out=%s dur_ratio=%s",
+                case.id, elapsed,
+                transformed_text[:40],
+                output_audio,
+                f"{duration_ratio:.2f}" if duration_ratio else "N/A",
+            )
+
+            verdict: Verdict = "pass"
+            if duration_ratio is not None and (duration_ratio < 0.3 or duration_ratio > 4.0):
+                verdict = "warn"
+
             return VoiceEvalResult(
                 case_id=case.id,
                 input_audio=case.input_audio,
-                output_audio=None,
+                output_audio=str(output_audio),
                 template=case.template,
                 input_text=case.input_text,
                 transformed_text=transformed_text,
                 voice_backend=backend,
-                verdict="fail",
-                failure_reason=f"pipeline did not complete (status={status})",
+                mode=mode,
+                duration_ratio=duration_ratio,
+                verdict=verdict,
             )
 
-        duration_ratio = _compute_duration_ratio(str(fixture_path), str(output_audio))
+        else:
+            # ── Pipeline mode (E2E, uses STT) ──
+            from kuchikae.domain.types import TextTransformPrompt
+            from kuchikae.ui.templates import TEMPLATES
 
-        logger.info(
-            "[eval] case=%s elapsed=%.1fs src=%s trf=%s out=%s dur_ratio=%s",
-            case.id, elapsed,
-            source_text[:40] if source_text else None,
-            transformed_text[:40] if transformed_text else None,
-            output_audio,
-            f"{duration_ratio:.2f}" if duration_ratio else "N/A",
-        )
+            template_text = TEMPLATES.get(case.template, TEMPLATES[u"自然に"])
+            prompt = TextTransformPrompt(instruction=template_text)
 
-        # Basic verdict: if the pipeline ran and produced output, pass
-        # (full acoustic metric computation requires librosa/pyworld)
-        verdict: Verdict = "pass"
-        if duration_ratio is not None and (duration_ratio < 0.3 or duration_ratio > 4.0):
-            verdict = "warn"
+            result_gen = pipeline.process_stream(str(fixture_path), prompt, voice_style="auto")
+            last_result: tuple[str, str | None, str | None, str | None] | None = None
+            for result in result_gen:
+                last_result = result
+            elapsed = time.time() - t0
 
-        return VoiceEvalResult(
-            case_id=case.id,
-            input_audio=case.input_audio,
-            output_audio=str(output_audio),
-            template=case.template,
-            input_text=case.input_text,
-            transformed_text=transformed_text,
-            voice_backend=backend,
-            duration_ratio=duration_ratio,
-            verdict=verdict,
-        )
+            if last_result is None:
+                return VoiceEvalResult(
+                    case_id=case.id,
+                    input_audio=case.input_audio,
+                    output_audio=None,
+                    template=case.template,
+                    input_text=case.input_text,
+                    transformed_text=None,
+                    voice_backend=backend,
+                    mode=mode,
+                    verdict="fail",
+                    failure_reason="pipeline returned no results",
+                )
+
+            status, source_text, transformed_text, output_audio = last_result
+            if status != "DONE" or not output_audio:
+                return VoiceEvalResult(
+                    case_id=case.id,
+                    input_audio=case.input_audio,
+                    output_audio=None,
+                    template=case.template,
+                    input_text=case.input_text,
+                    transformed_text=transformed_text,
+                    voice_backend=backend,
+                    mode=mode,
+                    verdict="fail",
+                    failure_reason=f"pipeline did not complete (status={status})",
+                )
+
+            duration_ratio = _compute_duration_ratio(str(fixture_path), str(output_audio))
+
+            # Warn if dummy STT leaked through
+            warning = ""
+            if transformed_text and "[DUMMY_STT_OUTPUT]" in transformed_text:
+                warning = " (dummy STT detected – results not usable for voice quality assessment)"
+
+            logger.info(
+                "[eval] case=%s elapsed=%.1fs src=%s trf=%s out=%s dur_ratio=%s%s",
+                case.id, elapsed,
+                source_text[:40] if source_text else None,
+                transformed_text[:40] if transformed_text else None,
+                output_audio,
+                f"{duration_ratio:.2f}" if duration_ratio else "N/A",
+                warning,
+            )
+
+            verdict = "warn" if "[DUMMY_STT_OUTPUT]" in (transformed_text or "") else "pass"
+            if duration_ratio is not None and (duration_ratio < 0.3 or duration_ratio > 4.0):
+                verdict = "warn"
+
+            failure_reason = warning.strip() if warning else ""
+            return VoiceEvalResult(
+                case_id=case.id,
+                input_audio=case.input_audio,
+                output_audio=str(output_audio),
+                template=case.template,
+                input_text=case.input_text,
+                transformed_text=transformed_text,
+                voice_backend=backend,
+                mode=mode,
+                duration_ratio=duration_ratio,
+                verdict=verdict,
+                failure_reason=failure_reason,
+            )
 
     except Exception as e:
         logger.exception("[eval] case=%s failed", case.id)
@@ -280,6 +399,7 @@ def process_case(
             input_text=case.input_text,
             transformed_text=None,
             voice_backend=backend,
+            mode=mode,
             verdict="fail",
             failure_reason=f"{type(e).__name__}: {e}",
         )
@@ -288,6 +408,7 @@ def process_case(
 # ---------------------------------------------------------------------------
 # Write results
 # ---------------------------------------------------------------------------
+
 
 def write_results(results: list[VoiceEvalResult], output_path: Path) -> None:
     """Write results to JSONL."""
@@ -302,8 +423,13 @@ def write_results(results: list[VoiceEvalResult], output_path: Path) -> None:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run voice eval cases")
+    parser.add_argument("--mode", default="tts-only", choices=["tts-only", "pipeline"],
+                        help="Evaluation mode (default: tts-only). "
+                             "tts-only skips STT and uses ground-truth input_text; "
+                             "pipeline runs full E2E including STT.")
     parser.add_argument("--backend", default="irodori", choices=["irodori", "openvoice", "f5-tts", "cosyvoice", "indextts", "rvc", "xtts"],
                         help="TTS backend to evaluate (default: irodori)")
     parser.add_argument("--out", default=str(RESULTS_DIR / "voice_eval_smoke.jsonl"),
@@ -323,11 +449,21 @@ def main() -> None:
         for cid, err in fixture_errors.items():
             logger.warning("[fixture] %s: %s", cid, err)
 
-    pipeline = _build_pipeline(args.backend) if not args.dry_run else None
+    pipeline = None
+    shared_voice_backend = None
+    if not args.dry_run:
+        from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
+        shared_voice_backend = IrodoriTTSVoiceOutputBackend()
+        if args.mode == "pipeline":
+            from kuchikae.pipeline import KuchikaePipeline
+            pipeline = KuchikaePipeline(
+                voice_output_backend=shared_voice_backend,
+                disable_processing_cache=True,
+            )
 
     results: list[VoiceEvalResult] = []
     for case in cases:
-        result = process_case(case, pipeline, backend=args.backend, dry_run=args.dry_run)
+        result = process_case(case, pipeline, backend=args.backend, mode=args.mode, dry_run=args.dry_run, voice_backend=shared_voice_backend)
         results.append(result)
 
     output_path = Path(args.out)
@@ -335,7 +471,8 @@ def main() -> None:
 
     # Summary
     verdicts = [r.verdict for r in results]
-    logger.info("results: total=%d pass=%d warn=%d fail=%d skip=%d",
+    logger.info("results: mode=%s total=%d pass=%d warn=%d fail=%d skip=%d",
+                args.mode,
                 len(verdicts),
                 verdicts.count("pass"),
                 verdicts.count("warn"),
