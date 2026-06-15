@@ -108,7 +108,7 @@ class TestOpenVoiceOutputBackend:
     def test_errors_on_non_ready(self) -> None:
         from kuchikae.backends.voice_output import OpenVoiceOutputBackend
 
-        vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=False)
+        vc = VoiceContext(reference_audio_path="test.wav", ready=False)
         backend = OpenVoiceOutputBackend()
         with pytest.raises(RuntimeError, match="requires a ready reference audio path"):
             backend.synthesize("test", vc)

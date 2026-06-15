@@ -263,7 +263,7 @@ def test_dummy_stt_sentinel_is_not_natural_sentence() -> None:
     from kuchikae.domain.stt import DummySTTBackend
 
     backend = DummySTTBackend()
-    out = backend.transcribe("/tmp/ignored.wav")
+    out = backend.transcribe("ignored.wav")
     assert out.startswith("[DUMMY_STT_OUTPUT]")
     assert "明日までに資料を送って" not in out
 

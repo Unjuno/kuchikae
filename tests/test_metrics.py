@@ -95,11 +95,11 @@ class TestStreamChunk:
             audio_end_sec=12.0,
             partial_transcript="hello world",
             committed_transcript="hello world",
-            output_audio_path="/tmp/out.wav",
+            output_audio_path="out.wav",
             is_final=True,
         )
         assert chunk.is_final is True
-        assert chunk.output_audio_path == "/tmp/out.wav"
+        assert chunk.output_audio_path == "out.wav"
         assert chunk.committed_transcript == "hello world"
 
 
@@ -235,7 +235,7 @@ class TestPipelineResultLatency:
     """PipelineResult now includes latency fields."""
 
     def test_latency_defaults(self) -> None:
-        result = PipelineResult(output_audio_path="/tmp/out.wav")
+        result = PipelineResult(output_audio_path="out.wav")
         assert result.stt_latency == 0.0
         assert result.text_transform_latency == 0.0
         assert result.voice_output_latency == 0.0
@@ -243,7 +243,7 @@ class TestPipelineResultLatency:
 
     def test_latency_values(self) -> None:
         result = PipelineResult(
-            output_audio_path="/tmp/out.wav",
+            output_audio_path="out.wav",
             source_text="hello",
             transformed_text="world",
             stt_latency=0.5,

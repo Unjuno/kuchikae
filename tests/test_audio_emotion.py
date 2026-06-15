@@ -15,7 +15,7 @@ def _write_wav(path: str, sr: int = 16000, seconds: float = 1.0) -> None:
 
 
 def test_dummy_audio_emotion_detector_returns_neutral() -> None:
-    emotion = DummyAudioEmotionDetector().detect("/tmp/ignored.wav")
+    emotion = DummyAudioEmotionDetector().detect("ignored.wav")
     assert emotion.mood == "neutral"
     assert emotion.energy == "medium"
     assert emotion.confidence == 0.0

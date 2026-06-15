@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import soundfile as sf
-from tempfile import NamedTemporaryFile
 
 from kuchikae.domain.audio_key import AudioKey
 from kuchikae.counting_backends import (
@@ -17,14 +16,13 @@ from kuchikae.pipeline import KuchikaePipeline
 from kuchikae.domain.types import TextTransformPrompt
 
 
-def test_same_audio_different_prompts_calls_stt_once() -> None:
+def test_same_audio_different_prompts_calls_stt_once(tmp_path) -> None:
     """Two separate pipelines with same audio each call STT exactly once."""
     # Create a test audio file
-    with NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        sr = 16000
-        data = np.zeros(sr, dtype=np.float32)
-        sf.write(tmp.name, data, sr)
-        audio_path = tmp.name
+    audio_path = str(tmp_path / "audio.wav")
+    sr = 16000
+    data = np.zeros(sr, dtype=np.float32)
+    sf.write(audio_path, data, sr)
 
     # Create counting backends for first run
     counting_stt1 = CountingSTTBackend()
@@ -79,17 +77,16 @@ def test_same_audio_different_prompts_calls_stt_once() -> None:
     assert counting_voice_output2.call_count == 1, f"Second run VoiceOutput should be called once, but was called {counting_voice_output2.call_count} times"
 
 
-def test_processing_cache_functionality() -> None:
+def test_processing_cache_functionality(tmp_path) -> None:
     """Test ProcessingCache functionality."""
     from kuchikae.domain.processing_cache import ProcessingCache
     from kuchikae.domain.types import VoiceContext
 
     # Create a test audio key
-    with NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        sr = 16000
-        data = np.zeros(sr, dtype=np.float32)
-        sf.write(tmp.name, data, sr)
-        audio_path = tmp.name
+    audio_path = str(tmp_path / "audio.wav")
+    sr = 16000
+    data = np.zeros(sr, dtype=np.float32)
+    sf.write(audio_path, data, sr)
 
     audio_key = AudioKey.from_file(audio_path)
 
@@ -137,16 +134,15 @@ def test_audio_key_equality() -> None:
     assert len(keys_set) == 2  # key1 and key2 are duplicates
 
 
-def test_repeated_run_with_cache() -> None:
+def test_repeated_run_with_cache(tmp_path) -> None:
     """Test that repeated runs with same audio use cache."""
     from kuchikae.domain.processing_cache import ProcessingCache
 
     # Create a test audio file
-    with NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        sr = 16000
-        data = np.zeros(sr, dtype=np.float32)
-        sf.write(tmp.name, data, sr)
-        audio_path = tmp.name
+    audio_path = str(tmp_path / "audio.wav")
+    sr = 16000
+    data = np.zeros(sr, dtype=np.float32)
+    sf.write(audio_path, data, sr)
 
     audio_key = AudioKey.from_file(audio_path)
 

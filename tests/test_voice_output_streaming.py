@@ -138,7 +138,7 @@ class TestAudioSegmentQueue:
 class TestDummyStreamingVoiceOutputBackend:
     def test_prepare_voice(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
-        vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=True)
+        vc = VoiceContext(reference_audio_path="test.wav", ready=True)
         backend.prepare_voice(vc, session_id="test")
 
     def test_synthesize_segment_returns_audio(self) -> None:
@@ -150,7 +150,7 @@ class TestDummyStreamingVoiceOutputBackend:
 
     def test_finalize_returns_path(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
-        vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=True)
+        vc = VoiceContext(reference_audio_path="test.wav", ready=True)
         backend.prepare_voice(vc, session_id="test")
         backend.synthesize_segment("最初の文。", session_id="test")
         backend.synthesize_segment("次の文。", session_id="test")
@@ -160,7 +160,7 @@ class TestDummyStreamingVoiceOutputBackend:
 
     def test_finalize_empty_returns_path(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
-        vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=True)
+        vc = VoiceContext(reference_audio_path="test.wav", ready=True)
         backend.prepare_voice(vc, session_id="test2")
         path = backend.finalize(session_id="test2")
         assert isinstance(path, str)
@@ -179,7 +179,7 @@ class TestDummyStreamingVoiceOutputBackend:
 
     def test_multiple_segments_with_pause(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
-        vc = VoiceContext(reference_audio_path="/tmp/test.wav", ready=True)
+        vc = VoiceContext(reference_audio_path="test.wav", ready=True)
         backend.prepare_voice(vc, session_id="test")
         backend.synthesize_segment("一つ目。", session_id="test")
         backend.synthesize_segment("二つ目。", session_id="test")

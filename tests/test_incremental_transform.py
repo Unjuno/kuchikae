@@ -113,7 +113,7 @@ class TestStreamingAudioSegment:
             session_id="sess_001",
             segment_index=2,
             text="hello",
-            audio_path="/tmp/out.wav",
+            audio_path="out.wav",
             start_sec=0.0,
             end_sec=2.0,
             is_final=True,
@@ -121,7 +121,7 @@ class TestStreamingAudioSegment:
         assert seg.session_id == "sess_001"
         assert seg.segment_index == 2
         assert seg.text == "hello"
-        assert seg.audio_path == "/tmp/out.wav"
+        assert seg.audio_path == "out.wav"
         assert seg.is_final
 
     def test_defaults(self) -> None:

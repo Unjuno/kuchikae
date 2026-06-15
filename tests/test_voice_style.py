@@ -44,7 +44,7 @@ def test_voice_style_prompt_contains_required_phrase() -> None:
 
 
 def test_dummy_audio_emotion_detector() -> None:
-    emotion = DummyAudioEmotionDetector().detect("/tmp/ignored.wav")
+    emotion = DummyAudioEmotionDetector().detect("ignored.wav")
     assert emotion.mood == "neutral"
     assert emotion.energy == "medium"
     assert emotion.confidence == 0.0
