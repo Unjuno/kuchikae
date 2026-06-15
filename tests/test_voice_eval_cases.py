@@ -120,7 +120,7 @@ class TestVoiceEvalRunner:
 
         cases = load_cases()
         for case in cases:
-            result = process_case(case, backend="irodori", dry_run=True)
+            result = process_case(case, pipeline=None, backend="irodori", dry_run=True)
             assert isinstance(result, VoiceEvalResult)
             assert result.verdict == "skip"
             assert result.case_id == case.id
@@ -129,7 +129,7 @@ class TestVoiceEvalRunner:
         cases = load_cases()
         from evals.run_voice_eval import process_case
 
-        results = [process_case(c, backend="irodori", dry_run=True) for c in cases]
+        results = [process_case(c, pipeline=None, backend="irodori", dry_run=True) for c in cases]
         output_path = tmp_path / "voice_results.jsonl"
         write_results(results, output_path)
         assert output_path.exists()

@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -116,13 +118,49 @@ def validate_fixtures(cases: list[VoiceEvalCase]) -> dict[str, str]:
                 errors[case.id] = f"fixture is empty: {fixture_path}"
     return errors
 
+# ---------------------------------------------------------------------------
+# Pipeline helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_pipeline(backend: str) -> Any:
+    """Build a KuchikaePipeline for the given backend."""
+    from kuchikae.pipeline import KuchikaePipeline
+    from kuchikae.backends.voice_output import (
+        IrodoriTTSVoiceOutputBackend,
+    )
+
+    if backend == "irodori":
+        voice_backend = IrodoriTTSVoiceOutputBackend()
+    else:
+        raise ValueError(f"unsupported backend for eval: {backend}")
+
+    return KuchikaePipeline(
+        voice_output_backend=voice_backend,
+        disable_processing_cache=True,
+    )
+
+
+def _compute_duration_ratio(input_path: str, output_path: str) -> float | None:
+    try:
+        import soundfile as sf
+        in_dur = len(sf.read(input_path)[0]) / 16000.0
+        out_dur = len(sf.read(output_path)[0]) / 16000.0
+        if in_dur <= 0:
+            return None
+        return out_dur / in_dur
+    except Exception:
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Process a single case
 # ---------------------------------------------------------------------------
 
+
 def process_case(
     case: VoiceEvalCase,
+    pipeline: Any,
     backend: str,
     dry_run: bool = False,
 ) -> VoiceEvalResult:
@@ -160,30 +198,80 @@ def process_case(
             failure_reason="dry-run (no inference)",
         )
 
-    # ── Real inference path (future) ──
-    # 1. Run text transform via pipeline
-    # 2. Run TTS via chosen backend
-    # 3. Compare input/output audio:
-    #    - speaker_similarity (e.g. speechbrain ECAPA)
-    #    - duration_ratio = output_duration / input_duration
-    #    - pitch_delta_mean (e.g. pyworld or librosa)
-    #    - energy_delta_db (RMS-based)
-    #    - input_emotion (audio emotion detector on input)
-    #    - output_emotion (audio emotion detector on output)
-    # 4. Determine verdict:
-    #    - skip: fixture missing or deps unavailable
-    #    - pass: metrics within expected thresholds
-    #    - warn: minor degradation
-    #    - fail: major quality loss or error
-    #
-    # For now, return skip with a descriptive reason.
-
+    # ── Real inference path ──
     try:
-        # Attempt to import heavy dependencies — graceful skip if missing
-        import librosa  # noqa: F401
-        import numpy as np  # noqa: F401
-        _ = fixture_path
-    except ImportError:
+        from kuchikae.domain.types import TextTransformPrompt
+        from kuchikae.ui.templates import TEMPLATES
+
+        template_text = TEMPLATES.get(case.template, TEMPLATES["自然に"])
+        prompt = TextTransformPrompt(instruction=template_text)
+        t0 = time.time()
+
+        # process_stream returns (status, source, transformed, audio)
+        result_gen = pipeline.process_stream(str(fixture_path), prompt, voice_style="auto")
+        last_result: tuple[str, str | None, str | None, str | None] | None = None
+        for result in result_gen:
+            last_result = result
+        elapsed = time.time() - t0
+
+        if last_result is None:
+            return VoiceEvalResult(
+                case_id=case.id,
+                input_audio=case.input_audio,
+                output_audio=None,
+                template=case.template,
+                input_text=case.input_text,
+                transformed_text=None,
+                voice_backend=backend,
+                verdict="fail",
+                failure_reason="pipeline returned no results",
+            )
+
+        status, source_text, transformed_text, output_audio = last_result
+        if status != "DONE" or not output_audio:
+            return VoiceEvalResult(
+                case_id=case.id,
+                input_audio=case.input_audio,
+                output_audio=None,
+                template=case.template,
+                input_text=case.input_text,
+                transformed_text=transformed_text,
+                voice_backend=backend,
+                verdict="fail",
+                failure_reason=f"pipeline did not complete (status={status})",
+            )
+
+        duration_ratio = _compute_duration_ratio(str(fixture_path), str(output_audio))
+
+        logger.info(
+            "[eval] case=%s elapsed=%.1fs src=%s trf=%s out=%s dur_ratio=%s",
+            case.id, elapsed,
+            source_text[:40] if source_text else None,
+            transformed_text[:40] if transformed_text else None,
+            output_audio,
+            f"{duration_ratio:.2f}" if duration_ratio else "N/A",
+        )
+
+        # Basic verdict: if the pipeline ran and produced output, pass
+        # (full acoustic metric computation requires librosa/pyworld)
+        verdict: Verdict = "pass"
+        if duration_ratio is not None and (duration_ratio < 0.3 or duration_ratio > 4.0):
+            verdict = "warn"
+
+        return VoiceEvalResult(
+            case_id=case.id,
+            input_audio=case.input_audio,
+            output_audio=str(output_audio),
+            template=case.template,
+            input_text=case.input_text,
+            transformed_text=transformed_text,
+            voice_backend=backend,
+            duration_ratio=duration_ratio,
+            verdict=verdict,
+        )
+
+    except Exception as e:
+        logger.exception("[eval] case=%s failed", case.id)
         return VoiceEvalResult(
             case_id=case.id,
             input_audio=case.input_audio,
@@ -192,21 +280,9 @@ def process_case(
             input_text=case.input_text,
             transformed_text=None,
             voice_backend=backend,
-            verdict="skip",
-            failure_reason="audio analysis dependencies not available (librosa, numpy)",
+            verdict="fail",
+            failure_reason=f"{type(e).__name__}: {e}",
         )
-
-    return VoiceEvalResult(
-        case_id=case.id,
-        input_audio=case.input_audio,
-        output_audio=None,
-        template=case.template,
-        input_text=case.input_text,
-        transformed_text=None,
-        voice_backend=backend,
-        verdict="skip",
-        failure_reason="inference not implemented (skeleton)",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -247,9 +323,11 @@ def main() -> None:
         for cid, err in fixture_errors.items():
             logger.warning("[fixture] %s: %s", cid, err)
 
+    pipeline = _build_pipeline(args.backend) if not args.dry_run else None
+
     results: list[VoiceEvalResult] = []
     for case in cases:
-        result = process_case(case, backend=args.backend, dry_run=args.dry_run)
+        result = process_case(case, pipeline, backend=args.backend, dry_run=args.dry_run)
         results.append(result)
 
     output_path = Path(args.out)

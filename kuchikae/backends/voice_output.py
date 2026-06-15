@@ -78,6 +78,9 @@ class OpenVoiceOutputBackend(VoiceOutputBackend):
         if not voice_context.ready or not voice_context.reference_audio_path:
             raise RuntimeError("OpenVoice requires a ready reference audio path.")
 
+        if prompt is not None:
+            logger.warning("[OpenVoice] prompt.instruction is ignored (OpenVoice API has no caption/emotion control)")
+
         t0 = time.time()
         base_tts, converter = self._ensure_models_loaded()
         self._log(f"model load: {time.time()-t0:.2f}s")

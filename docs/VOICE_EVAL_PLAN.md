@@ -120,17 +120,18 @@ JSONL schema:
 
 | 項目 | Irodori-TTS (現行) | F5-TTS | CosyVoice / CosyVoice2 | IndexTTS | RVC (post-conversion) | XTTS 系 |
 |------|-------------------|--------|------------------------|----------|----------------------|---------|
-| **Japanese support** | 日本語特化 (Aratako 製) | 中。英語/中国語中心、日本語は fine-tune が必要 | 中。CosyVoice2 は中国語+英語中心 | 日本語対応 (GitHub 上で Japanese demo) | 言語非依存 (voice conversion) | 中。多言語対応だが日本語品質は限定的 |
-| **Zero-shot voice cloning** | 対応。ref_wav から話者特徴抽出 | 対応。prompt audio で clone | CosyVoice2 で対応改善 (3s reference) | 対応 (3-10s reference) | **変換専用**。入力音声の声質をターゲット話者に変換 | 対応 (6s reference) |
-| **Reference audio support** | ✅ 対応 (ref_wav 利用) | ✅ 対応 (prompt audio) | ✅ 対応 (reference embedding) | ✅ 対応 (reference) | ✅ 必須 (変換元音声) | ✅ 対応 |
-| **Emotion/style control** | ❌ prompt 無視 (制御不能) | ❌ なし (zero-shot のみ) | ❌ なし (CosyVoice2 で改善傾向) | ❌ なし | ❌ なし (voice conversion) | ⚠️ emotion encoder あり (限定的) |
-| **Local inference** | ✅ MPS/CUDA/CPU | ✅ (DiT, 要 GPU) | ⚠️ 要 CUDA、Linux 推奨 | ⚠️ 要 GPU | ✅ 軽量 (要 CUDA) | ⚠️ 要 GPU (VITS 系) |
-| **macOS feasibility** | ✅ MPS 動作確認済み | ⚠️ MPS 未検証、重い | ❌ Linux のみ実質 | ❌ CUDA 前提 | ⚠️ MPS で一部動作 | ❌ CUDA 前提 |
-| **License** | Apache 2.0 | CC BY-NC-SA 4.0 | CosyVoice: Apache 2.0 / CosyVoice2: CC BY-NC-SA 4.0 | CC BY-NC-SA 4.0 | MIT (RVC) | CPML (XTTSv2) / Apache 2.0 (Coqui) |
-| **Expected integration difficulty** | 低 (導入済み) | 高 (モデル大、推論設計要) | 高 (依存重い、CUDA 前提) | 中 (Python API あり) | 中 (RVC は別処理、pipeline 設計要) | 中 (TTS として統合可) |
-| **備考** | emotion 制御が効かない点が最大の課題 | 音質高いがサイズ大 | 中国語以外の品質未知 | 日本語品質期待できるがやや重い | voice conversion なので別用途 | コミュニティ分散 |
+| **Japanese support** | 日本語特化 (Aratako 製, pyopenjtalk g2p) | 中。英語/中国語中心、日本語は fine-tune が必要 | 中。CosyVoice2 は中国語+英語中心 | **emergent (非公式)**。BPE tokenizer は CJK 範囲をカバーするが、日本語 g2p/讀み/アクセント未対応 | 言語非依存 (voice conversion) | 中。多言語対応だが日本語品質は限定的 |
+| **Zero-shot voice cloning** | 対応。ref_wav から話者特徴抽出 | 対応。prompt audio で clone | CosyVoice2 で対応改善 (3s reference) | ✅ 対応 (3-10s reference, spk_audio_prompt/ref_wav) | **変換専用**。入力音声の声質をターゲット話者に変換 | 対応 (6s reference) |
+| **Emotion/style control** | ✅ caption 経由で制御可 (2026-06-15 修正済, cfg_scale_caption 環境変数) | ❌ なし (zero-shot のみ) | ❌ なし (CosyVoice2 で改善傾向) | ✅ **最強**。8次元emo_vector, emo_text→Qwen3, emo_audio_prompt, emo_alpha ブレンド。声色/感情の分離制御可 | ❌ なし (voice conversion) | ⚠️ emotion encoder あり (限定的) |
+| **Local inference** | ✅ MPS/CUDA/CPU (int4 lite: ~1GB) | ✅ (DiT, 要 GPU) | ⚠️ 要 CUDA、Linux 推奨 | ⚠️ FP16 で 4-6GB VRAM、FP32 では 10-12GB | ✅ 軽量 (要 CUDA) | ⚠️ 要 GPU (VITS 系) |
+| **macOS feasibility** | ✅ MPS 動作確認済み | ⚠️ MPS 未検証、重い | ❌ Linux のみ実質 | ⚠️ MPS 対応しているがFP16非推奨・低速 | ⚠️ MPS で一部動作 | ❌ CUDA 前提 |
+| **Speed (RTF)** | 高速 (GPU) | 中 (DiT 推論) | 高速 | ⚠️ FP16 RTX3060 で ~1.6-2.2× RTF (やや遅い) | 高速 | 中 |
+| **License** | Apache 2.0 | CC BY-NC-SA 4.0 | CosyVoice: Apache 2.0 / CosyVoice2: CC BY-NC-SA 4.0 | **独自 Bilibili license** (非商用制限, MAU>1億/売上>10億RMBで要別途許諾, AIモデル改善禁止条項) | MIT (RVC) | CPML (XTTSv2) / Apache 2.0 (Coqui) |
+| **Expected integration difficulty** | 低 (導入済み) | 高 (モデル大、推論設計要) | 高 (依存重い、CUDA 前提) | 中 (Python API 充実, `indextts` pip パッケージ有) | 中 (RVC は別処理、pipeline 設計要) | 中 (TTS として統合可) |
+| **備考** | emotion 制御が caption 経由で可能に。cfg_scale_caption 既定は cfg_scale_text と同じ | 音質高いがサイズ大 | 中国語以外の品質未知 | **日本語品質未検証が最大リスク**。感情制御は3候補中最強。Bilibili が活発開発中 (2026年6月時点)。インストールはuv必須。 | voice conversion なので別用途 | コミュニティ分散 |
 
 ### 推奨優先順位 (今後)
 1. **Irodori-TTS 改善** (prompt を caption として渡すよう修正) — ✅ 済み (2026-06-15)
-2. **IndexTTS** 調査 — 日本語品質が最も期待できる代替
-3. **F5-TTS** 長期検討 — 音質最高だがリソース要求大
+2. **IndexTTS2 調査** — ✅ 済み (2026-06-15)。日本語品質未検証、VRAM要求(4-6GB FP16)、独自ライセンスが課題
+3. **IndexTTS2 統合判断**: 日本語 test utterance で品質検証 → 合格なら optional backend として追加 (~2週間工数)
+4. **F5-TTS** 長期検討 — 音質最高だがリソース要求大

@@ -218,7 +218,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     except ImportError:
         pass
 
-    audio_emotion_detector_type = config.get("audio_emotion_detector", "dummy")
+    audio_emotion_detector_type = config.get("audio_emotion_detector", "auto")
     if audio_emotion_detector_type == "transformers_audio_emotion":
         audio_emotion_detector = TransformersAudioEmotionDetector(
             model_id=config.get("audio_emotion_model_id"),
@@ -226,6 +226,18 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         )
     elif audio_emotion_detector_type == "disabled":
         audio_emotion_detector = DisabledAudioEmotionDetector()
+    elif audio_emotion_detector_type == "auto":
+        try:
+            audio_emotion_detector = TransformersAudioEmotionDetector(
+                model_id=config.get("audio_emotion_model_id"),
+                strict=bool(config.get("audio_emotion_strict", False)),
+            )
+            # Probe-load to see if model is actually available
+            audio_emotion_detector._load()
+            if audio_emotion_detector.model_unavailable:
+                audio_emotion_detector = DummyAudioEmotionDetector()
+        except Exception:
+            audio_emotion_detector = DummyAudioEmotionDetector()
     else:
         audio_emotion_detector = DummyAudioEmotionDetector()
 
