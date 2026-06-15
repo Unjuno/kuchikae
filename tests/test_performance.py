@@ -18,7 +18,7 @@ from kuchikae.domain.types import TextTransformPrompt
 
 
 def test_same_audio_different_prompts_calls_stt_once() -> None:
-    """Verify STT is called only once for same audio with different text prompts."""
+    """Two separate pipelines with same audio each call STT exactly once."""
     # Create a test audio file
     with NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         sr = 16000

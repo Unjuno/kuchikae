@@ -97,7 +97,7 @@ def test_transformers_audio_emotion_resamples_and_trims(tmp_path, monkeypatch) -
     assert emotion.mood == "happy"
     assert emotion.energy == "high"
     assert emotion.valence > 0
-    assert processor.calls
+    assert len(processor.calls) > 0
     samples_len, sr = processor.calls[-1]
     assert sr == 16000
     assert samples_len <= 16000 * 15
