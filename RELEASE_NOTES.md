@@ -1,128 +1,107 @@
-# Kuchikae v0.1.0 Release Notes
+# Kuchikae v0.1.1
 
-**Release date:** 2026-06-13
+**Release date:** 2026-06-15
 
-## Highlights
+## Requirements
 
-Kuchikae v0.1 is a prompt-conditioned, voice-conditioned speech transformation prototype for Japanese.
+- Python 3.11
+- [`uv`](https://docs.astral.sh/uv/) — fast Python package manager
+- (optional) [Ollama](https://ollama.com/) for LLM text transform
+- (optional) ~6 GB disk for model downloads
 
-> Speak once. Kuchikae says it back in your voice, following your prompt.
+## Installation
 
-## What's new
-
-### CLI interface
-
-- `kuchikae serve` — start the web server
-- `kuchikae doctor` — check backend availability
-- `kuchikae serve --dummy` — smoke test with dummy backends
-- `kuchikae serve --real` — use real STT/TTS backends
-- `kuchikae serve --real --streaming` — enable faster-whisper streaming STT
-
-### Voice style detection
-
-- **Text-based rules**: detects urgent, apologetic, warm, or serious tone from transcript
-- **Audio emotion**: optional parallel analysis of speaker audio
-- **Fusion**: combines text style and optional audio emotion with confidence weighting
-- **VoiceOutputPrompt** can be generated automatically from detected style
-
-### Pipeline architecture
-
-- `VoicePromptResolver` handles voice style detection and fusion
-- Text transform validation and fallback are handled at the pipeline layer
-- Optional audio emotion detection can run in parallel with STT
-- Streaming STT is available for real-backend push-to-talk experiments
-
-### Backends
-
-- **STT**: dummy smoke backend, optional faster-whisper, streaming, segmented
-- **Text transform**: prompted rule, rule-based, optional Ollama LLM, optional GPT backend
-- **Voice output**: dummy smoke backend, optional Irodori-TTS, experimental OpenVoice
-
-## Quick start
-
-### Smoke test (no models required)
+### From GitHub release (zip/tar.gz)
 
 ```bash
-uv sync --extra test
-uv run kuchikae serve --dummy
+# Download and extract
+curl -sL https://github.com/Unjuno/kuchikae/archive/refs/tags/v0.1.1.tar.gz | tar xz
+cd kuchikae-0.1.1
+
+# Smoke test (no models required)
+make run
+# → http://127.0.0.1:7860
+
+# Real backends (downloads models automatically)
+make run-real
 ```
 
-Opens Gradio at `http://127.0.0.1:7860`. Dummy mode is for smoke testing only; it does not evaluate real STT or voice quality.
-
-### Real backends
+### From git clone
 
 ```bash
+git clone https://github.com/Unjuno/kuchikae.git
+cd kuchikae
+make run           # smoke test
+make run-real      # real backends
+```
+
+## Quick start commands
+
+| Command | What it does |
+|---------|-------------|
+| `make run` | Install deps + start dummy server |
+| `make run-real` | Install real deps + download models + start |
+| `make run-streaming` | Real deps + streaming STT |
+| `make doctor` | Check backend/model status |
+| `make test` | Run lightweight tests |
+| `make check-all` | Full lint + typecheck + audit + tests |
+
+## Manual usage (without Makefile)
+
+```bash
+# Smoke test
+uv sync
+uv run kuchikae serve --dummy
+
+# Real backends
 uv sync --extra real
+uv run kuchikae setup-models --all
 uv run kuchikae serve --real
 ```
 
-Requires:
+## Changes since v0.1.0
 
-- faster-whisper models
-- Ollama running with a model
-- Irodori-TTS models
+### 🔍 Full code audit (6 rounds)
 
-### Streaming STT
+- Bug fixes: Irodori-TTS caption passing, audio emotion init, voice context cache
+- Dead code removal: VoicePromptResolver (261 lines), _shift_speed, repair_model_by_name
+- Code dedup: _linear_resample and _torch_module extracted to kuchikae/domain/audio.py
+- Temp file hygiene, weak assertions hardened, silent exception fixed
 
-```bash
-uv sync --extra real
-uv run kuchikae serve --real --streaming
+### ✅ Lint, type check & security (zero issues)
+
+- `ruff`: 0 errors (fixed 28 files)
+- `mypy`: 0 errors (fixed 54→0 across 12 categories)
+- `pip-audit`: 0 vulnerabilities
+- `pytest`: 449 passed, 13 skipped (1 pre-existing flaky)
+
+### 🎤 Voice evaluation framework
+
+- `evals/run_voice_eval.py` with `--mode tts-only|pipeline`
+- 42 eval cases, baseline results, `docs/VOICE_EVAL_PLAN.md`
+
+### 🎛️ Simplified startup
+
+- `Makefile` with `make run`, `make run-real`, `make run-streaming`
+
+### 📦 Package structure
+
 ```
-
-Streaming STT is a real-backend mode.
-
-### Check backends
-
-```bash
-uv run kuchikae doctor
+kuchikae/
+  domain/      # Core interfaces & types
+  backends/    # STT, TTS, emotion implementations
+  pipeline/    # KuchikaePipeline orchestration
+  ui/          # Gradio component tree
 ```
-
-Shows installed backends, Ollama status, and selected environment variables.
-
-## Validation
-
-Validate locally before tagging the release:
-
-```bash
-uv sync --extra test
-uv run pytest -q -m "not slow and not e2e"
-uv run python -m compileall kuchikae
-uv run kuchikae doctor
-uv run kuchikae serve --dummy
-```
-
-## Environment variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `KUCHIKAE_STT_BACKEND` | STT backend | `dummy` for default smoke mode, `faster_whisper` with `--real` |
-| `KUCHIKAE_TEXT_BACKEND` | Text transform backend | `prompted_rule` |
-| `KUCHIKAE_VOICE_BACKEND` | Voice output backend | `dummy` for default smoke mode, `irodori` with `--real` |
-| `KUCHIKAE_STREAMING_STT` | Request streaming STT | `0` |
-| `KUCHIKAE_TEXT_MODEL` | Ollama model name | backend default |
-| `KUCHIKAE_ALLOW_DUMMY_BACKENDS` | Allow dummy fallback | `1` for default smoke mode, `0` with `--real` |
-
-## Documentation
-
-- [`README.md`](README.md) — quick start and CLI usage
-- [`docs/LOCAL_SETUP.md`](docs/LOCAL_SETUP.md) — setup instructions
-- [`docs/SPEC.md`](docs/SPEC.md) — product specification
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — backend interfaces
 
 ## Known limitations
 
-- This is a prototype.
-- Dummy mode is only for smoke testing.
-- Exact voice cloning is not guaranteed.
-- Real STT/TTS quality depends on local models and hardware.
-- Streaming STT requires real backend setup.
-- OpenVoice integration is experimental.
+- Prototype phase — breaking changes may occur
+- Dummy mode is for smoke testing only
+- Real STT/TTS quality depends on local models and hardware
+- OpenVoice integration is experimental
+- Exact voice cloning is not guaranteed
 
-## Credits
+## License
 
-Built with optional integrations around:
-
-- [Gradio](https://gradio.app/) — web UI
-- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — STT
-- [Ollama](https://ollama.com/) — LLM inference
-- [Irodori-TTS](https://github.com/Aratako/Irodori-TTS) — voice synthesis
+MIT. See `LICENSE` file.

@@ -10,21 +10,54 @@ The app takes a short Japanese speech input, uses that audio both as the utteran
 
 ## Quick start
 
-### Smoke test (dummy backends)
+### Requirements
+- Python 3.11
+- `uv` (install: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- (optional) [Ollama](https://ollama.com/) for LLM text transform
+- (optional) ~6 GB disk for model downloads
+
+### Smoke test (no models required)
 
 ```bash
-uv sync --extra test
-uv run kuchikae serve --dummy
+make run
 ```
 
-Opens Gradio at `http://127.0.0.1:7860`. Record audio → get dummy output. No models required. Dummy mode is for smoke testing only; it does not evaluate real STT or voice quality.
+Opens Gradio at `http://127.0.0.1:7860`. Record audio → get dummy output.
 
-### Real backends
+### Real backends (STT + TTS)
 
 ```bash
+make run-real
+```
+
+This installs real dependencies, downloads models, and starts the server.
+
+### Streaming STT
+
+```bash
+make run-streaming
+```
+
+### Doctor (check backend availability)
+
+```bash
+make doctor
+```
+
+Shows installed backends, Ollama status, environment variables, and missing dependencies.
+
+### Manual steps (without Makefile)
+
+```bash
+# Install
+uv sync
+
+# Smoke test
+uv run kuchikae serve --dummy
+
+# Real backends
 uv sync --extra real
 uv run kuchikae setup-models --all
-uv run kuchikae doctor --strict
 uv run kuchikae serve --real
 ```
 
@@ -32,32 +65,12 @@ Models are downloaded to the standard Hugging Face cache directory (`~/.cache/hu
 
 ### Repairing broken models
 
-If model weights are missing or corrupted:
-
 ```bash
+make doctor       # check status
 uv run kuchikae doctor --fix
 # or
 uv run kuchikae setup-models --all --repair
 ```
-
-This re-downloads models with `force_download=True` without deleting the entire cache directory.
-
-### Streaming STT
-
-```bash
-uv sync --extra real
-uv run kuchikae serve --real --streaming
-```
-
-Streaming STT is a real-backend mode. Plain `--dummy` remains the recommended fresh-clone smoke path.
-
-### Doctor (check backend availability)
-
-```bash
-uv run kuchikae doctor
-```
-
-Shows installed backends, Ollama status, environment variables, and missing dependencies.
 
 ## CLI usage
 
