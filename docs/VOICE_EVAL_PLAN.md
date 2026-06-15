@@ -135,3 +135,5 @@ JSONL schema:
 2. **IndexTTS2 調査** — ✅ 済み (2026-06-15)。日本語品質未検証、VRAM要求(4-6GB FP16)、独自ライセンスが課題
 3. **IndexTTS2 統合判断**: 日本語 test utterance で品質検証 → 合格なら optional backend として追加 (~2週間工数)
 4. **F5-TTS** 長期検討 — 音質最高だがリソース要求大
+
+> **Note (2026-06-15):** Current eval harness implements only `irodori` and `openvoice`. F5-TTS, CosyVoice, IndexTTS, RVC, and XTTS are research candidates listed for comparison and are not selectable from the CLI yet.

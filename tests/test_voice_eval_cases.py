@@ -350,6 +350,13 @@ class TestModeValidation:
         args = parse_args([])
         assert args.backend == "irodori"
 
+    def test_cli_backend_choices_limited(self):
+        """CLI should reject unsupported backends."""
+        from evals.run_voice_eval import parse_args
+        for name in ("f5-tts", "cosyvoice", "indextts", "rvc", "xtts"):
+            with pytest.raises(SystemExit):
+                parse_args(["--backend", name])
+
 
 # ---------------------------------------------------------------------------
 # Summarizer

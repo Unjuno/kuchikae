@@ -464,7 +464,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Evaluation mode (default: tts-only). "
                              "tts-only skips STT and uses ground-truth input_text; "
                              "pipeline runs full E2E including STT.")
-    parser.add_argument("--backend", default="irodori", choices=["irodori", "openvoice", "f5-tts", "cosyvoice", "indextts", "rvc", "xtts"],
+    parser.add_argument("--backend", default="irodori", choices=["irodori", "openvoice"],
                         help="TTS backend to evaluate (default: irodori)")
     parser.add_argument("--out", default=str(RESULTS_DIR / "voice_eval_smoke.jsonl"),
                         help="Output JSONL path (default: evals/results/voice_eval_smoke.jsonl)")
