@@ -13,7 +13,6 @@ from gradio.themes.utils import colors
 
 from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.pipeline import KuchikaePipeline
-from kuchikae.ui.css import CSS
 from kuchikae.ui.handlers import (
     TEMPLATES,
     _experimental_warning_html,

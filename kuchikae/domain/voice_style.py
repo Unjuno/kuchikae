@@ -132,10 +132,6 @@ def _clamp_emphasis(e: VoiceEmphasis) -> VoiceEmphasis:
     return VoiceEmphasis.MEDIUM
 
 
-def _shift_speed(s: VoiceSpeed, delta: int) -> VoiceSpeed:
-    return _clamp_speed(VoiceSpeed(list(_SPEED_ORDER.keys())[max(0, min(2, _SPEED_ORDER[s] + delta))]))
-
-
 def _shift_emphasis(e: VoiceEmphasis, delta: int) -> VoiceEmphasis:
     return _clamp_emphasis(VoiceEmphasis(list(_EMPHASIS_ORDER.keys())[max(0, min(2, _EMPHASIS_ORDER[e] + delta))]))
 

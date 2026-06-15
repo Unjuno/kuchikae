@@ -20,12 +20,12 @@ from kuchikae.ui.templates import TEMPLATES, TEMPLATE_CATEGORIES
 logger = logging.getLogger("kuchikae.ui.handlers")
 
 
-def normalize_audio_path(audio_input) -> str | None:
+def normalize_audio_path(audio_input: str | tuple | None) -> str | None:
     if audio_input is None:
         logger.warning("[normalize] input is None")
         return None
 
-    def _valid_local_file(candidate) -> str | None:
+    def _valid_local_file(candidate: str | None) -> str | None:
         if not candidate:
             return None
         path = str(candidate).strip()
@@ -139,7 +139,7 @@ def _backend_status(pipeline: KuchikaePipeline) -> str:
 
 def run_simple(
     pipeline: KuchikaePipeline,
-    audio_input,
+    audio_input: str | tuple | None,
     live_streaming: bool = False,
     stt_preset: str | None = None,
     template_name: str = "自然に",
@@ -225,7 +225,7 @@ def run_simple(
 
 
 def run(
-    audio_input,
+    audio_input: str | tuple | None,
     template_name: str,
     custom_prompt: str,
     pipeline: KuchikaePipeline,
@@ -331,7 +331,7 @@ def _experimental_warning_html(template_name: str = "") -> str:
     )
 
 
-def on_template_change(template_name: str):
+def on_template_change(template_name: str) -> tuple[gr.update, str]:
     if template_name == "カスタム":
         return gr.update(), _experimental_warning_html(template_name)
     text = TEMPLATES.get(template_name, TEMPLATES["自然に"])

@@ -8,7 +8,6 @@ Generates VoiceOutputPrompt from detected emotion, with priority:
 
 from __future__ import annotations
 
-from kuchikae.domain.audio_emotion import AudioEmotion
 from kuchikae.domain.types import VoiceOutputPrompt
 from kuchikae.domain.voice_style import VOICE_STYLE_PRESETS
 

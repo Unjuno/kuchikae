@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import platform
 import resource
@@ -21,6 +22,8 @@ import soundfile as sf
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+LOG = logging.getLogger(__name__)
 
 
 def repo_root() -> Path:
@@ -47,7 +50,8 @@ def machine_info() -> dict[str, Any]:
             "cuda_available": torch.cuda.is_available(),
         }
     except Exception:
-        pass
+        LOG.warning("torch not available", exc_info=True)
+        torch_info = {"installed": False}
 
     return {
         "platform": sys.platform,

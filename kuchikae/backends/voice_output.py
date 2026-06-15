@@ -8,7 +8,7 @@ import sys
 import time
 from typing import Any
 
-from kuchikae.domain.voice_output import DummyVoiceOutputBackend, VoiceOutputBackend
+from kuchikae.domain.voice_output import VoiceOutputBackend
 from kuchikae.domain.types import VoiceContext, VoiceOutputPrompt
 
 logger = logging.getLogger(__name__)

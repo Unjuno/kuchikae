@@ -139,7 +139,8 @@ class TestDummyStreamingVoiceOutputBackend:
     def test_prepare_voice(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()
         vc = VoiceContext(reference_audio_path="test.wav", ready=True)
-        backend.prepare_voice(vc, session_id="test")
+        result = backend.prepare_voice(vc, session_id="test")
+        assert result is None  # DummyVoiceOutputBackend.prepare_voice is a no-op
 
     def test_synthesize_segment_returns_audio(self) -> None:
         backend = DummyStreamingVoiceOutputBackend()

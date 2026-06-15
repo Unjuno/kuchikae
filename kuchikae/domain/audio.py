@@ -1,9 +1,9 @@
-"""Audio chunking scaffold."""
+"""Audio chunking scaffold and shared audio utilities."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from functools import lru_cache
 from typing import List
 
 import numpy as np
@@ -60,3 +60,21 @@ class TranscriptJoiner:
     @staticmethod
     def join(transcripts: List[str]) -> str:
         return " ".join(t.strip() for t in transcripts if t.strip())
+
+
+def linear_resample(samples: np.ndarray, source_rate: int, target_rate: int = 16000) -> np.ndarray:
+    if source_rate == target_rate:
+        return samples.astype(np.float32, copy=False)
+    if samples.size == 0:
+        return samples.astype(np.float32, copy=False)
+    duration = samples.shape[0] / float(source_rate)
+    target_size = max(1, int(round(duration * target_rate)))
+    source_x = np.linspace(0.0, duration, num=samples.shape[0], endpoint=False)
+    target_x = np.linspace(0.0, duration, num=target_size, endpoint=False)
+    return np.interp(target_x, source_x, samples).astype(np.float32, copy=False)
+
+
+@lru_cache(maxsize=1)
+def torch_module():
+    import torch
+    return torch

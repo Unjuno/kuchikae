@@ -147,6 +147,7 @@ class TestGPTTextTransformBackend:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(not ollama_available(), reason="Ollama not available")
 class TestOllamaSystemPrompt:
     def test_system_prompt_contains_engine_name(self) -> None:
         backend = OllamaTextTransformBackend()

@@ -37,20 +37,15 @@ from kuchikae.domain.text_transform import (
     PromptedRuleTextTransformBackend,
     RuleTextTransformBackend,
     TextTransformBackend,
-    strip_cot,
     validate_transform,
 )
 from kuchikae.domain.voice_style import (
     RuleVoiceStyleDetector,
     VoiceStyle,
     VoiceStyleDetector,
-    fuse_voice_styles,
-    merge_voice_style,
-    voice_style_to_prompt,
 )
 from kuchikae.domain.voice_prompt import (
     build_voice_output_prompt_from_analysis,
-    get_emotion_description,
     get_voice_style_display,
 )
 from kuchikae.domain.types import (

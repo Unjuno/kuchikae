@@ -5,29 +5,16 @@ from __future__ import annotations
 import logging
 import os
 import time
-from functools import lru_cache
 from typing import Any
 
-import numpy as np
 import soundfile as sf
 
+from kuchikae.domain.audio import linear_resample, torch_module
 from kuchikae.domain.stt import STTBackend
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_WHISPER_MODEL_ID = "kotoba-tech/kotoba-whisper-v2.1"
-
-
-def _linear_resample(samples: np.ndarray, source_rate: int, target_rate: int = 16000) -> np.ndarray:
-    if source_rate == target_rate:
-        return samples.astype(np.float32, copy=False)
-    if samples.size == 0:
-        return samples.astype(np.float32, copy=False)
-    duration = samples.shape[0] / float(source_rate)
-    target_size = max(1, int(round(duration * target_rate)))
-    source_x = np.linspace(0.0, duration, num=samples.shape[0], endpoint=False)
-    target_x = np.linspace(0.0, duration, num=target_size, endpoint=False)
-    return np.interp(target_x, source_x, samples).astype(np.float32, copy=False)
 
 
 class TransformersWhisperJapaneseASRBackend(STTBackend):
@@ -55,20 +42,13 @@ class TransformersWhisperJapaneseASRBackend(STTBackend):
                 "Install with `uv sync --extra real`."
             ) from e
 
-    @staticmethod
-    @lru_cache(maxsize=1)
-    def _torch_module():
-        import torch
-
-        return torch
-
     def _load_model(self) -> tuple[Any, Any]:
         if self._model is not None and self._processor is not None:
             return self._processor, self._model
 
         from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
-        torch = self._torch_module()
+        torch = torch_module()
         dtype = {
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
@@ -98,12 +78,12 @@ class TransformersWhisperJapaneseASRBackend(STTBackend):
         samples, sample_rate = sf.read(audio_path, dtype="float32")
         if samples.ndim > 1:
             samples = samples.mean(axis=1)
-        samples = _linear_resample(samples.astype(np.float32, copy=False), sample_rate, 16000)
+        samples = linear_resample(samples.astype(np.float32, copy=False), sample_rate, 16000)
         return processor(samples, sampling_rate=16000, return_tensors="pt")
 
     def transcribe(self, audio_path: str) -> str:
         processor, model = self._load_model()
-        torch = self._torch_module()
+        torch = torch_module()
         inputs = self._prepare_inputs(audio_path)
 
         t1 = time.time()

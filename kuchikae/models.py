@@ -123,7 +123,7 @@ def _model_specs() -> list[ModelSpec]:
 def _check_whisper_model(spec: ModelSpec) -> ModelStatus:
     model_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
-        from huggingface_hub import try_to_load_from_cache  # type: ignore
+        from huggingface_hub import try_to_load_from_cache  # type: ignore[import-untyped]
         cache_dir = os.path.join(
             Path.home(), ".cache", "huggingface", "hub",
             f"models--Systran--faster-whisper-{model_id}",
@@ -153,7 +153,7 @@ def _check_whisper_model(spec: ModelSpec) -> ModelStatus:
 def _check_hf_file_model(spec: ModelSpec) -> ModelStatus:
     repo_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
-        from huggingface_hub import try_to_load_from_cache  # type: ignore
+        from huggingface_hub import try_to_load_from_cache  # type: ignore[import-untyped]
         filename = "model.safetensors"
         cache_path = try_to_load_from_cache(
             repo_id=repo_id,
@@ -184,7 +184,7 @@ def _check_hf_file_model(spec: ModelSpec) -> ModelStatus:
 def _check_hf_repo_model(spec: ModelSpec) -> ModelStatus:
     repo_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
-        from huggingface_hub import try_to_load_from_cache  # type: ignore
+        from huggingface_hub import try_to_load_from_cache  # type: ignore[import-untyped]
         # Check for any cached snapshot of this repo
         repo_cache = os.path.join(
             Path.home(), ".cache", "huggingface", "hub",
@@ -240,7 +240,7 @@ def check_models(category: str | None = None) -> list[ModelStatus]:
 def _setup_whisper_model(spec: ModelSpec) -> ModelStatus:
     model_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
-        from faster_whisper import WhisperModel  # type: ignore
+        from faster_whisper import WhisperModel  # type: ignore[import-untyped]
         logger.info("Downloading whisper model '%s'...", model_id)
         model = WhisperModel(model_id, device="cpu", compute_type="int8")
         del model
@@ -264,7 +264,7 @@ def _setup_whisper_model(spec: ModelSpec) -> ModelStatus:
 def _setup_hf_file_model(spec: ModelSpec, repair: bool = False) -> ModelStatus:
     repo_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
-        from huggingface_hub import hf_hub_download  # type: ignore
+        from huggingface_hub import hf_hub_download  # type: ignore[import-untyped]
         logger.info("Downloading %s from %s...", spec.name, repo_id)
         path = hf_hub_download(
             repo_id=repo_id,
@@ -292,7 +292,7 @@ def _setup_hf_file_model(spec: ModelSpec, repair: bool = False) -> ModelStatus:
 def _setup_hf_repo_model(spec: ModelSpec, repair: bool = False) -> ModelStatus:
     repo_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
-        from huggingface_hub import snapshot_download  # type: ignore
+        from huggingface_hub import snapshot_download  # type: ignore[import-untyped]
         logger.info("Downloading %s snapshot from %s...", spec.name, repo_id)
         path = snapshot_download(
             repo_id=repo_id,
@@ -354,17 +354,6 @@ def setup_models(
 def repair_models(category: str | None = None) -> SetupReport:
     """Re-download models that are missing or broken."""
     return setup_models(category=category, repair=True)
-
-
-def repair_model_by_name(name: str) -> ModelStatus:
-    specs = _model_specs()
-    for spec in specs:
-        if spec.name == name:
-            return setup_model(spec, repair=True)
-    return ModelStatus(
-        name=name, category="unknown", status="error",
-        error=f"Unknown model: {name}",
-    )
 
 
 # ---------------------------------------------------------------------------

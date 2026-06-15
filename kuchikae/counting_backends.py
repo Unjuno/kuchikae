@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from kuchikae.domain.stt import STTBackend, DummySTTBackend
 from kuchikae.domain.text_transform import TextTransformBackend, DummyTextTransformBackend
 from kuchikae.domain.types import TextTransformPrompt, VoiceContext, VoiceOutputPrompt

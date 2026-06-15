@@ -70,7 +70,7 @@ def test_check_audio_valid_wav_passes(tmp_path) -> None:
     path = str(tmp_path / "valid.wav")
     _write_wav(path)
     pipeline = KuchikaePipeline()
-    pipeline.check_audio(path)
+    assert pipeline.check_audio(path) is None
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +574,7 @@ def test_dummy_audio_emotion_detector_emits_start_and_done(tmp_path) -> None:
 
 def test_warmup_noop_with_dummy_backends(tmp_path) -> None:
     pipeline = KuchikaePipeline()
-    pipeline.warmup()
+    assert pipeline.warmup() is None
 
 
 def test_warmup_does_not_raise_on_error(tmp_path) -> None:
@@ -593,3 +593,5 @@ def test_warmup_does_not_raise_on_error(tmp_path) -> None:
 
     with patch("httpx.post", side_effect=Exception("boom")):
         pipeline.warmup()
+
+    assert pipeline.warmup() is None  # survival check

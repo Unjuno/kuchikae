@@ -61,7 +61,7 @@ class TransformersAudioEmotionDetector:
         if self._processor is not None and self._model is not None:
             return
         try:
-            from transformers import AutoFeatureExtractor, AutoModelForAudioClassification  # type: ignore
+            from transformers import AutoFeatureExtractor, AutoModelForAudioClassification  # type: ignore[import-untyped]
 
             self._processor = AutoFeatureExtractor.from_pretrained(self.model_id)
             self._model = AutoModelForAudioClassification.from_pretrained(self.model_id)

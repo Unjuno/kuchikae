@@ -5,29 +5,14 @@ from __future__ import annotations
 import logging
 import os
 import time
-from functools import lru_cache
-from typing import Any
 
-import numpy as np
-import soundfile as sf
+from typing import Any, Generator
 
 from kuchikae.domain.stt import STTBackend
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_NEMO_MODEL_ID = "reazon-research/reazonspeech-nemo-v2"
-
-
-def _linear_resample(samples: np.ndarray, source_rate: int, target_rate: int = 16000) -> np.ndarray:
-    if source_rate == target_rate:
-        return samples.astype(np.float32, copy=False)
-    if samples.size == 0:
-        return samples.astype(np.float32, copy=False)
-    duration = samples.shape[0] / float(source_rate)
-    target_size = max(1, int(round(duration * target_rate)))
-    source_x = np.linspace(0.0, duration, num=samples.shape[0], endpoint=False)
-    target_x = np.linspace(0.0, duration, num=target_size, endpoint=False)
-    return np.interp(target_x, source_x, samples).astype(np.float32, copy=False)
 
 
 class ReazonSpeechNemoASRBackend(STTBackend):
@@ -55,14 +40,7 @@ class ReazonSpeechNemoASRBackend(STTBackend):
                 "Install it in an optional environment before using this backend."
             ) from e
 
-    @staticmethod
-    @lru_cache(maxsize=1)
-    def _torch_module():
-        import torch
-
-        return torch
-
-    def _load_model(self):
+    def _load_model(self) -> Any:
         if self._model is not None:
             return self._model
 
@@ -89,6 +67,6 @@ class ReazonSpeechNemoASRBackend(STTBackend):
         text = getattr(first, "text", first)
         return str(text).strip()
 
-    def transcribe_stream(self, audio_path: str):
+    def transcribe_stream(self, audio_path: str) -> Generator[str, None, None]:
         yield self.transcribe(audio_path)
 

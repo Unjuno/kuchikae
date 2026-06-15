@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
-from kuchikae.domain.types import AudioSegment, VoiceContext
+from kuchikae.domain.types import VoiceContext
 
 logger = logging.getLogger(__name__)
 
