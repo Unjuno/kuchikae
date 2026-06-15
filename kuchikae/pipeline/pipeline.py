@@ -300,7 +300,7 @@ class KuchikaePipeline:
         stt_config: FasterWhisperConfig | None = None,
         voice_style_detector: VoiceStyleDetector | None = None,
         audio_emotion_detector: AudioEmotionDetector | None = None,
-        voice_style_timeout_sec: float = 0.05,
+        voice_style_timeout_sec: float = 5.0,
         backend_config: dict | None = None,
     ) -> None:
         self.stt_backend = stt_backend or DummySTTBackend()

@@ -190,6 +190,9 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         self._num_steps = int(os.environ.get("IRODORI_NUM_STEPS", str(self._num_steps)))
         self._cfg_scale_text = float(os.environ.get("IRODORI_CFG_SCALE_TEXT", str(self._cfg_scale_text)))
         self._cfg_scale_speaker = float(os.environ.get("IRODORI_CFG_SCALE_SPEAKER", str(self._cfg_scale_speaker)))
+        self._cfg_scale_caption = (
+            float(os.environ["IRODORI_CFG_SCALE_CAPTION"]) if os.environ.get("IRODORI_CFG_SCALE_CAPTION") else self._cfg_scale_text
+        )
         self._cfg_guidance_mode = os.environ.get("IRODORI_CFG_GUIDANCE_MODE", self._cfg_guidance_mode)
         self._cfg_scale = (
             float(os.environ["IRODORI_CFG_SCALE"]) if os.environ.get("IRODORI_CFG_SCALE") else self._cfg_scale
@@ -276,11 +279,13 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
             f"irodori_output_{int(time.time() * 1000)}_{os.getpid()}.wav",
         )
 
-        self._log(f"synthesizing ({self._num_steps} steps, linear)...")
+        caption = prompt.instruction if prompt else None
+        self._log(f"synthesizing ({self._num_steps} steps, linear)... caption={repr(caption[:80]) if caption else None}")
         t1 = time.time()
         result = runtime.synthesize(
             SamplingRequest(
                 text=stripped,
+                caption=caption,
                 ref_wav=voice_context.reference_audio_path,
                 decode_mode=self._decode_mode,
                 duration_scale=self._duration_scale,
@@ -297,7 +302,7 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
                 ref_normalize_db=self._ref_normalize_db,
                 ref_ensure_max=self._ref_ensure_max,
                 cfg_scale_text=self._cfg_scale_text,
-                cfg_scale_caption=self._cfg_scale_text,
+                cfg_scale_caption=self._cfg_scale_caption,
                 cfg_scale_speaker=self._cfg_scale_speaker,
                 cfg_min_t=self._cfg_min_t,
                 cfg_max_t=self._cfg_max_t,

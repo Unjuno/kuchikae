@@ -13,8 +13,7 @@ from typing import Generator
 import gradio as gr
 import soundfile as sf
 
-from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
-from kuchikae.domain.voice_style import VOICE_STYLE_PRESETS
+from kuchikae.domain.types import TextTransformPrompt
 from kuchikae.pipeline import KuchikaePipeline
 from kuchikae.ui.templates import TEMPLATES, TEMPLATE_CATEGORIES
 
@@ -88,25 +87,6 @@ def normalize_audio_path(audio_input) -> str | None:
     return None
 
 
-def normalize_voice_output_prompt(value) -> VoiceOutputPrompt | None:
-    if value is None:
-        return None
-    if isinstance(value, VoiceOutputPrompt):
-        return value
-    text = str(value).strip()
-    if not text:
-        return None
-    return VoiceOutputPrompt(instruction=text)
-
-
-def resolve_voice_style(voice_style: str, custom_prompt: str | None = None) -> VoiceOutputPrompt | None:
-    if voice_style == "auto" or not voice_style:
-        return None
-    if voice_style in VOICE_STYLE_PRESETS:
-        return VoiceOutputPrompt(instruction=VOICE_STYLE_PRESETS[voice_style])
-    return None
-
-
 def _voice_analysis_html(pipeline: KuchikaePipeline) -> str:
     """Generate HTML for voice analysis label showing emotion and applied style."""
     voice_style = getattr(pipeline, "_last_voice_style", "auto")
@@ -163,6 +143,7 @@ def run_simple(
     live_streaming: bool = False,
     stt_preset: str | None = None,
     template_name: str = "自然に",
+    voice_style: str = "auto",
 ) -> Generator:
     logger.info(
         "[run_simple] called live_streaming=%s audio_type=%s audio_repr=%r template=%s",
@@ -182,6 +163,7 @@ def run_simple(
             "",
             "",
             "録音ファイルを取得できませんでした。マイク権限を許可し、もう一度押して話してください。",
+            _voice_analysis_html(pipeline),
         )
         return
 
@@ -202,13 +184,14 @@ def run_simple(
 
     try:
         for idx, (status, src, txt, aud) in enumerate(
-            stream_fn(path, prompt),
+            stream_fn(path, prompt, voice_style),
             start=1,
         ):
             last_status = status
             last_source = src or ""
             last_text = txt or ""
             backend_status = _backend_status(pipeline)
+            voice_analysis = _voice_analysis_html(pipeline)
             logger.info(
                 "[run_simple] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
                 idx,
@@ -220,15 +203,15 @@ def run_simple(
                 txt[:120] if isinstance(txt, str) else txt,
             )
             if status == "DONE":
-                yield aud, src, txt, f"言い直しました | {backend_status}"
+                yield aud, src, txt, f"言い直しました | {backend_status}", voice_analysis
             elif status == "VOX":
-                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}"
+                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}", voice_analysis
             elif status == "TXT":
-                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}"
+                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}", voice_analysis
             elif status == "STT_PARTIAL":
-                yield gr.update(value=None), src, "", f"文字起こし中... | {backend_status}"
+                yield gr.update(value=None), src, "", f"文字起こし中... | {backend_status}", voice_analysis
             else:
-                yield gr.update(value=None), "", "", f"音声認識中... | {backend_status}"
+                yield gr.update(value=None), "", "", f"音声認識中... | {backend_status}", voice_analysis
     except Exception as e:
         logger.exception("[run_simple] inference failed")
         yield (
@@ -236,6 +219,7 @@ def run_simple(
             last_source,
             last_text,
             f"{last_status} 段階で失敗しました: {type(e).__name__}: {e}",
+            _voice_analysis_html(pipeline),
         )
         return
 

@@ -52,7 +52,3 @@ def test_cli_doctor(capsys) -> None:
     assert "Kuchikae Doctor" in captured.out
 
 
-def test_voice_style_presets_not_shadowed() -> None:
-    import kuchikae.ui.handlers as handlers
-    import kuchikae.domain.voice_style as voice_style
-    assert handlers.VOICE_STYLE_PRESETS is voice_style.VOICE_STYLE_PRESETS

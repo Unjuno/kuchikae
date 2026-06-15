@@ -203,6 +203,17 @@ def create_app(
                         value=_experimental_warning_html("自然に"),
                     )
 
+                    simple_voice_style = gr.Radio(
+                        choices=["auto", "natural", "calm", "bright", "slow_clear"],
+                        value="auto",
+                        label="声の出し方",
+                    )
+
+                    simple_voice_analysis = gr.HTML(
+                        elem_id="simple-voice-analysis-label",
+                        value=_voice_analysis_pending_html(),
+                    )
+
                     gr.HTML(PTT_HTML, js_on_load=PTT_JS)
 
                     simple_audio = gr.Audio(
@@ -256,24 +267,25 @@ def create_app(
                         outputs=[simple_experimental_warning],
                     )
 
-                    def _run_simple_handler(audio_value, template_value, stt_preset_value):
+                    def _run_simple_handler(audio_value, template_value, stt_preset_value, voice_style_value):
                         yield from run_simple(
                             pipeline,
                             audio_value,
                             live_streaming=live_streaming,
                             stt_preset=stt_preset_value,
                             template_name=template_value,
+                            voice_style=voice_style_value,
                         )
 
                     simple_audio.stop(
                         _run_simple_handler,
-                        inputs=[simple_audio, simple_template, stt_preset],
-                        outputs=[simple_output, simple_source, simple_transformed, simple_status],
+                        inputs=[simple_audio, simple_template, stt_preset, simple_voice_style],
+                        outputs=[simple_output, simple_source, simple_transformed, simple_status, simple_voice_analysis],
                     )
                     simple_audio.change(
                         _run_simple_handler,
-                        inputs=[simple_audio, simple_template, stt_preset],
-                        outputs=[simple_output, simple_source, simple_transformed, simple_status],
+                        inputs=[simple_audio, simple_template, stt_preset, simple_voice_style],
+                        outputs=[simple_output, simple_source, simple_transformed, simple_status, simple_voice_analysis],
                     )
 
     return demo

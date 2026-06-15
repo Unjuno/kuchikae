@@ -38,7 +38,17 @@ UI voice_style Radio (通常タブのみ)
         → voice_output_backend.synthesize(text, voice_context, prompt)
 ```
 
-**重要:** `IrodoriTTSVoiceOutputBackend.synthesize()` および `OpenVoiceOutputBackend.synthesize()` は `prompt` パラメータを受け取るが **内容を完全に無視している**。emotion/style の instruction 文字列は TTS に渡らない。
+**重要 (2026-06-15 修正):** `IrodoriTTSVoiceOutputBackend.synthesize()` は `prompt` パラメータを無視していたが、`SamplingRequest(caption=prompt.instruction)` に渡すよう修正済み (voice_output.py:279)。
+Irodori-TTS の内部で `model_cfg.use_caption_condition` が True の場合に caption が生成に影響する。`cfg_scale_caption` は `cfg_scale_text` と同じ値が使われており、個別の環境変数はない。
+
+`OpenVoiceOutputBackend.synthesize()` は引き続き prompt を無視しているが、OpenVoice に caption 相当の API は存在しない。
+
+### デッドコード: VoicePromptResolver
+
+`pipeline/voice_prompt_resolver.py` の `VoicePromptResolver` クラスは text-based voice style detection (source → transformed text を解析) + emotion fusion を行うが、本番の pipeline.py からは一切呼ばれていない。テスト (`test_voice_prompt_resolver.py`) のみ存在。
+代わりに pipeline.py はインラインの `_detect_audio_emotion_async()` / `_collect_audio_emotion()` / `_build_voice_prompt()` を使用している。
+
+同じく `handlers.py:102` の `resolve_voice_style()` も未使用。`run()` は `voice_style` 文字列を pipeline に渡し、`_build_voice_prompt()` 内で `build_voice_output_prompt_from_analysis()` が変換する。
 
 ### normal mode vs simple mode の差異
 
@@ -49,7 +59,13 @@ UI voice_style Radio (通常タブのみ)
 | voice_analysis 表示 | あり (yield に含む) | なし |
 | emotion 検出 | 両モードとも行われる (違いなし) |
 
-simple mode では voice_style を指定できない。
+simple mode では voice_style を指定できない。template_name のみ選択可能。
+
+### Audio emotion detection timeout
+
+pipeline.py:303 の `voice_style_timeout_sec: float = 0.05` (50ms) が audio emotion 検出の上限。
+`DummyAudioEmotionDetector` は即時応答するため問題ないが、`TransformersAudioEmotionDetector` (wav2vec2) が使われる場合、CPU 推論は 50ms を超えるため常にタイムアウト → None → neutral fallback となる。
+実質的に emotion 検出を機能させるには 5–10 秒程度に緩和する必要がある。
 
 ### Irodori-TTS の reference audio 利用
 
@@ -115,6 +131,6 @@ JSONL schema:
 | **備考** | emotion 制御が効かない点が最大の課題 | 音質高いがサイズ大 | 中国語以外の品質未知 | 日本語品質期待できるがやや重い | voice conversion なので別用途 | コミュニティ分散 |
 
 ### 推奨優先順位 (今後)
-1. **Irodori-TTS 改善** (prompt を実際に使うよう修正) — 最小工数で効果期待
+1. **Irodori-TTS 改善** (prompt を caption として渡すよう修正) — ✅ 済み (2026-06-15)
 2. **IndexTTS** 調査 — 日本語品質が最も期待できる代替
 3. **F5-TTS** 長期検討 — 音質最高だがリソース要求大

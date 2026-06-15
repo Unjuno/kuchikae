@@ -24,7 +24,7 @@ def test_run_simple_none_input_yields_empty():
     gen = run_simple(pipeline, None)
     results = list(gen)
     assert len(results) == 1
-    aud, src, trf, sts = results[0]
+    aud, src, trf, sts, _ = results[0]
     assert src == ""
     assert trf == ""
     assert "録音ファイルを取得できませんでした" in sts
@@ -49,7 +49,7 @@ def test_run_simple_with_dummy_wav_yields_done(tmp_path):
     results = list(gen)
     assert len(results) >= 1
     last = results[-1]
-    aud, src, trf, sts = last
+    aud, src, trf, sts, _ = last
     assert isinstance(aud, str) and aud != ""
     assert isinstance(src, str) and len(src) > 0
     assert isinstance(trf, str) and len(trf) > 0
