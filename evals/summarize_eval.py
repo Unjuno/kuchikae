@@ -64,7 +64,6 @@ def compute_summary(results: list[dict]) -> dict:
 
         by_template[template].total += 1
         by_category[category].total += 1
-        overall.total = overall.total  # ensure exists
 
         if verdict == "pass":
             overall.passed += 1

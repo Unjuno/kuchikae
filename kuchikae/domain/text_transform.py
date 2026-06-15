@@ -9,6 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from importlib.resources import files
 from functools import lru_cache
+from typing import Callable
 
 from kuchikae.domain.types import TextTransformPrompt, TransformUpdate
 
@@ -459,7 +460,7 @@ class DummyTextTransformBackend(TextTransformBackend):
 
 class OllamaTextTransformBackend(TextTransformBackend):
 
-    def __init__(self, model: str | None = None, strict: bool = False, on_cot_stripped: callable | None = None) -> None:
+    def __init__(self, model: str | None = None, strict: bool = False, on_cot_stripped: Callable | None = None) -> None:
         self.model = model or os.environ.get("KUCHIKAE_TEXT_MODEL", DEFAULT_OLLAMA_TEXT_MODEL)
         self.strict = strict
         self._base_url = os.environ.get("KUCHIKAE_OLLAMA_URL", "http://localhost:11434")
@@ -622,28 +623,28 @@ class GPTTextTransformBackend(TextTransformBackend):
         import httpx
 
         t0 = time.time()
-        resp = httpx.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": (
-                        "あなたは日本語のテキスト変換アシスタントです。"
-                        "ユーザーの入力テキストをプロンプトに基づいて変換してください。\n"
-                        "- 内容、数字、日時、固有名詞、否定条件は保ってください。\n"
-                        "- 新しい事実を追加しないでください。\n"
-                        "- 出力は日本語のみで、余計な説明文を除いてください。"
-                    )},
-                    {"role": "user", "content": f"テキスト: {text}\n\nプロンプト: {prompt.instruction}"},
-                ],
-            },
-            timeout=30,
-        )
         try:
+            resp = httpx.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": [
+                        {"role": "system", "content": (
+                            "あなたは日本語のテキスト変換アシスタントです。"
+                            "ユーザーの入力テキストをプロンプトに基づいて変換してください。\n"
+                            "- 内容、数字、日時、固有名詞、否定条件は保ってください。\n"
+                            "- 新しい事実を追加しないでください。\n"
+                            "- 出力は日本語のみで、余計な説明文を除いてください。"
+                        )},
+                        {"role": "user", "content": f"テキスト: {text}\n\nプロンプト: {prompt.instruction}"},
+                    ],
+                },
+                timeout=30,
+            )
             resp.raise_for_status()
             result = resp.json()["choices"][0]["message"]["content"].strip()
             logger.info("gpt: %.2fs → %s", time.time() - t0, result[:60])
@@ -732,22 +733,6 @@ class PromptedRuleTextTransformBackend(TextTransformBackend):
 
     def transform(self, text: str, prompt: TextTransformPrompt) -> str:
         return self._rule_backend.transform(text, prompt)
-
-    def _detect_prompt_type(self, instruction: str) -> str:
-        if any(kw in instruction for kw in ("要約", "まとめ", "summarize")):
-            return "summarize"
-        if any(kw in instruction for kw in ("カジュアル", "普通形", "タメ口", "casual", "plain")):
-            return "casual"
-        return "polite"
-
-    @lru_cache(maxsize=4)
-    def _load_template(self, prompt_type: str) -> str:
-        filename = PROMPT_FILES.get(prompt_type, PROMPT_FILES["polite"])
-        try:
-            return files("kuchikae.prompts").joinpath(filename).read_text(encoding="utf-8")
-        except Exception as e:
-            logger.warning("Failed to load prompt template %s: %s", filename, e)
-            return ""
 
 
 # ---------------------------------------------------------------------------

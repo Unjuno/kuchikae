@@ -56,7 +56,7 @@ def _normalize_audio_path(audio_input: Any) -> str:
     try:
         validate_audio(path)
     except ValueError as e:
-        raise ValueError(str(e))
+        raise ValueError(str(e)) from e
     
     return path
 

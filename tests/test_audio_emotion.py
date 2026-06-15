@@ -6,8 +6,6 @@ import soundfile as sf
 import sys
 import types
 from importlib.machinery import ModuleSpec
-from unittest.mock import patch
-
 from kuchikae.domain.audio_emotion import AudioEmotion, DummyAudioEmotionDetector, TransformersAudioEmotionDetector
 
 

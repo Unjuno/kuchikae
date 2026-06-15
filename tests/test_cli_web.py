@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from unittest.mock import patch
 
 from kuchikae.web import build_pipeline_config_from_env

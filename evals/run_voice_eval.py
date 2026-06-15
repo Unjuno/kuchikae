@@ -13,8 +13,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import os
-import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -165,6 +163,7 @@ def _compute_duration_ratio(input_path: str, output_path: str) -> float | None:
             return None
         return out_dur / in_dur
     except Exception:
+        logger.debug("duration ratio computation failed", exc_info=True)
         return None
 
 

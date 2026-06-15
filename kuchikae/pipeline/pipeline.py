@@ -9,18 +9,12 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from typing import Generator
 
 from kuchikae.domain.audio import AudioSegmenter, FixedWindowSegmenter
-from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor, DummyVoiceContextExtractor
+from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor
 from kuchikae.domain.audio_key import AudioKey, AudioKeyFromCacheKey
 from kuchikae.domain.metrics import LatencyLogger
 from kuchikae.domain.diagnostics import DiagnosticRecorder
 from kuchikae.domain.error_hints import hint_for_error
 from kuchikae.domain.events import DiagnosticEvent, EventLevel, new_run_id
-from kuchikae.counting_backends import (
-    CountingSTTBackend,
-    CountingTextTransformBackend,
-    CountingVoiceContextExtractor,
-    CountingVoiceOutputBackend,
-)
 from kuchikae.domain.processing_cache import ProcessingCache
 from kuchikae.domain.audio_emotion import (
     AudioEmotion,

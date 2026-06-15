@@ -76,7 +76,8 @@ def get_new_templates() -> list[str]:
 
 def transform_text(text: str, template_name: str) -> dict[str, Any]:
     """Transform text using the specified template via Ollama."""
-    from kuchikae.domain.text_transform import OllamaTextTransformBackend, TextTransformPrompt
+    from kuchikae.domain.text_transform import OllamaTextTransformBackend
+    from kuchikae.domain.types import TextTransformPrompt
 
     template_text = TEMPLATES.get(template_name, "")
     prompt = TextTransformPrompt(instruction=template_text)

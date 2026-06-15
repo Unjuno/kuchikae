@@ -91,7 +91,7 @@ def compute_summary(results: list[dict]) -> dict:
     avg_ss = (sum(speaker_similarities) / len(speaker_similarities)) if speaker_similarities else None
     avg_dr = (sum(duration_ratios) / len(duration_ratios)) if duration_ratios else None
 
-    worst_cases.sort(key=lambda x: x.get("speaker_similarity") or 1.0)
+    worst_cases.sort(key=lambda x: x.get("speaker_similarity") if x.get("speaker_similarity") is not None else 1.0)
 
     return {
         "overall": {
