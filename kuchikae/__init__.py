@@ -1,6 +1,6 @@
 """Kuchikae — prompt-conditioned voice transformation prototype."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor
 from kuchikae.domain.audio_key import AudioKey
