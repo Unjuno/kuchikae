@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -32,6 +33,9 @@ def wav_exists(name: str) -> bool:
 
 
 def generate_fixture(name: str, text: str) -> None:
+    if platform.system() != "Darwin":
+        logger.error("create_fixtures requires macOS (say command)")
+        sys.exit(1)
     out = FIXTURES_DIR / name
     logger.info("generating %s …", name)
     result = subprocess.run(

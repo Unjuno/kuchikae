@@ -169,7 +169,7 @@ class StreamingFasterWhisperSTTBackend(FasterWhisperSTTBackend):
                     tmp_name = tmp.name
                     sf.write(tmp.name, chunk, sr)
                 segments, _ = model.transcribe(
-                tmp_name,
+                    tmp_name,
                     language=self._config.language,
                     beam_size=int(os.environ.get("WHISPER_BEAM_SIZE", str(self._config.beam_size))),
                     vad_filter=os.environ.get("WHISPER_VAD_FILTER", str(int(self._config.vad_filter))).lower() in ("1", "true", "yes"),

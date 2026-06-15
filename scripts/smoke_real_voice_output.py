@@ -35,40 +35,43 @@ def main() -> int:
     # Create test audio.
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         ref_audio = f.name
-    create_test_audio(ref_audio)
-    print(f"  Reference audio: {ref_audio}")
-
-    # Test dummy backend.
-    print("\n--- DummyVoiceOutputBackend ---")
-    dummy_backend = DummyVoiceOutputBackend()
-    voice_context_dummy = VoiceContext(reference_audio_path=ref_audio, ready=True)
-    dummy_path = dummy_backend.synthesize("テスト", voice_context_dummy)
-    assert os.path.isfile(dummy_path), f"Dummy output missing: {dummy_path}"
-    data, sr = sf.read(dummy_path)
-    print(f"  Output: {dummy_path}")
-    print(f"  Duration: {len(data)/sr:.2f}s, SR: {sr}")
-
-    # Test OpenVoice backend.
-    print("\n--- OpenVoiceOutputBackend ---")
+    dummy_path = None
+    ow_path = None
     try:
-        ow_backend = OpenVoiceOutputBackend()
-        voice_context = VoiceContext(reference_audio_path=ref_audio, ready=True)
-        ow_path = ow_backend.synthesize("テスト", voice_context)
-        assert os.path.isfile(ow_path), f"OpenVoice output missing: {ow_path}"
-        data2, sr2 = sf.read(ow_path)
-        print(f"  Output: {ow_path}")
-        print(f"  Duration: {len(data2)/sr2:.2f}s, SR: {sr2}")
-    except RuntimeError as e:
-        print(f"  SKIPPED (OpenVoice not ready): {e}")
-        return 1
+        create_test_audio(ref_audio)
+        print(f"  Reference audio: {ref_audio}")
 
-    # Cleanup.
-    os.unlink(ref_audio)
-    for p in [dummy_path, ow_path]:
-        if os.path.isfile(p):
-            os.unlink(p)
-    print("\n=== PASS ===")
-    return 0
+        # Test dummy backend.
+        print("\n--- DummyVoiceOutputBackend ---")
+        dummy_backend = DummyVoiceOutputBackend()
+        voice_context_dummy = VoiceContext(reference_audio_path=ref_audio, ready=True)
+        dummy_path = dummy_backend.synthesize("テスト", voice_context_dummy)
+        assert os.path.isfile(dummy_path), f"Dummy output missing: {dummy_path}"
+        data, sr = sf.read(dummy_path)
+        print(f"  Output: {dummy_path}")
+        print(f"  Duration: {len(data)/sr:.2f}s, SR: {sr}")
+
+        # Test OpenVoice backend.
+        print("\n--- OpenVoiceOutputBackend ---")
+        try:
+            ow_backend = OpenVoiceOutputBackend()
+            voice_context = VoiceContext(reference_audio_path=ref_audio, ready=True)
+            ow_path = ow_backend.synthesize("テスト", voice_context)
+            assert os.path.isfile(ow_path), f"OpenVoice output missing: {ow_path}"
+            data2, sr2 = sf.read(ow_path)
+            print(f"  Output: {ow_path}")
+            print(f"  Duration: {len(data2)/sr2:.2f}s, SR: {sr2}")
+        except RuntimeError as e:
+            print(f"  SKIPPED (OpenVoice not ready): {e}")
+            return 1
+
+        print("\n=== PASS ===")
+        return 0
+    finally:
+        os.unlink(ref_audio)
+        for p in [dummy_path, ow_path]:
+            if p and os.path.isfile(p):
+                os.unlink(p)
 
 
 if __name__ == "__main__":

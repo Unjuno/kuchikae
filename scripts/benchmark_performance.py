@@ -21,9 +21,6 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-# Add parent directory to path for kuchikae imports
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 import numpy as np
 import soundfile as sf
 
@@ -67,19 +64,23 @@ def benchmark_stt(iterations: int = 3) -> BenchmarkResult | None:
     backend = FasterWhisperSTTBackend(model_size="tiny")
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         audio_path = f.name
-    create_test_audio(audio_path, duration_sec=3.0)
+    try:
+        create_test_audio(audio_path, duration_sec=3.0)
 
-    # Warmup
-    backend.transcribe(audio_path)
-
-    latencies = []
-    for _ in range(iterations):
-        t0 = time.perf_counter()
+        # Warmup
         backend.transcribe(audio_path)
-        latencies.append(time.perf_counter() - t0)
 
-    os.unlink(audio_path)
-    audio_dur = 3.0
+        latencies = []
+        for _ in range(iterations):
+            t0 = time.perf_counter()
+            backend.transcribe(audio_path)
+            latencies.append(time.perf_counter() - t0)
+
+        os.unlink(audio_path)
+        audio_dur = 3.0
+    except Exception:
+        os.unlink(audio_path)
+        raise
     return BenchmarkResult(
         component="STT (FasterWhisper)",
         iterations=iterations,
@@ -169,18 +170,22 @@ def benchmark_pipeline(iterations: int = 3) -> BenchmarkResult | None:
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         audio_path = f.name
-    create_test_audio(audio_path, duration_sec=2.0)
+    try:
+        create_test_audio(audio_path, duration_sec=2.0)
 
-    latencies = []
-    for _ in range(iterations):
-        t0 = time.perf_counter()
-        result = pipeline.process(audio_path, prompt)
-        latencies.append(time.perf_counter() - t0)
-        if os.path.exists(result.output_audio_path):
-            os.unlink(result.output_audio_path)
+        latencies = []
+        for _ in range(iterations):
+            t0 = time.perf_counter()
+            result = pipeline.process(audio_path, prompt)
+            latencies.append(time.perf_counter() - t0)
+            if os.path.exists(result.output_audio_path):
+                os.unlink(result.output_audio_path)
 
-    os.unlink(audio_path)
-    audio_dur = 2.0
+        os.unlink(audio_path)
+        audio_dur = 2.0
+    except Exception:
+        os.unlink(audio_path)
+        raise
     return BenchmarkResult(
         component="Pipeline (Full)",
         iterations=iterations,

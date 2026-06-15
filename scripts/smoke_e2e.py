@@ -27,34 +27,36 @@ def main() -> int:
     # Create test audio.
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         audio_path = f.name
-    samples = np.random.randn(4 * 44_100).astype(np.float32)
-    sf.write(audio_path, samples, 44_100)
-
-    # Create pipeline with real backends.
-    os.environ.setdefault("OPENVOICE_READY", "1")
     try:
-        pipe = create_pipeline({"text_transform_backend": "rule"})
-    except RuntimeError as e:
-        print(f"SKIPPED (backends not ready): {e}")
-        return 1
+        samples = np.random.randn(4 * 44_100).astype(np.float32)
+        sf.write(audio_path, samples, 44_100)
 
-    # Run pipeline.
-    result = pipe.process(
-        audio_path=audio_path,
-        text_transform_prompt=TextTransformPrompt(instruction="確認"),
-    )
+        # Create pipeline with real backends.
+        os.environ.setdefault("OPENVOICE_READY", "1")
+        try:
+            pipe = create_pipeline({"text_transform_backend": "rule"})
+        except RuntimeError as e:
+            print(f"SKIPPED (backends not ready): {e}")
+            return 1
 
-    print(f"\n--- PipelineResult ---")
-    print(f"  Output audio: {result.output_audio_path} ({os.path.getsize(result.output_audio_path)} bytes)")
+        # Run pipeline.
+        result = pipe.process(
+            audio_path=audio_path,
+            text_transform_prompt=TextTransformPrompt(instruction="確認"),
+        )
 
-    # Verify output.
-    assert os.path.isfile(result.output_audio_path), "Output audio missing!"
-    data, sr = sf.read(result.output_audio_path)
-    print(f"\n  Output duration: {len(data)/sr:.2f}s at {sr} Hz")
+        print(f"\n--- PipelineResult ---")
+        print(f"  Output audio: {result.output_audio_path} ({os.path.getsize(result.output_audio_path)} bytes)")
 
-    os.unlink(audio_path)
-    print("\n=== PASS ===")
-    return 0
+        # Verify output.
+        assert os.path.isfile(result.output_audio_path), "Output audio missing!"
+        data, sr = sf.read(result.output_audio_path)
+        print(f"\n  Output duration: {len(data)/sr:.2f}s at {sr} Hz")
+
+        print("\n=== PASS ===")
+        return 0
+    finally:
+        os.unlink(audio_path)
 
 
 if __name__ == "__main__":

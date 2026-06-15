@@ -21,9 +21,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-# Add the project root to the path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from kuchikae.ui.templates import TEMPLATES
 
 

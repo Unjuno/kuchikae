@@ -29,28 +29,30 @@ def main() -> int:
 
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         audio_path = f.name
-    create_test_audio(audio_path)
-    print(f"  Audio: {audio_path}")
-
-    # Dummy.
-    dummy = DummySTTBackend()
-    result1 = dummy.transcribe(audio_path)
-    print(f"\n--- DummySTTBackend ---")
-    print(f"  Result: {result1}")
-
-    # Faster-whisper (if available).
     try:
-        fw = FasterWhisperSTTBackend()
-        result2 = fw.transcribe(audio_path)
-        print(f"\n--- FasterWhisperSTTBackend ---")
-        print(f"  Result: {result2}")
-    except RuntimeError as e:
-        print(f"\n--- FasterWhisperSTTBackend SKIPPED ---")
-        print(f"  Reason: {e}")
+        create_test_audio(audio_path)
+        print(f"  Audio: {audio_path}")
 
-    os.unlink(audio_path)
-    print("\n=== PASS ===")
-    return 0
+        # Dummy.
+        dummy = DummySTTBackend()
+        result1 = dummy.transcribe(audio_path)
+        print(f"\n--- DummySTTBackend ---")
+        print(f"  Result: {result1}")
+
+        # Faster-whisper (if available).
+        try:
+            fw = FasterWhisperSTTBackend()
+            result2 = fw.transcribe(audio_path)
+            print(f"\n--- FasterWhisperSTTBackend ---")
+            print(f"  Result: {result2}")
+        except RuntimeError as e:
+            print(f"\n--- FasterWhisperSTTBackend SKIPPED ---")
+            print(f"  Reason: {e}")
+
+        print("\n=== PASS ===")
+        return 0
+    finally:
+        os.unlink(audio_path)
 
 
 if __name__ == "__main__":
