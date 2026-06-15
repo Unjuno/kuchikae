@@ -74,3 +74,23 @@ Heavy deps (torch, faster-whisper, irodori-tts) are optional at import time.
 
 ## Versioning
 `0.1.x` — prototype phase. Breaking changes expected.
+
+## Release workflow
+```bash
+# Version bump + license + changelog
+# Edit pyproject.toml version, add license field
+
+# Final verification
+uv run ruff check kuchikae
+uv run mypy kuchikae
+uv run python -m compileall kuchikae
+uv run pip-audit --strict
+uv run pytest -q -m "not slow and not e2e"
+
+# Tag and release
+git tag v0.1.x
+git push origin v0.1.x
+gh release create v0.1.x --notes-file /tmp/release_notes.md
+
+# GitHub auto-generates source archives (.zip, .tar.gz)
+```
