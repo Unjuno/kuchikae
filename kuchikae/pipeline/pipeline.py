@@ -53,6 +53,7 @@ from kuchikae.domain.types import (
     PipelineResult,
     StreamingLatencyReport,
     TextTransformPrompt,
+    VoiceContext,
     VoiceOutputPrompt,
 )
 from kuchikae.domain.voice_output import (
@@ -99,6 +100,8 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     except ImportError:
         pass
 
+    stt_config: FasterWhisperConfig | None = None
+    inner: STTBackend
     if stt_type == "faster_whisper" and has_faster_whisper:
         from kuchikae.backends.stt import FasterWhisperSTTBackend
         stt_config = FasterWhisperConfig(
@@ -165,7 +168,6 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         )
 
     stt: STTBackend
-    stt_config: FasterWhisperConfig | None = None
     if use_segmented:
         segmenter: AudioSegmenter = FixedWindowSegmenter(chunk_sec=30.0, overlap_sec=2.0)
         stt = SegmentedSTTBackend(inner=inner, segmenter=segmenter)
@@ -208,6 +210,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
         pass
 
     audio_emotion_detector_type = config.get("audio_emotion_detector", "auto")
+    audio_emotion_detector: AudioEmotionDetector
     if audio_emotion_detector_type == "transformers_audio_emotion":
         audio_emotion_detector = TransformersAudioEmotionDetector(
             model_id=config.get("audio_emotion_model_id"),
@@ -230,6 +233,7 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     else:
         audio_emotion_detector = DummyAudioEmotionDetector()
 
+    vo: VoiceOutputBackend
     if voice_output_type == "irodori" and _irodori_ready:
         from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
         vo = IrodoriTTSVoiceOutputBackend()
@@ -474,7 +478,7 @@ class KuchikaePipeline:
             except Exception as e:
                 logger.debug("voice warmup skipped: %s", e)
 
-        if hasattr(self.text_transform_backend, "model"):
+        if hasattr(self.text_transform_backend, "model") and hasattr(self.text_transform_backend, "_base_url"):
             try:
                 logger.info("warming up LLM...")
                 import httpx
@@ -533,7 +537,7 @@ class KuchikaePipeline:
             return accumulated
         return self._step_stt(audio_path, audio_key)
 
-    def _voice_context(self, audio_path: str, audio_key: AudioKey) -> object:
+    def _voice_context(self, audio_path: str, audio_key: AudioKey) -> VoiceContext:
         if self.disable_processing_cache:
             return self._voice_context_extractor.extract(audio_path)
         cached = self.processing_cache.get_voice_context(audio_key)

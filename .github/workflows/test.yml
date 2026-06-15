@@ -61,6 +61,12 @@ jobs:
       - name: Compile all modules
         run: uv run python -m compileall kuchikae
 
+      - name: Lint (ruff)
+        run: uv run ruff check kuchikae
+
+      - name: Security audit (pip-audit)
+        run: uv run pip-audit --strict
+
       - name: Check CLI help
         run: uv run kuchikae --help
 

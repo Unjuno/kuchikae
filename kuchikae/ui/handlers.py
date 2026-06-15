@@ -331,14 +331,14 @@ def _experimental_warning_html(template_name: str = "") -> str:
     )
 
 
-def on_template_change(template_name: str) -> tuple[gr.update, str]:
+def on_template_change(template_name: str) -> tuple[dict, str]:
     if template_name == "カスタム":
         return gr.update(), _experimental_warning_html(template_name)
     text = TEMPLATES.get(template_name, TEMPLATES["自然に"])
     return gr.update(value=text), _experimental_warning_html(template_name)
 
 
-def on_template_category_change(category: str) -> gr.update:
+def on_template_category_change(category: str) -> dict:
     choices = TEMPLATE_CATEGORIES.get(category, TEMPLATE_CATEGORIES["標準"])
     first = choices[0] if choices else "自然に"
     return gr.update(choices=choices, value=first)

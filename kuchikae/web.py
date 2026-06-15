@@ -10,7 +10,7 @@ from typing import Any
 from kuchikae.domain.types import TextTransformPrompt, VoiceOutputPrompt
 from kuchikae.pipeline.audio_validation import validate_audio
 from kuchikae.pipeline import create_pipeline
-from kuchikae.ui import CSS, create_app
+from kuchikae.ui import CSS, THEME, create_app
 
 
 def _truthy(value: str | None) -> bool:
@@ -31,24 +31,24 @@ def _normalize_audio_path(audio_input: Any) -> str:
         raise ValueError("Audio required.")
     
     if isinstance(audio_input, str):
-        path = audio_input
+        path: str = audio_input
     elif isinstance(audio_input, dict):
-        path = (
+        path = str(
             audio_input.get("path")
             or audio_input.get("name")
             or audio_input.get("orig_name")
+            or ""
         )
     else:
-        path = (
+        path = str(
             getattr(audio_input, "path", None)
             or getattr(audio_input, "name", None)
             or getattr(audio_input, "orig_name", None)
+            or ""
         )
     
     if not path:
         raise ValueError("Audio required.")
-    
-    path = str(path)
     
     if os.path.splitext(path)[1].lower() not in {'.wav', '.mp3', '.m4a', '.flac'}:
         raise ValueError("Unsupported audio.")
@@ -155,7 +155,7 @@ def serve(
     )
     
     server_port = port or int(os.environ.get("GRADIO_SERVER_PORT", "7860"))
-    demo.launch(css=CSS, server_port=server_port)
+    demo.launch(css=CSS, server_port=server_port, theme=THEME)
 
 
 if __name__ == "__main__":

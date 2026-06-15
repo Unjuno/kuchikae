@@ -29,8 +29,8 @@ class TransformersWhisperJapaneseASRBackend(STTBackend):
         self._model_id = model_id or os.environ.get("TRANSFORMERS_WHISPER_STT_MODEL_ID", _DEFAULT_WHISPER_MODEL_ID)
         self._device = device or os.environ.get("TRANSFORMERS_WHISPER_STT_DEVICE", "cpu")
         self._torch_dtype = torch_dtype or os.environ.get("TRANSFORMERS_WHISPER_STT_TORCH_DTYPE", "float32")
-        self._processor = None
-        self._model = None
+        self._processor: Any = None
+        self._model: Any = None
         self._resolved_model_id: str | None = None
         self._resolved_device: str | None = None
         self._resolved_torch_dtype: str | None = None

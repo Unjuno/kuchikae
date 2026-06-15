@@ -29,7 +29,7 @@ class ReazonSpeechNemoASRBackend(STTBackend):
     ) -> None:
         self._model_id = model_id or os.environ.get("NEMO_STT_MODEL_ID", _DEFAULT_NEMO_MODEL_ID)
         self._device = device or os.environ.get("NEMO_STT_DEVICE", "cpu")
-        self._model = None
+        self._model: Any = None
         self._resolved_model_id: str | None = None
         self._resolved_device: str | None = None
         try:

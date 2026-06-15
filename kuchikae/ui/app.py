@@ -30,7 +30,7 @@ def _voice_analysis_pending_html() -> str:
     return '<span class="voice-analysis-label-inner">声の印象: 分析中...</span>'
 
 
-_THEME = (
+THEME = (
     gr.themes.Base(
         primary_hue=colors.purple,
         neutral_hue=colors.slate,
@@ -66,7 +66,7 @@ def create_app(
     default_voice_prompt: VoiceOutputPrompt | None = None,
     live_streaming: bool = False,
 ) -> gr.Blocks:
-    with gr.Blocks(title="Kuchikae", theme=_THEME) as demo:
+    with gr.Blocks(title="Kuchikae") as demo:
         with gr.Column(elem_classes="wrap"):
             gr.HTML('<div id="title">Kuchikae</div>')
             stt_preset = gr.Radio(

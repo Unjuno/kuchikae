@@ -50,7 +50,7 @@ class EnergyVAD:
 
         boundaries: list[tuple[float, float]] = []
         in_speech = False
-        speech_start = 0
+        speech_start = 0.0
         consecutive_silence = 0
 
         for i, speaking in enumerate(speech_frames):

@@ -94,7 +94,7 @@ def _resolve_emotion_key(emotion: str | None) -> str:
 def build_voice_output_prompt_from_analysis(
     emotion: str | None = None,
     voice_style: str = "auto",
-) -> VoiceOutputPrompt | None:
+) -> VoiceOutputPrompt:
     """Build VoiceOutputPrompt from audio emotion analysis and voice style selection.
 
     Priority:

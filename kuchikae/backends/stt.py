@@ -156,7 +156,7 @@ class StreamingFasterWhisperSTTBackend(FasterWhisperSTTBackend):
         total = len(data)
         
         model = self._load_model()
-        accumulated = []
+        accumulated: list[str] = []
         
         start = 0
         while start < total:

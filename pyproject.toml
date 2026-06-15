@@ -58,6 +58,9 @@ markers = [
 "benchmarks/*.py" = ["E402"]
 "tests/test_text_transform_eval_cases.py" = ["E402"]
 
+[tool.mypy]
+ignore_missing_imports = true
+
 [dependency-groups]
 dev = [
     "playwright",
