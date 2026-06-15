@@ -126,6 +126,30 @@ def validate_fixtures(cases: list[VoiceEvalCase]) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
+# Voice backend factory
+# ---------------------------------------------------------------------------
+
+
+def _build_voice_backend(backend: str) -> Any:
+    """Build a voice output backend by name.
+
+    Raises NotImplementedError for backends that are not yet implemented
+    in the eval harness.
+    """
+    if backend == "irodori":
+        from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
+        return IrodoriTTSVoiceOutputBackend()
+    elif backend == "openvoice":
+        from kuchikae.backends.voice_output import OpenVoiceOutputBackend
+        return OpenVoiceOutputBackend()
+    else:
+        raise NotImplementedError(
+            f"Unsupported eval backend: {backend!r}. "
+            f"Supported: irodori, openvoice"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Duration helper (sample-rate aware)
 # ---------------------------------------------------------------------------
 
@@ -268,9 +292,8 @@ def process_case(
 
             # ── Direct TTS call ──
             from kuchikae.domain.types import VoiceContext, VoiceOutputPrompt
-            from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
 
-            _vb = voice_backend if voice_backend is not None else IrodoriTTSVoiceOutputBackend()
+            _vb = voice_backend if voice_backend is not None else _build_voice_backend(backend)
             voice_context = VoiceContext(
                 reference_audio_path=str(fixture_path),
                 ready=True,
@@ -293,9 +316,15 @@ def process_case(
                 f"{duration_ratio:.2f}" if duration_ratio else "N/A",
             )
 
+            failure_reason = ""
             verdict: Verdict = "pass"
-            if duration_ratio is not None and (duration_ratio < 0.3 or duration_ratio > 4.0):
-                verdict = "warn"
+            if duration_ratio is not None:
+                if duration_ratio > 4.0:
+                    verdict = "warn"
+                    failure_reason = f"duration_ratio too high: {duration_ratio:.2f}"
+                elif duration_ratio < 0.3:
+                    verdict = "warn"
+                    failure_reason = f"duration_ratio too low: {duration_ratio:.2f}"
 
             return VoiceEvalResult(
                 case_id=case.id,
@@ -308,6 +337,7 @@ def process_case(
                 mode=mode,
                 duration_ratio=duration_ratio,
                 verdict=verdict,
+                failure_reason=failure_reason,
             )
 
         else:
@@ -370,11 +400,15 @@ def process_case(
                 warning,
             )
 
-            verdict = "warn" if "[DUMMY_STT_OUTPUT]" in (transformed_text or "") else "pass"
-            if duration_ratio is not None and (duration_ratio < 0.3 or duration_ratio > 4.0):
-                verdict = "warn"
-
             failure_reason = warning.strip() if warning else ""
+            verdict = "warn" if "[DUMMY_STT_OUTPUT]" in (transformed_text or "") else "pass"
+            if duration_ratio is not None:
+                if duration_ratio > 4.0:
+                    verdict = "warn"
+                    failure_reason = (failure_reason + "; " if failure_reason else "") + f"duration_ratio too high: {duration_ratio:.2f}"
+                elif duration_ratio < 0.3:
+                    verdict = "warn"
+                    failure_reason = (failure_reason + "; " if failure_reason else "") + f"duration_ratio too low: {duration_ratio:.2f}"
             return VoiceEvalResult(
                 case_id=case.id,
                 input_audio=case.input_audio,
@@ -452,8 +486,7 @@ def main() -> None:
     pipeline = None
     shared_voice_backend = None
     if not args.dry_run:
-        from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
-        shared_voice_backend = IrodoriTTSVoiceOutputBackend()
+        shared_voice_backend = _build_voice_backend(args.backend)
         if args.mode == "pipeline":
             from kuchikae.pipeline import KuchikaePipeline
             pipeline = KuchikaePipeline(

@@ -43,6 +43,7 @@ def compute_summary(results: list[dict]) -> dict:
     overall = SummaryStats(total=len(results))
     by_backend: dict[str, SummaryStats] = defaultdict(SummaryStats)
     by_template: dict[str, SummaryStats] = defaultdict(SummaryStats)
+    by_mode: dict[str, SummaryStats] = defaultdict(SummaryStats)
     speaker_similarities: list[float] = []
     duration_ratios: list[float] = []
     worst_cases: list[dict] = []
@@ -51,27 +52,33 @@ def compute_summary(results: list[dict]) -> dict:
         verdict = r.get("verdict", "skip")
         backend = r.get("voice_backend", "unknown")
         template = r.get("template", "unknown")
+        mode = r.get("mode", "unknown")
 
         by_backend[backend].total += 1
         by_template[template].total += 1
+        by_mode[mode].total += 1
 
         if verdict == "pass":
             overall.passed += 1
             by_backend[backend].passed += 1
             by_template[template].passed += 1
+            by_mode[mode].passed += 1
         elif verdict == "warn":
             overall.warned += 1
             by_backend[backend].warned += 1
             by_template[template].warned += 1
+            by_mode[mode].warned += 1
         elif verdict == "fail":
             overall.failed += 1
             by_backend[backend].failed += 1
             by_template[template].failed += 1
+            by_mode[mode].failed += 1
             worst_cases.append(r)
         else:
             overall.skipped += 1
             by_backend[backend].skipped += 1
             by_template[template].skipped += 1
+            by_mode[mode].skipped += 1
 
         ss = r.get("speaker_similarity")
         if ss is not None:
@@ -115,6 +122,16 @@ def compute_summary(results: list[dict]) -> dict:
             }
             for t, s in sorted(by_template.items())
         },
+        "by_mode": {
+            m: {
+                "total": s.total,
+                "passed": s.passed,
+                "warned": s.warned,
+                "failed": s.failed,
+                "skipped": s.skipped,
+            }
+            for m, s in sorted(by_mode.items())
+        },
         "average_speaker_similarity": avg_ss,
         "average_duration_ratio": avg_dr,
         "worst_cases": [
@@ -145,10 +162,16 @@ def format_text(summary: dict) -> str:
         lines.append(f"Avg duration ratio:     {summary['average_duration_ratio']:.3f}")
     lines.append("")
 
-    if summary["by_backend"]:
+    if summary.get("by_backend"):
         lines.append("--- by backend ---")
         for backend, s in summary["by_backend"].items():
             lines.append(f"  {backend}: {s['total']} total, {s['passed']} pass, {s['failed']} fail, {s['skipped']} skip")
+        lines.append("")
+
+    if summary.get("by_mode"):
+        lines.append("--- by mode ---")
+        for mode, s in summary["by_mode"].items():
+            lines.append(f"  {mode}: {s['total']} total, {s['passed']} pass, {s['failed']} fail, {s['skipped']} skip")
         lines.append("")
 
     if summary["worst_cases"]:
@@ -179,13 +202,22 @@ def format_markdown(summary: dict) -> str:
         lines.append(f"| Avg duration ratio | {summary['average_duration_ratio']:.3f} |")
     lines.append("")
 
-    if summary["by_backend"]:
+    if summary.get("by_backend"):
         lines.append("### By backend")
         lines.append("")
         lines.append("| Backend | Total | Pass | Fail | Skip |")
         lines.append("|---------|-------|------|------|------|")
         for backend, s in summary["by_backend"].items():
             lines.append(f"| {backend} | {s['total']} | {s['passed']} | {s['failed']} | {s['skipped']} |")
+        lines.append("")
+
+    if summary.get("by_mode"):
+        lines.append("### By mode")
+        lines.append("")
+        lines.append("| Mode | Total | Pass | Fail | Skip |")
+        lines.append("|------|-------|------|------|------|")
+        for mode, s in summary["by_mode"].items():
+            lines.append(f"| {mode} | {s['total']} | {s['passed']} | {s['failed']} | {s['skipped']} |")
         lines.append("")
 
     if summary["worst_cases"]:
