@@ -1057,7 +1057,6 @@ nemo-stt = [
 real = [
     { name = "faster-whisper", marker = "sys_platform == 'darwin'" },
     { name = "irodori-tts", marker = "sys_platform == 'darwin'" },
-    { name = "silentcipher", marker = "sys_platform == 'darwin'" },
     { name = "torch", marker = "sys_platform == 'darwin'" },
     { name = "torchaudio", marker = "sys_platform == 'darwin'" },
     { name = "transformers", marker = "sys_platform == 'darwin'" },
@@ -1071,7 +1070,6 @@ test = [
 ]
 tts = [
     { name = "irodori-tts", marker = "sys_platform == 'darwin'" },
-    { name = "silentcipher", marker = "sys_platform == 'darwin'" },
     { name = "torch", marker = "sys_platform == 'darwin'" },
     { name = "torchaudio", marker = "sys_platform == 'darwin'" },
 ]
@@ -1094,7 +1092,6 @@ requires-dist = [
     { name = "numpy" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pyyaml" },
-    { name = "silentcipher", marker = "extra == 'tts'", git = "https://github.com/SesameAILabs/silentcipher.git?rev=d46d7d0893a583d8968ab3a6626e2289faec9152" },
     { name = "soundfile" },
     { name = "torch", marker = "extra == 'tts'", specifier = ">=2.12.0" },
     { name = "torchaudio", marker = "extra == 'tts'", specifier = ">=2.11.0" },

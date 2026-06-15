@@ -237,7 +237,7 @@ def check_models(category: str | None = None) -> list[ModelStatus]:
 # Setup (download)
 # ---------------------------------------------------------------------------
 
-def _setup_whisper_model(spec: ModelSpec, repair: bool = False) -> ModelStatus:
+def _setup_whisper_model(spec: ModelSpec) -> ModelStatus:
     model_id = os.environ.get(spec.env_var or "", spec.default_id)
     try:
         from faster_whisper import WhisperModel  # type: ignore
@@ -318,7 +318,7 @@ def _setup_hf_repo_model(spec: ModelSpec, repair: bool = False) -> ModelStatus:
 
 def setup_model(spec: ModelSpec, repair: bool = False) -> ModelStatus:
     if spec.model_type == "whisper":
-        return _setup_whisper_model(spec, repair=repair)
+        return _setup_whisper_model(spec)
     elif spec.model_type == "hf_file":
         return _setup_hf_file_model(spec, repair=repair)
     elif spec.model_type == "hf_repo":

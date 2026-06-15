@@ -326,6 +326,7 @@ class KuchikaePipeline:
         self.voice_style_timeout_sec = voice_style_timeout_sec
         self._last_voice_style = "auto"
         self._last_audio_emotion = "disabled"
+        self._last_audio_emotion_mood = "neutral"
         self.backend_config = backend_config or {}
         self._audio_cache = AudioCache()
         self._voice_context_extractor = VoiceContextExtractor()
@@ -849,7 +850,7 @@ class KuchikaePipeline:
                 "voice_context",
                 backend=type(self._voice_context_extractor).__name__,
             )
-            voice_context = self._voice_context_extractor.extract(audio_path)
+            voice_context = self._voice_context(audio_path, audio_key)
             self._emit(
                 "voice_context.done",
                 "Voice context extraction finished.",

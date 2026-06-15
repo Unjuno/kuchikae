@@ -25,7 +25,6 @@ tts = [
     "torch>=2.12.0",
     "torchaudio>=2.11.0",
     "irodori-tts",
-    "silentcipher",
 ]
 real = [
     "kuchikae[stt,tts]",
@@ -44,7 +43,6 @@ environments = ["sys_platform == 'darwin'"]
 [tool.uv.sources]
 kuchikae = { workspace = true }
 irodori-tts = { git = "https://github.com/Aratako/Irodori-TTS.git" }
-silentcipher = { git = "https://github.com/SesameAILabs/silentcipher.git", rev = "d46d7d0893a583d8968ab3a6626e2289faec9152" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

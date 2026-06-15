@@ -55,7 +55,7 @@
           echo ""
           echo "  Run: uv sync"
           echo "  Run: uv run pytest"
-          echo "  Run: uv run python app.py"
+          echo "  Run: uv run kuchikae serve"
           echo "========================"
         '';
       };

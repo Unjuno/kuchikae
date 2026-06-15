@@ -84,7 +84,7 @@ def test_setup_model_delegates_to_type_handler(mock_setup) -> None:
     )
     result = setup_model(spec)
     assert result.status == "ok"
-    mock_setup.assert_called_once_with(spec, repair=False)
+    mock_setup.assert_called_once_with(spec)
 
 
 @patch("kuchikae.models._setup_whisper_model")
@@ -97,7 +97,7 @@ def test_setup_model_repair_flag(mock_setup) -> None:
         default_id="small",
     )
     setup_model(spec, repair=True)
-    mock_setup.assert_called_once_with(spec, repair=True)
+    mock_setup.assert_called_once_with(spec)
 
 
 @patch("kuchikae.models.setup_model")
