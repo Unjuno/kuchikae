@@ -268,35 +268,81 @@ class TestDurationRatio:
         ratio = _compute_duration_ratio("/nonexistent/input.wav", "/nonexistent/output.wav")
         assert ratio is None
 
-    def test_duration_ratio_warn_high_has_reason(self, tmp_path):
-        """Warn verdict for duration_ratio > 4.0 should include failure_reason."""
+    def test_duration_ratio_warn_high_via_process_case(self, tmp_path):
+        """process_case with short input / long output → verdict=warn + failure_reason."""
+        from unittest.mock import patch
         import numpy as np
         import soundfile as sf
-        from evals.run_voice_eval import _compute_duration_ratio
+        from evals.run_voice_eval import (
+            process_case, VoiceEvalCase,
+        )
 
-        in_sr, in_dur = 44100, 2.0
-        sf.write(str(tmp_path / "in.wav"), np.zeros(int(in_dur * in_sr)), in_sr)
-        out_sr, out_dur = 8000, 12.0
-        sf.write(str(tmp_path / "out.wav"), np.zeros(int(out_dur * out_sr)), out_sr)
+        in_path = tmp_path / "fixture.wav"
+        out_path = tmp_path / "output_long.wav"
+        sf.write(str(in_path), np.zeros(int(0.1 * 16000)), 16000)
+        sf.write(str(out_path), np.zeros(int(1.0 * 8000)), 8000)
 
-        ratio = _compute_duration_ratio(str(tmp_path / "in.wav"), str(tmp_path / "out.wav"))
-        assert ratio is not None
-        assert ratio > 4.0, f"Expected ratio > 4.0, got {ratio}"
+        class FakeVoiceBackend:
+            def synthesize(self, text, voice_context, prompt=None):
+                return str(out_path)
 
-    def test_duration_ratio_warn_low_has_reason(self, tmp_path):
-        """Warn verdict for duration_ratio < 0.3 should include failure_reason."""
+        case = VoiceEvalCase(
+            id="warn-high",
+            input_audio="fixture.wav",
+            input_text="test",
+            template=u"自然に",
+        )
+
+        import evals.run_voice_eval as m
+        with (
+            patch.object(m, "FIXTURES_DIR", tmp_path),
+            patch.object(m, "_apply_text_transform", return_value="transformed"),
+        ):
+            result = process_case(case, pipeline=None, backend="irodori",
+                                 mode="tts-only", voice_backend=FakeVoiceBackend())
+        assert result.verdict == "warn", f"Expected warn, got {result.verdict}"
+        assert "duration_ratio too high" in result.failure_reason, (
+            f"Expected 'duration_ratio too high' in failure_reason, "
+            f"got {result.failure_reason!r}"
+        )
+
+    def test_duration_ratio_warn_low_via_process_case(self, tmp_path):
+        """process_case with long input / short output → verdict=warn + failure_reason."""
+        from unittest.mock import patch
         import numpy as np
         import soundfile as sf
-        from evals.run_voice_eval import _compute_duration_ratio
+        from evals.run_voice_eval import (
+            process_case, VoiceEvalCase,
+        )
 
-        in_sr, in_dur = 8000, 10.0
-        sf.write(str(tmp_path / "in.wav"), np.zeros(int(in_dur * in_sr)), in_sr)
-        out_sr, out_dur = 44100, 1.0
-        sf.write(str(tmp_path / "out.wav"), np.zeros(int(out_dur * out_sr)), out_sr)
+        in_path = tmp_path / "fixture.wav"
+        out_path = tmp_path / "output_short.wav"
+        sf.write(str(in_path), np.zeros(int(10.0 * 8000)), 8000)
+        sf.write(str(out_path), np.zeros(int(0.5 * 44100)), 44100)
 
-        ratio = _compute_duration_ratio(str(tmp_path / "in.wav"), str(tmp_path / "out.wav"))
-        assert ratio is not None
-        assert ratio < 0.3, f"Expected ratio < 0.3, got {ratio}"
+        class FakeVoiceBackend:
+            def synthesize(self, text, voice_context, prompt=None):
+                return str(out_path)
+
+        case = VoiceEvalCase(
+            id="warn-low",
+            input_audio="fixture.wav",
+            input_text="test",
+            template=u"自然に",
+        )
+
+        import evals.run_voice_eval as m
+        with (
+            patch.object(m, "FIXTURES_DIR", tmp_path),
+            patch.object(m, "_apply_text_transform", return_value="transformed"),
+        ):
+            result = process_case(case, pipeline=None, backend="irodori",
+                                 mode="tts-only", voice_backend=FakeVoiceBackend())
+        assert result.verdict == "warn", f"Expected warn, got {result.verdict}"
+        assert "duration_ratio too low" in result.failure_reason, (
+            f"Expected 'duration_ratio too low' in failure_reason, "
+            f"got {result.failure_reason!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
