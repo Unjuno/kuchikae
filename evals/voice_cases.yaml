@@ -1,0 +1,103 @@
+# Kuchikae voice/audio evaluation cases
+# Schema:
+#   input_audio: path to input WAV fixture (relative to fixtures/voice/)
+#   input_text: transcribed text (ground truth)
+#   template: text transform template name
+#   expected:
+#     emotion: expected emotion label (happy/anger/sad/calm/neutral)
+#     voice_style: expected style preset (auto/natural/calm/bright/slow_clear)
+#     should_preserve: list of acoustic characteristics to preserve
+#     should_not_preserve: list of artifacts/behaviors to avoid
+
+cases:
+  # ──────────────────────────────────────────────
+  # 1. neutral_speech — 平坦な発話
+  # ──────────────────────────────────────────────
+  - id: ns-001
+    input_audio: neutral_short.wav
+    input_text: "明日の会議は14時からです。"
+    template: 自然に
+    expected:
+      emotion: neutral
+      voice_style: auto
+      should_preserve: ["speaking_rate", "pitch_range"]
+      should_not_preserve: ["robot_voice", "unstable_volume"]
+
+  - id: ns-002
+    input_audio: neutral_long.wav
+    input_text: "来週の月曜日に3000円の交通費を申請してください。大阪駅で14時30分に待ち合わせです。"
+    template: 自然に
+    expected:
+      emotion: neutral
+      voice_style: auto
+      should_preserve: ["speaking_rate", "pitch_range"]
+      should_not_preserve: ["unstable_volume", "stutter"]
+
+  # ──────────────────────────────────────────────
+  # 2. emotional_speech — 感情を込めた発話
+  # ──────────────────────────────────────────────
+  - id: es-001
+    input_audio: happy_greeting.wav
+    input_text: "こんにちは！今日は本当にいい天気ですね。"
+    template: 自然に
+    expected:
+      emotion: happy
+      voice_style: auto
+      should_preserve: ["rising_intonation", "upbeat_tempo"]
+      should_not_preserve: ["monotone", "flat_emotion"]
+
+  - id: es-002
+    input_audio: calm_instruction.wav
+    input_text: "ゆっくりで大丈夫ですよ。間違えても気にしないでください。"
+    template: 自然に
+    expected:
+      emotion: calm
+      voice_style: auto
+      should_preserve: ["low_pitch_variance", "slow_tempo"]
+      should_not_preserve: ["robotic", "rushed_delivery"]
+
+  # ──────────────────────────────────────────────
+  # 3. style_override — preset 指定
+  # ──────────────────────────────────────────────
+  - id: so-001
+    input_audio: neutral_short.wav
+    input_text: "明日の会議は14時からです。"
+    template: 親しみやすく
+    expected:
+      emotion: neutral
+      voice_style: bright
+      should_preserve: ["speaking_rate"]
+      should_not_preserve: ["cold_tone", "monotone"]
+
+  - id: so-002
+    input_audio: neutral_long.wav
+    input_text: "来週の月曜日に3000円の交通費を申請してください。大阪駅で14時30分に待ち合わせです。"
+    template: 丁寧に
+    expected:
+      emotion: neutral
+      voice_style: calm
+      should_preserve: ["factual_content"]
+      should_not_preserve: ["rushed_delivery"]
+
+  # ──────────────────────────────────────────────
+  # 4. short_utterance — 短い発話
+  # ──────────────────────────────────────────────
+  - id: su-001
+    input_audio: short_yes.wav
+    input_text: "はい。"
+    template: 自然に
+    expected:
+      emotion: neutral
+      voice_style: auto
+      should_preserve: ["pitch"]
+      should_not_preserve: ["distortion", "echo"]
+
+  - id: su-002
+    input_audio: short_no.wav
+    input_text: "いいえ、違います。"
+    template: 自然に
+    expected:
+      emotion: neutral
+      voice_style: auto
+      should_preserve: ["pitch", "duration"]
+      should_not_preserve: ["glitch"]
