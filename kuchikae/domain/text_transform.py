@@ -15,7 +15,7 @@ from kuchikae.domain.types import TextTransformPrompt, TransformUpdate
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_OLLAMA_TEXT_MODEL = "qwen2.5:7b-instruct"
+DEFAULT_OLLAMA_TEXT_MODEL = "gemma3:1b-it-qat"
 
 PROMPT_FILES = {
     "polite": "text_transform_polite.txt",

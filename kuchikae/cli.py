@@ -54,6 +54,7 @@ Options:
   --real          Use real backends (requires models)
   --streaming     Enable streaming STT with --real
   --port PORT     Server port (default: 7860)
+  --text-model    Text transform model (default: gemma3:1b-it-qat)
 
 Setup:
   setup-models               Download all required models
@@ -73,7 +74,8 @@ Examples:
   kuchikae setup-models --all         # Download all models
   kuchikae doctor --fix               # Check and repair models
   kuchikae serve --real               # Use real STT/TTS backends
-  kuchikae serve --port 8080          # Use custom port""")
+  kuchikae serve --port 8080          # Use custom port
+  kuchikae serve --text-model qwen2.5:7b-instruct  # Use specific model""")
 
     print(f"\nWeb UI will be available at http://127.0.0.1:{port}")
 
@@ -84,6 +86,7 @@ def cmd_serve(args: list[str]) -> None:
     streaming = "--streaming" in args
 
     port = None
+    text_model = None
     for i, arg in enumerate(args):
         if arg == "--port" and i + 1 < len(args):
             try:
@@ -91,10 +94,16 @@ def cmd_serve(args: list[str]) -> None:
             except ValueError:
                 print(f"Invalid port: {args[i + 1]}")
                 sys.exit(1)
+        if arg == "--text-model" and i + 1 < len(args):
+            text_model = args[i + 1]
 
     if real and dummy:
         print("Cannot use both --real and --dummy.")
         sys.exit(1)
+
+    # Set text model environment variable if specified
+    if text_model:
+        os.environ["KUCHIKAE_TEXT_MODEL"] = text_model
 
     from kuchikae.web import serve
     serve(dummy=dummy, real=real, streaming=streaming, port=port)

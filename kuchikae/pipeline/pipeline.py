@@ -6,7 +6,7 @@ import os
 import time
 from dataclasses import asdict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-from typing import Generator
+from typing import Any, Generator
 
 from kuchikae.domain.audio import AudioSegmenter, FixedWindowSegmenter
 from kuchikae.domain.audio_cache import AudioCache, VoiceContextExtractor
@@ -62,6 +62,7 @@ from kuchikae.domain.voice_output import (
 )
 from kuchikae.logging import setup_logger
 from kuchikae.pipeline.audio_validation import validate_audio
+from kuchikae.pipeline.config import PipelineConfig
 
 logger = setup_logger("kuchikae.pipeline")
 
@@ -290,6 +291,115 @@ def create_pipeline(backend_config: dict | None = None) -> KuchikaePipeline:
     )
 
 
+def create_pipeline_from_config(config: PipelineConfig) -> KuchikaePipeline:
+    """Create pipeline from a PipelineConfig object.
+
+    This is a cleaner alternative to create_pipeline that uses a typed config.
+    """
+    from kuchikae.domain.stt import resolve_stt_preset
+
+    allow_dummy = config.allow_dummy_backends
+
+    # Resolve STT
+    stt_preset = resolve_stt_preset(config.stt.preset)
+    stt_config_data = FasterWhisperConfig(
+        model_size=config.stt.model_size or stt_preset.model_size,
+        device=config.stt.device or stt_preset.device,
+        compute_type=config.stt.compute_type or stt_preset.compute_type,
+        language=config.stt.language or stt_preset.language,
+        beam_size=config.stt.beam_size if config.stt.beam_size is not None else stt_preset.beam_size,
+        vad_filter=config.stt.vad_filter if config.stt.vad_filter is not None else stt_preset.vad_filter,
+        temperature=config.stt.temperature if config.stt.temperature is not None else stt_preset.temperature,
+        condition_on_previous_text=(
+            config.stt.condition_on_previous_text
+            if config.stt.condition_on_previous_text is not None
+            else stt_preset.condition_on_previous_text
+        ),
+    )
+
+    stt: STTBackend
+    if config.stt.backend == "faster_whisper":
+        from kuchikae.backends.stt import FasterWhisperSTTBackend
+        stt = FasterWhisperSTTBackend(config=stt_config_data)
+    elif config.stt.backend == "dummy":
+        stt = DummySTTBackend()
+    else:
+        raise ValueError(f"Unknown STT backend: {config.stt.backend}")
+
+    if config.stt.segmented:
+        segmenter: AudioSegmenter = FixedWindowSegmenter(chunk_sec=30.0, overlap_sec=2.0)
+        stt = SegmentedSTTBackend(inner=stt, segmenter=segmenter)
+
+    # Resolve text transform
+    text_backends = {
+        "ollama": OllamaTextTransformBackend,
+        "rule": RuleTextTransformBackend,
+        "prompted_rule": PromptedRuleTextTransformBackend,
+        "gpt_oss": GPTTextTransformBackend,
+    }
+    tt_class = text_backends.get(config.text_transform.backend, OllamaTextTransformBackend)
+    tt_kwargs: dict[str, Any] = {}
+    if config.text_transform.model:
+        tt_kwargs["model"] = config.text_transform.model
+    if tt_class in (OllamaTextTransformBackend, GPTTextTransformBackend):
+        tt_kwargs["strict"] = config.text_transform.strict
+
+    # Resolve voice output
+    vo: VoiceOutputBackend
+    if config.voice_output.backend == "irodori":
+        try:
+            from irodori_tts.inference_runtime import InferenceRuntime  # noqa: F401
+            from kuchikae.backends.voice_output import IrodoriTTSVoiceOutputBackend
+            vo = IrodoriTTSVoiceOutputBackend()
+        except ImportError:
+            if not allow_dummy:
+                raise RuntimeError("Irodori-TTS not available")
+            vo = DummyVoiceOutputBackend()
+    elif config.voice_output.backend == "dummy":
+        vo = DummyVoiceOutputBackend()
+    else:
+        raise ValueError(f"Unknown voice output backend: {config.voice_output.backend}")
+
+    # Resolve audio emotion
+    audio_emotion_detector: AudioEmotionDetector
+    if config.audio_emotion.detector == "transformers_audio_emotion":
+        audio_emotion_detector = TransformersAudioEmotionDetector(
+            model_id=config.audio_emotion.model_id,
+            strict=config.audio_emotion.strict,
+        )
+    elif config.audio_emotion.detector == "disabled":
+        audio_emotion_detector = DisabledAudioEmotionDetector()
+    elif config.audio_emotion.detector == "auto":
+        try:
+            detector = TransformersAudioEmotionDetector(
+                model_id=config.audio_emotion.model_id,
+                strict=config.audio_emotion.strict,
+            )
+            detector._load()
+            if detector.model_unavailable:
+                audio_emotion_detector = DummyAudioEmotionDetector()
+            else:
+                audio_emotion_detector = detector
+        except Exception:
+            audio_emotion_detector = DummyAudioEmotionDetector()
+    else:
+        audio_emotion_detector = DummyAudioEmotionDetector()
+
+    return KuchikaePipeline(
+        stt_backend=stt,
+        text_transform_backend=tt_class(**tt_kwargs),
+        voice_output_backend=vo,
+        disable_processing_cache=config.cache.disable_processing_cache,
+        stt_preset=config.stt.preset,
+        stt_config=stt_config_data,
+        audio_emotion_detector=audio_emotion_detector,
+        voice_style_timeout_sec=config.audio_emotion.timeout_sec,
+        stt_timeout_sec=config.stt.timeout_sec,
+        tts_timeout_sec=config.voice_output.timeout_sec,
+        backend_config=config.to_dict(),
+    )
+
+
 class KuchikaePipeline:
 
     def __init__(
@@ -508,6 +618,183 @@ class KuchikaePipeline:
             if "not found" in str(e):
                 raise FileNotFoundError(str(e)) from e
             raise
+
+    def _run_with_timeout(
+        self,
+        fn: Any,
+        args: tuple = (),
+        kwargs: dict | None = None,
+        timeout_sec: float = 0,
+        step_name: str = "",
+    ) -> Any:
+        """Run a function with optional timeout using ThreadPoolExecutor."""
+        if timeout_sec <= 0:
+            return fn(*args, **(kwargs or {}))
+
+        executor = ThreadPoolExecutor(max_workers=1)
+        try:
+            future = executor.submit(fn, *args, **(kwargs or {}))
+            return future.result(timeout=timeout_sec)
+        except FuturesTimeoutError:
+            raise TimeoutError(
+                f"{step_name} timed out after {timeout_sec}s"
+            )
+        finally:
+            executor.shutdown(wait=False)
+
+    def _run_stt(self, audio_path: str, audio_key: AudioKey) -> str:
+        """Execute STT step with caching and timeout."""
+        if not self.disable_processing_cache:
+            cached = self.processing_cache.get_stt(audio_key)
+            if cached is not None:
+                self._emit(
+                    "cache.stt_hit",
+                    "STT cache hit; backend was not executed.",
+                    "stt",
+                    cache="stt",
+                    data={"source_len": len(cached), "source_preview": cached[:80]},
+                )
+                return cached
+
+        self._emit(
+            "stt.start",
+            "STT started.",
+            "stt",
+            backend=type(self.stt_backend).__name__,
+        )
+
+        text = self._run_with_timeout(
+            self.stt_backend.transcribe,
+            args=(audio_path,),
+            timeout_sec=self.stt_timeout_sec,
+            step_name="STT",
+        )
+
+        if not self.disable_processing_cache:
+            self.processing_cache.set_stt(audio_key, text)
+
+        self._emit(
+            "stt.done",
+            "STT finished.",
+            "stt",
+            backend=type(self.stt_backend).__name__,
+            data={"source_len": len(text), "source_preview": text[:80]},
+        )
+        return text
+
+    def _run_text_transform(
+        self,
+        source_text: str,
+        prompt: TextTransformPrompt,
+    ) -> str:
+        """Execute text transform step with validation and fallback."""
+        if not self.disable_processing_cache:
+            cached = self.processing_cache.get_text(source_text, prompt)
+            if cached is not None:
+                self._emit(
+                    "cache.text_hit",
+                    "Text transform cache hit; backend was not executed.",
+                    "text",
+                    cache="text",
+                    data={"transformed_len": len(cached)},
+                )
+                return cached
+
+        self._emit(
+            "text.start",
+            "Text transform started.",
+            "text",
+            backend=type(self.text_transform_backend).__name__,
+        )
+
+        transformed = self._run_with_timeout(
+            self.text_transform_backend.transform,
+            args=(source_text, prompt),
+            timeout_sec=60.0,
+            step_name="Text transform",
+        )
+
+        # Validate and fallback if needed
+        if not validate_transform(source_text, transformed, prompt.instruction):
+            self._emit(
+                "text_transform.validation_failed",
+                "Text transform validation failed.",
+                "text",
+                level=EventLevel.WARNING,
+                data={"source_len": len(source_text), "transformed_len": len(transformed)},
+            )
+            transformed = PromptedRuleTextTransformBackend().transform(source_text, prompt)
+            self._emit(
+                "text_transform.fallback_used",
+                "PromptedRuleTextTransformBackend fallback used.",
+                "text",
+            )
+
+        if not self.disable_processing_cache:
+            self.processing_cache.set_text(source_text, prompt, transformed)
+
+        self._emit(
+            "text.done",
+            "Text transform finished.",
+            "text",
+            backend=type(self.text_transform_backend).__name__,
+            data={"transformed_len": len(transformed), "transformed_preview": transformed[:80]},
+        )
+        return transformed
+
+    def _run_voice_output(
+        self,
+        text: str,
+        audio_path: str,
+        audio_key: AudioKey,
+        voice_context: VoiceContext,
+        voice_output_prompt: VoiceOutputPrompt | None = None,
+    ) -> str:
+        """Execute voice output step with caching and timeout."""
+        if not self.disable_processing_cache:
+            cached_audio = self.processing_cache.get_voice_output(
+                text, voice_output_prompt.instruction if voice_output_prompt else "", voice_context
+            )
+            if cached_audio and os.path.exists(cached_audio):
+                self._emit(
+                    "cache.voice_hit",
+                    "Voice output cache hit; backend was not executed.",
+                    "tts",
+                    cache="voice_output",
+                    data={"output_audio_path": cached_audio},
+                )
+                return cached_audio
+
+        self._emit(
+            "tts.start",
+            "Voice output started.",
+            "tts",
+            backend=type(self.voice_output_backend).__name__,
+        )
+
+        output_path = self._run_with_timeout(
+            self.voice_output_backend.synthesize,
+            args=(text, voice_context, voice_output_prompt),
+            timeout_sec=self.tts_timeout_sec,
+            step_name="TTS",
+        )
+
+        if not self.disable_processing_cache:
+            self.processing_cache.set_voice_output(
+                text,
+                voice_output_prompt.instruction if voice_output_prompt else "",
+                voice_context,
+                output_path,
+            )
+
+        self._emit(
+            "tts.done",
+            "Voice output finished.",
+            "tts",
+            backend=type(self.voice_output_backend).__name__,
+            data={"output_audio_path": output_path},
+        )
+        return output_path
 
     def _step_stt(self, audio_path: str, audio_key: AudioKey) -> str:
         cached = None if self.disable_processing_cache else self.processing_cache.get_stt(audio_key)
