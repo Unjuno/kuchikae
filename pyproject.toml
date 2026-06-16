@@ -9,6 +9,7 @@ dependencies = [
     "soundfile",
     "pyyaml",
     "httpx",
+    "noisereduce",
 ]
 
 [project.optional-dependencies]

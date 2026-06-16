@@ -1050,11 +1050,12 @@ wheels = [
 
 [[package]]
 name = "kuchikae"
-version = "0.1.2"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "gradio", marker = "sys_platform == 'darwin'" },
     { name = "httpx", marker = "sys_platform == 'darwin'" },
+    { name = "noisereduce", marker = "sys_platform == 'darwin'" },
     { name = "numpy", marker = "sys_platform == 'darwin'" },
     { name = "pyyaml", marker = "sys_platform == 'darwin'" },
     { name = "soundfile", marker = "sys_platform == 'darwin'" },
@@ -1101,6 +1102,7 @@ requires-dist = [
     { name = "irodori-tts", marker = "extra == 'tts'", git = "https://github.com/Aratako/Irodori-TTS.git" },
     { name = "kuchikae", extras = ["stt", "tts"], marker = "extra == 'real'", editable = "." },
     { name = "nemo-toolkit", extras = ["asr"], marker = "extra == 'nemo-stt'" },
+    { name = "noisereduce" },
     { name = "numpy" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pyyaml" },
@@ -1567,6 +1569,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/74/a1/b3b4adf15585a5bc4c357adde150c01ebeeb642173ded4d871e89468767c/nltk-3.9.4.tar.gz", hash = "sha256:ed03bc098a40481310320808b2db712d95d13ca65b27372f8a403949c8b523d0", size = 2946864, upload-time = "2026-03-24T06:13:40.641Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9d/91/04e965f8e717ba0ab4bdca5c112deeab11c9e750d94c4d4602f050295d39/nltk-3.9.4-py3-none-any.whl", hash = "sha256:f2fa301c3a12718ce4a0e9305c5675299da5ad9e26068218b69d692fda84828f", size = 1552087, upload-time = "2026-03-24T06:13:38.47Z" },
+]
+
+[[package]]
+name = "noisereduce"
+version = "3.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib", marker = "sys_platform == 'darwin'" },
+    { name = "matplotlib", marker = "sys_platform == 'darwin'" },
+    { name = "numpy", marker = "sys_platform == 'darwin'" },
+    { name = "scipy", marker = "sys_platform == 'darwin'" },
+    { name = "tqdm", marker = "sys_platform == 'darwin'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/11/08/539e3cff148b7f9bde5b4b060451a7445d708fa3fe5d8a2bc0c552976e52/noisereduce-3.0.3.tar.gz", hash = "sha256:ff64a28fb92e3c81f153cf29550e5c2db56b2523afa8f56f5e03c177cc5e918f", size = 20968, upload-time = "2024-10-06T13:43:45.431Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/c5/fc00b3e8f86437039fb300ba41d5d683fdf0878d8782e827c2bad074eb59/noisereduce-3.0.3-py3-none-any.whl", hash = "sha256:95cb64cfe29b5fa0311ac764755d2f503ae71571040693577796412be1a54b9d", size = 22142, upload-time = "2024-10-06T13:43:43.886Z" },
 ]
 
 [[package]]

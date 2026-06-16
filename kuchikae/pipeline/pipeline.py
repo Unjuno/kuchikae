@@ -643,7 +643,7 @@ class KuchikaePipeline:
             executor.shutdown(wait=False)
 
     def _run_stt(self, audio_path: str, audio_key: AudioKey) -> str:
-        """Execute STT step with caching and timeout."""
+        """Execute STT step with caching, timeout, and noise reduction."""
         if not self.disable_processing_cache:
             cached = self.processing_cache.get_stt(audio_key)
             if cached is not None:
@@ -656,6 +656,21 @@ class KuchikaePipeline:
                 )
                 return cached
 
+        # Apply noise reduction before STT
+        denoised_path = audio_path
+        try:
+            from kuchikae.domain.audio_denoise import reduce_noise_simple
+            denoised_path = reduce_noise_simple(audio_path)
+            if denoised_path != audio_path:
+                self._emit(
+                    "stt.denoise",
+                    "Noise reduction applied.",
+                    "stt",
+                    data={"original": audio_path, "denoised": denoised_path},
+                )
+        except Exception as e:
+            logger.debug("Noise reduction skipped: %s", e)
+
         self._emit(
             "stt.start",
             "STT started.",
@@ -665,10 +680,17 @@ class KuchikaePipeline:
 
         text = self._run_with_timeout(
             self.stt_backend.transcribe,
-            args=(audio_path,),
+            args=(denoised_path,),
             timeout_sec=self.stt_timeout_sec,
             step_name="STT",
         )
+
+        # Clean up denoised temp file
+        if denoised_path != audio_path and os.path.exists(denoised_path):
+            try:
+                os.unlink(denoised_path)
+            except OSError:
+                pass
 
         if not self.disable_processing_cache:
             self.processing_cache.set_stt(audio_key, text)
