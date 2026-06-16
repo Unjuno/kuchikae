@@ -61,10 +61,12 @@ PTT_JS = r"""
   function clickButton(btn) {
     if (!btn) return false;
     btn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
-    btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
     btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-    btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    setTimeout(function () {
+      btn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerType: 'mouse' }));
+      btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    }, 50);
     return true;
   }
 
@@ -124,7 +126,6 @@ PTT_JS = r"""
       stopRecording();
     });
     btn.addEventListener('pointercancel', stopRecording);
-    btn.addEventListener('pointerleave', stopRecording);
     btn.addEventListener('keydown', handleKeyDown);
   }
 

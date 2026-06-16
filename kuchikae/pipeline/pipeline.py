@@ -306,6 +306,8 @@ class KuchikaePipeline:
         voice_style_detector: VoiceStyleDetector | None = None,
         audio_emotion_detector: AudioEmotionDetector | None = None,
         voice_style_timeout_sec: float = 5.0,
+        stt_timeout_sec: float = 120.0,
+        tts_timeout_sec: float = 120.0,
         backend_config: dict | None = None,
     ) -> None:
         self.stt_backend = stt_backend or DummySTTBackend()
@@ -323,6 +325,8 @@ class KuchikaePipeline:
         self.voice_style_detector = voice_style_detector or RuleVoiceStyleDetector()
         self.audio_emotion_detector = audio_emotion_detector or DummyAudioEmotionDetector()
         self.voice_style_timeout_sec = voice_style_timeout_sec
+        self.stt_timeout_sec = stt_timeout_sec
+        self.tts_timeout_sec = tts_timeout_sec
         self._last_voice_style = "auto"
         self._last_audio_emotion = "disabled"
         self._last_audio_emotion_mood = "neutral"
@@ -516,7 +520,17 @@ class KuchikaePipeline:
                 data={"source_len": len(cached), "source_preview": cached[:80]},
             )
             return cached
-        text = self.stt_backend.transcribe(audio_path)
+        executor = ThreadPoolExecutor(max_workers=1)
+        try:
+            future = executor.submit(self.stt_backend.transcribe, audio_path)
+            text = future.result(timeout=self.stt_timeout_sec)
+        except FuturesTimeoutError:
+            raise TimeoutError(
+                f"STT timed out after {self.stt_timeout_sec}s "
+                f"(backend={type(self.stt_backend).__name__})"
+            )
+        finally:
+            executor.shutdown(wait=False)
         if not self.disable_processing_cache:
             self.processing_cache.set_stt(audio_key, text)
         return text
@@ -698,13 +712,37 @@ class KuchikaePipeline:
         voice_output_prompt: VoiceOutputPrompt | None = None,
     ) -> str:
         if self.disable_processing_cache:
-            return self.voice_output_backend.synthesize(text, voice_context, voice_output_prompt)
+            executor = ThreadPoolExecutor(max_workers=1)
+            try:
+                future = executor.submit(
+                    self.voice_output_backend.synthesize, text, voice_context, voice_output_prompt,
+                )
+                return future.result(timeout=self.tts_timeout_sec)
+            except FuturesTimeoutError:
+                raise TimeoutError(
+                    f"TTS timed out after {self.tts_timeout_sec}s "
+                    f"(backend={type(self.voice_output_backend).__name__})"
+                )
+            finally:
+                executor.shutdown(wait=False)
         cached_context = self.processing_cache.get_voice_context(audio_key)
         if cached_context is not None:
             voice_context = cached_context
         else:
             self.processing_cache.set_voice_context(audio_key, voice_context)
-        return self.voice_output_backend.synthesize(text, voice_context, voice_output_prompt)
+        executor = ThreadPoolExecutor(max_workers=1)
+        try:
+            future = executor.submit(
+                self.voice_output_backend.synthesize, text, voice_context, voice_output_prompt,
+            )
+            return future.result(timeout=self.tts_timeout_sec)
+        except FuturesTimeoutError:
+            raise TimeoutError(
+                f"TTS timed out after {self.tts_timeout_sec}s "
+                f"(backend={type(self.voice_output_backend).__name__})"
+            )
+        finally:
+            executor.shutdown(wait=False)
 
     def process(
         self,
@@ -1011,104 +1049,108 @@ class KuchikaePipeline:
         )
         audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
 
-        logger.info("process_stream:yield STT")
-        yield "STT", None, None, None
-        source_text = self._step_stt(audio_path, audio_key)
-        logger.info(
-            "process_stream:stt:done elapsed=%.2fs source_len=%d source_preview=%r",
-            time.time() - t0,
-            len(source_text),
-            source_text[:120],
-        )
-
-        logger.info("process_stream:yield TXT")
-        yield "TXT", source_text, None, None
-        logger.info(
-            "process_stream:text:start text_prompt_preview=%r",
-            text_transform_prompt.instruction[:160],
-        )
-        cached_text = None if self.disable_processing_cache else self.processing_cache.get_text(source_text, text_transform_prompt)
-        if cached_text is not None:
-            transformed_text = cached_text
-            logger.info("process_stream:text:cache_hit transformed_len=%d", len(transformed_text))
-        else:
-            transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-            if not validate_transform(source_text, transformed_text, text_transform_prompt.instruction):
-                self._emit("text_transform.validation_failed", "Text transform validation failed.", "text", level=EventLevel.WARNING, data={"source_len": len(source_text), "transformed_len": len(transformed_text)})
-                transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
-                self._emit("text_transform.fallback_used", "PromptedRuleTextTransformBackend fallback used.", "text")
-            if not self.disable_processing_cache:
-                self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
-        logger.info(
-            "process_stream:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
-            time.time() - t0,
-            len(transformed_text),
-            transformed_text[:120],
-        )
-
-        logger.info("process_stream:yield VOX")
-        yield "VOX", source_text, transformed_text, None
-        logger.info("process_stream:voice_context:start")
-        voice_context = self._voice_context(audio_path, audio_key)
-        logger.info(
-            "process_stream:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
-            voice_context.reference_audio_path,
-            voice_context.ready,
-            voice_context.speaker_embedding is not None,
-            voice_context.prosody_profile is not None,
-        )
-        text_for_voice = transformed_text.strip() or source_text
-        audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
-        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_style)
-        voice_prompt_text = voice_output_prompt.instruction
-        logger.info(
-            "process_stream:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
-            len(text_for_voice),
-            text_for_voice[:120],
-            "set" if voice_output_prompt is not None else "none",
-        )
-        cached_audio = None if self.disable_processing_cache else self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
-        if cached_audio is not None and os.path.exists(cached_audio):
-            output_audio_path = cached_audio
-            logger.info("process_stream:voice:cache_hit output_audio_path=%s", output_audio_path)
-        else:
-            output_audio_path = self._step_voice(
-                text_for_voice,
-                audio_path,
-                audio_key,
-                voice_context,
-                voice_output_prompt,
+        try:
+            logger.info("process_stream:yield STT")
+            yield "STT", None, None, None
+            source_text = self._step_stt(audio_path, audio_key)
+            logger.info(
+                "process_stream:stt:done elapsed=%.2fs source_len=%d source_preview=%r",
+                time.time() - t0,
+                len(source_text),
+                source_text[:120],
             )
-            if not self.disable_processing_cache:
-                self.processing_cache.set_voice_output(
+
+            logger.info("process_stream:yield TXT")
+            yield "TXT", source_text, None, None
+            logger.info(
+                "process_stream:text:start text_prompt_preview=%r",
+                text_transform_prompt.instruction[:160],
+            )
+            cached_text = None if self.disable_processing_cache else self.processing_cache.get_text(source_text, text_transform_prompt)
+            if cached_text is not None:
+                transformed_text = cached_text
+                logger.info("process_stream:text:cache_hit transformed_len=%d", len(transformed_text))
+            else:
+                transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+                if not validate_transform(source_text, transformed_text, text_transform_prompt.instruction):
+                    self._emit("text_transform.validation_failed", "Text transform validation failed.", "text", level=EventLevel.WARNING, data={"source_len": len(source_text), "transformed_len": len(transformed_text)})
+                    transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
+                    self._emit("text_transform.fallback_used", "PromptedRuleTextTransformBackend fallback used.", "text")
+                if not self.disable_processing_cache:
+                    self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
+            logger.info(
+                "process_stream:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
+                time.time() - t0,
+                len(transformed_text),
+                transformed_text[:120],
+            )
+
+            logger.info("process_stream:yield VOX")
+            yield "VOX", source_text, transformed_text, None
+            logger.info("process_stream:voice_context:start")
+            voice_context = self._voice_context(audio_path, audio_key)
+            logger.info(
+                "process_stream:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
+                voice_context.reference_audio_path,
+                voice_context.ready,
+                voice_context.speaker_embedding is not None,
+                voice_context.prosody_profile is not None,
+            )
+            text_for_voice = transformed_text.strip() or source_text
+            audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
+            voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_style)
+            voice_prompt_text = voice_output_prompt.instruction
+            logger.info(
+                "process_stream:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
+                len(text_for_voice),
+                text_for_voice[:120],
+                "set" if voice_output_prompt is not None else "none",
+            )
+            cached_audio = None if self.disable_processing_cache else self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
+            if cached_audio is not None and os.path.exists(cached_audio):
+                output_audio_path = cached_audio
+                logger.info("process_stream:voice:cache_hit output_audio_path=%s", output_audio_path)
+            else:
+                output_audio_path = self._step_voice(
                     text_for_voice,
-                    voice_prompt_text,
+                    audio_path,
+                    audio_key,
                     voice_context,
-                    output_audio_path,
+                    voice_output_prompt,
                 )
-        logger.info(
-            "process_stream:voice:done elapsed=%.2fs output_audio_path=%s",
-            time.time() - t0,
-            output_audio_path,
-        )
-
-        logger.info("process_stream:yield DONE")
-        yield "DONE", source_text, transformed_text, output_audio_path
-        if not self.disable_processing_cache:
-            self.processing_cache.set_result(
-                audio_key,
-                text_transform_prompt.instruction,
-                voice_prompt_text,
-                PipelineResult(
-                    output_audio_path=output_audio_path,
-                    source_text=source_text,
-                    transformed_text=transformed_text,
-                    stt_latency=0.0,
-                    text_transform_latency=0.0,
-                    voice_output_latency=0.0,
-                    total_latency=time.time() - t0,
-                ),
+                if not self.disable_processing_cache:
+                    self.processing_cache.set_voice_output(
+                        text_for_voice,
+                        voice_prompt_text,
+                        voice_context,
+                        output_audio_path,
+                    )
+            logger.info(
+                "process_stream:voice:done elapsed=%.2fs output_audio_path=%s",
+                time.time() - t0,
+                output_audio_path,
             )
+
+            logger.info("process_stream:yield DONE")
+            yield "DONE", source_text, transformed_text, output_audio_path
+            if not self.disable_processing_cache:
+                self.processing_cache.set_result(
+                    audio_key,
+                    text_transform_prompt.instruction,
+                    voice_prompt_text,
+                    PipelineResult(
+                        output_audio_path=output_audio_path,
+                        source_text=source_text,
+                        transformed_text=transformed_text,
+                        stt_latency=0.0,
+                        text_transform_latency=0.0,
+                        voice_output_latency=0.0,
+                        total_latency=time.time() - t0,
+                    ),
+                )
+        finally:
+            if audio_executor is not None:
+                audio_executor.shutdown(wait=False, cancel_futures=True)
 
     def process_stream_live(
         self,
@@ -1143,192 +1185,196 @@ class KuchikaePipeline:
         )
         audio_future, audio_executor = self._detect_audio_emotion_async(audio_path)
 
-        # Check cache first
-        cached_stt = None if self.disable_processing_cache else self.processing_cache.get_stt(audio_key)
-        if cached_stt is not None:
-            logger.info(
-                "process_stream_live:stt_cache_hit source_len=%d source_preview=%r",
-                len(cached_stt),
-                cached_stt[:120],
-            )
-            self._emit(
-                "cache.stt_hit",
-                "STT cache hit; backend was not executed.",
-                "stt",
-                cache="stt",
-                data={"source_len": len(cached_stt), "source_preview": cached_stt[:80]},
-            )
-            source_text = cached_stt
-            logger.info("process_stream_live:yield STT")
-            yield "STT", source_text, None, None
-        else:
-            self._emit(
-                "stt.start",
-                "STT started.",
-                "stt",
-                backend=type(self.stt_backend).__name__,
-            )
-            # Stream STT
-            if hasattr(self.stt_backend, "transcribe_stream"):
-                logger.info("process_stream_live:stt_stream:start backend=%s", type(self.stt_backend).__name__)
-                accumulated = ""
-                for idx, partial in enumerate(self.stt_backend.transcribe_stream(audio_path), start=1):
-                    accumulated = partial
-                    logger.info(
-                        "process_stream_live:stt_partial idx=%d partial_len=%d partial_preview=%r",
-                        idx,
-                        len(partial),
-                        partial[:120],
-                    )
-                    yield "STT_PARTIAL", partial, None, None
-                source_text = accumulated
-                if not self.disable_processing_cache:
-                    self.processing_cache.set_stt(audio_key, source_text)
-                self._emit(
-                    "stt.done",
-                    "STT finished.",
-                    "stt",
-                    backend=type(self.stt_backend).__name__,
-                    data={"source_len": len(source_text), "source_preview": source_text[:80]},
-                )
+        try:
+            # Check cache first
+            cached_stt = None if self.disable_processing_cache else self.processing_cache.get_stt(audio_key)
+            if cached_stt is not None:
                 logger.info(
-                    "process_stream_live:stt_stream:done source_len=%d source_preview=%r",
-                    len(source_text),
-                    source_text[:120],
+                    "process_stream_live:stt_cache_hit source_len=%d source_preview=%r",
+                    len(cached_stt),
+                    cached_stt[:120],
                 )
+                self._emit(
+                    "cache.stt_hit",
+                    "STT cache hit; backend was not executed.",
+                    "stt",
+                    cache="stt",
+                    data={"source_len": len(cached_stt), "source_preview": cached_stt[:80]},
+                )
+                source_text = cached_stt
                 logger.info("process_stream_live:yield STT")
                 yield "STT", source_text, None, None
             else:
-                logger.info("process_stream_live:stt_fallback:start backend=%s", type(self.stt_backend).__name__)
-                source_text = self._step_stt(audio_path, audio_key)
                 self._emit(
-                    "stt.done",
-                    "STT finished.",
+                    "stt.start",
+                    "STT started.",
                     "stt",
                     backend=type(self.stt_backend).__name__,
-                    data={"source_len": len(source_text), "source_preview": source_text[:80]},
                 )
-                logger.info(
-                    "process_stream_live:stt_fallback:done source_len=%d source_preview=%r",
-                    len(source_text),
-                    source_text[:120],
+                # Stream STT
+                if hasattr(self.stt_backend, "transcribe_stream"):
+                    logger.info("process_stream_live:stt_stream:start backend=%s", type(self.stt_backend).__name__)
+                    accumulated = ""
+                    for idx, partial in enumerate(self.stt_backend.transcribe_stream(audio_path), start=1):
+                        accumulated = partial
+                        logger.info(
+                            "process_stream_live:stt_partial idx=%d partial_len=%d partial_preview=%r",
+                            idx,
+                            len(partial),
+                            partial[:120],
+                        )
+                        yield "STT_PARTIAL", partial, None, None
+                    source_text = accumulated
+                    if not self.disable_processing_cache:
+                        self.processing_cache.set_stt(audio_key, source_text)
+                    self._emit(
+                        "stt.done",
+                        "STT finished.",
+                        "stt",
+                        backend=type(self.stt_backend).__name__,
+                        data={"source_len": len(source_text), "source_preview": source_text[:80]},
+                    )
+                    logger.info(
+                        "process_stream_live:stt_stream:done source_len=%d source_preview=%r",
+                        len(source_text),
+                        source_text[:120],
+                    )
+                    logger.info("process_stream_live:yield STT")
+                    yield "STT", source_text, None, None
+                else:
+                    logger.info("process_stream_live:stt_fallback:start backend=%s", type(self.stt_backend).__name__)
+                    source_text = self._step_stt(audio_path, audio_key)
+                    self._emit(
+                        "stt.done",
+                        "STT finished.",
+                        "stt",
+                        backend=type(self.stt_backend).__name__,
+                        data={"source_len": len(source_text), "source_preview": source_text[:80]},
+                    )
+                    logger.info(
+                        "process_stream_live:stt_fallback:done source_len=%d source_preview=%r",
+                        len(source_text),
+                        source_text[:120],
+                    )
+                    logger.info("process_stream_live:yield STT")
+                    yield "STT", source_text, None, None
+
+            # Text transform
+            logger.info("process_stream_live:yield TXT")
+            yield "TXT", source_text, None, None
+            logger.info(
+                "process_stream_live:text:start text_prompt_preview=%r",
+                text_transform_prompt.instruction[:160],
+            )
+            cached_text = None if self.disable_processing_cache else self.processing_cache.get_text(source_text, text_transform_prompt)
+            if cached_text is not None:
+                transformed_text = cached_text
+                logger.info("process_stream_live:text:cache_hit transformed_len=%d", len(transformed_text))
+            else:
+                self._emit(
+                    "text.start",
+                    "Text transform started.",
+                    "text",
+                    backend=type(self.text_transform_backend).__name__,
                 )
-                logger.info("process_stream_live:yield STT")
-                yield "STT", source_text, None, None
+                transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
+                if not validate_transform(source_text, transformed_text, text_transform_prompt.instruction):
+                    self._emit("text_transform.validation_failed", "Text transform validation failed.", "text", level=EventLevel.WARNING, data={"source_len": len(source_text), "transformed_len": len(transformed_text)})
+                    transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
+                    self._emit("text_transform.fallback_used", "PromptedRuleTextTransformBackend fallback used.", "text")
+                if not self.disable_processing_cache:
+                    self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
+                self._emit(
+                    "text.done",
+                    "Text transform finished.",
+                    "text",
+                    backend=type(self.text_transform_backend).__name__,
+                    data={"transformed_len": len(transformed_text), "transformed_preview": transformed_text[:80]},
+                )
+            logger.info(
+                "process_stream_live:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
+                time.time() - t0,
+                len(transformed_text),
+                transformed_text[:120],
+            )
 
-        # Text transform
-        logger.info("process_stream_live:yield TXT")
-        yield "TXT", source_text, None, None
-        logger.info(
-            "process_stream_live:text:start text_prompt_preview=%r",
-            text_transform_prompt.instruction[:160],
-        )
-        cached_text = None if self.disable_processing_cache else self.processing_cache.get_text(source_text, text_transform_prompt)
-        if cached_text is not None:
-            transformed_text = cached_text
-            logger.info("process_stream_live:text:cache_hit transformed_len=%d", len(transformed_text))
-        else:
-            self._emit(
-                "text.start",
-                "Text transform started.",
-                "text",
-                backend=type(self.text_transform_backend).__name__,
+            # Voice output
+            logger.info("process_stream_live:yield VOX")
+            yield "VOX", source_text, transformed_text, None
+            logger.info("process_stream_live:voice_context:start")
+            voice_context = self._voice_context(audio_path, audio_key)
+            logger.info(
+                "process_stream_live:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
+                voice_context.reference_audio_path,
+                voice_context.ready,
+                voice_context.speaker_embedding is not None,
+                voice_context.prosody_profile is not None,
             )
-            transformed_text = self.text_transform_backend.transform(source_text, text_transform_prompt)
-            if not validate_transform(source_text, transformed_text, text_transform_prompt.instruction):
-                self._emit("text_transform.validation_failed", "Text transform validation failed.", "text", level=EventLevel.WARNING, data={"source_len": len(source_text), "transformed_len": len(transformed_text)})
-                transformed_text = PromptedRuleTextTransformBackend().transform(source_text, text_transform_prompt)
-                self._emit("text_transform.fallback_used", "PromptedRuleTextTransformBackend fallback used.", "text")
-            if not self.disable_processing_cache:
-                self.processing_cache.set_text(source_text, text_transform_prompt, transformed_text)
-            self._emit(
-                "text.done",
-                "Text transform finished.",
-                "text",
-                backend=type(self.text_transform_backend).__name__,
-                data={"transformed_len": len(transformed_text), "transformed_preview": transformed_text[:80]},
+            text_for_voice = transformed_text.strip() or source_text
+            audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
+            voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_style)
+            voice_prompt_text = voice_output_prompt.instruction
+            logger.info(
+                "process_stream_live:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
+                len(text_for_voice),
+                text_for_voice[:120],
+                "set" if voice_output_prompt is not None else "none",
             )
-        logger.info(
-            "process_stream_live:text:done elapsed=%.2fs transformed_len=%d transformed_preview=%r",
-            time.time() - t0,
-            len(transformed_text),
-            transformed_text[:120],
-        )
-
-        # Voice output
-        logger.info("process_stream_live:yield VOX")
-        yield "VOX", source_text, transformed_text, None
-        logger.info("process_stream_live:voice_context:start")
-        voice_context = self._voice_context(audio_path, audio_key)
-        logger.info(
-            "process_stream_live:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
-            voice_context.reference_audio_path,
-            voice_context.ready,
-            voice_context.speaker_embedding is not None,
-            voice_context.prosody_profile is not None,
-        )
-        text_for_voice = transformed_text.strip() or source_text
-        audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
-        voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_style)
-        voice_prompt_text = voice_output_prompt.instruction
-        logger.info(
-            "process_stream_live:voice:start text_for_voice_len=%d text_for_voice_preview=%r voice_prompt=%s",
-            len(text_for_voice),
-            text_for_voice[:120],
-            "set" if voice_output_prompt is not None else "none",
-        )
-        cached_audio = None if self.disable_processing_cache else self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
-        if cached_audio is not None and os.path.exists(cached_audio):
-            output_audio_path = cached_audio
-            logger.info("process_stream_live:voice:cache_hit output_audio_path=%s", output_audio_path)
-        else:
-            self._emit(
-                "tts.start",
-                "Voice output started.",
-                "tts",
-                backend=type(self.voice_output_backend).__name__,
-            )
-            output_audio_path = self._step_voice(
-                text_for_voice,
-                audio_path,
-                audio_key,
-                voice_context,
-                voice_output_prompt,
-            )
-            if not self.disable_processing_cache:
-                self.processing_cache.set_voice_output(
+            cached_audio = None if self.disable_processing_cache else self.processing_cache.get_voice_output(text_for_voice, voice_prompt_text, voice_context)
+            if cached_audio is not None and os.path.exists(cached_audio):
+                output_audio_path = cached_audio
+                logger.info("process_stream_live:voice:cache_hit output_audio_path=%s", output_audio_path)
+            else:
+                self._emit(
+                    "tts.start",
+                    "Voice output started.",
+                    "tts",
+                    backend=type(self.voice_output_backend).__name__,
+                )
+                output_audio_path = self._step_voice(
                     text_for_voice,
-                    voice_prompt_text,
+                    audio_path,
+                    audio_key,
                     voice_context,
-                    output_audio_path,
+                    voice_output_prompt,
                 )
-            self._emit(
-                "tts.done",
-                "Voice output finished.",
-                "tts",
-                backend=type(self.voice_output_backend).__name__,
-                data={"output_audio_path": output_audio_path},
+                if not self.disable_processing_cache:
+                    self.processing_cache.set_voice_output(
+                        text_for_voice,
+                        voice_prompt_text,
+                        voice_context,
+                        output_audio_path,
+                    )
+                self._emit(
+                    "tts.done",
+                    "Voice output finished.",
+                    "tts",
+                    backend=type(self.voice_output_backend).__name__,
+                    data={"output_audio_path": output_audio_path},
+                )
+            logger.info(
+                "process_stream_live:voice:done elapsed=%.2fs output_audio_path=%s",
+                time.time() - t0,
+                output_audio_path,
             )
-        logger.info(
-            "process_stream_live:voice:done elapsed=%.2fs output_audio_path=%s",
-            time.time() - t0,
-            output_audio_path,
-        )
 
-        logger.info("process_stream_live:yield DONE")
-        yield "DONE", source_text, transformed_text, output_audio_path
-        if not self.disable_processing_cache:
-            self.processing_cache.set_result(
-                audio_key,
-                text_transform_prompt.instruction,
-                voice_prompt_text,
-                PipelineResult(
-                    output_audio_path=output_audio_path,
-                    source_text=source_text,
-                    transformed_text=transformed_text,
-                    stt_latency=0.0,
-                    text_transform_latency=0.0,
-                    voice_output_latency=0.0,
-                    total_latency=time.time() - t0,
-                ),
-            )
+            logger.info("process_stream_live:yield DONE")
+            yield "DONE", source_text, transformed_text, output_audio_path
+            if not self.disable_processing_cache:
+                self.processing_cache.set_result(
+                    audio_key,
+                    text_transform_prompt.instruction,
+                    voice_prompt_text,
+                    PipelineResult(
+                        output_audio_path=output_audio_path,
+                        source_text=source_text,
+                        transformed_text=transformed_text,
+                        stt_latency=0.0,
+                        text_transform_latency=0.0,
+                        voice_output_latency=0.0,
+                        total_latency=time.time() - t0,
+                    ),
+                )
+        finally:
+            if audio_executor is not None:
+                audio_executor.shutdown(wait=False, cancel_futures=True)
