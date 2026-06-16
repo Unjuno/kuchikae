@@ -112,6 +112,7 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         codec_repo: str = "Aratako/Semantic-DACVAE-Japanese-32dim",
         num_steps: int = 6,
         cfg_scale_text: float = 2.0,
+        cfg_scale_caption: float = 0.0,
         cfg_scale_speaker: float = 3.0,
         cfg_guidance_mode: str = "independent",
         cfg_scale: float | None = None,
@@ -144,6 +145,7 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         self._codec_repo = codec_repo
         self._num_steps = num_steps
         self._cfg_scale_text = cfg_scale_text
+        self._cfg_scale_caption = cfg_scale_caption
         self._cfg_scale_speaker = cfg_scale_speaker
         self._cfg_guidance_mode = cfg_guidance_mode
         self._cfg_scale = cfg_scale
@@ -193,9 +195,8 @@ class IrodoriTTSVoiceOutputBackend(VoiceOutputBackend):
         self._num_steps = int(os.environ.get("IRODORI_NUM_STEPS", str(self._num_steps)))
         self._cfg_scale_text = float(os.environ.get("IRODORI_CFG_SCALE_TEXT", str(self._cfg_scale_text)))
         self._cfg_scale_speaker = float(os.environ.get("IRODORI_CFG_SCALE_SPEAKER", str(self._cfg_scale_speaker)))
-        self._cfg_scale_caption = (
-            float(os.environ["IRODORI_CFG_SCALE_CAPTION"]) if os.environ.get("IRODORI_CFG_SCALE_CAPTION") else self._cfg_scale_text
-        )
+        if os.environ.get("IRODORI_CFG_SCALE_CAPTION"):
+            self._cfg_scale_caption = float(os.environ["IRODORI_CFG_SCALE_CAPTION"])
         self._cfg_guidance_mode = os.environ.get("IRODORI_CFG_GUIDANCE_MODE", self._cfg_guidance_mode)
         self._cfg_scale = (
             float(os.environ["IRODORI_CFG_SCALE"]) if os.environ.get("IRODORI_CFG_SCALE") else self._cfg_scale

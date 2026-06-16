@@ -1,5 +1,20 @@
 # Release
 
+## Changelog
+
+### v0.1.2 — 2026-06-16
+
+#### Fixes
+- **Voice quality**: `IrodoriTTSVoiceOutputBackend.cfg_scale_caption` default changed from `cfg_scale_text` (2.0) to `0.0`. Caption (voice style description) no longer overrides the reference speaker's voice identity. Set `IRODORI_CFG_SCALE_CAPTION` env var to re-enable.
+- **LLM text transformation**: System prompt no longer allows adding greetings ("はい", "こんにちは" etc.) or other introductions. Removed "自由度" section that permitted elaboration for short social utterances. Replaced few-shot examples with faithful content-preserving ones. Updated "自然に" and "丁寧に" templates to not ask for extra words.
+- **PTT mode**: Removed duplicate `simple_audio.stop()` event binding that caused two concurrent pipeline runs, the second of which overwrote the audio output from the first.
+- **UI progress**: Simple mode status now shows pulsing animation during processing (`文字起こし中...`, `文章変換中...`, `音声生成中...`), using per-step Japanese labels instead of generic "変換中...".
+
+#### Maintenance
+- Version bumped to 0.1.2
+- All tests passing (459 passed, 14 skipped)
+- Manual test checklist created (`docs/MANUAL_TEST_CHECKLIST.md`)
+
 ## Build
 - **package via uv build** - Use `uv build` to create wheel and sdist
 

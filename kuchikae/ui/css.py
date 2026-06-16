@@ -536,7 +536,6 @@ gradio-app, .gradio-app {
 
 #simple-status {
   font-size: 12px;
-  color: var(--text-muted);
   text-align: center;
   min-height: 28px;
   margin-top: 8px;
@@ -546,17 +545,27 @@ gradio-app, .gradio-app {
   transition: none !important;
 }
 
+#simple-status-inner {
+  color: var(--text-muted);
+}
+
+#simple-status-inner.processing {
+  color: var(--accent-light);
+  background: rgba(124, 58, 237, 0.15);
+  animation: status-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
 #simple-text-compare {
   min-height: 160px;
 }
 
 #simple-status, #simple-text-compare, #simple-output-audio {
   transition: none !important;
-}
-
-#simple-status.processing {
-  color: var(--accent-light);
-  background: rgba(124, 58, 237, 0.15);
 }
 
 input[type="text"]:focus,

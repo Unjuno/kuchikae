@@ -137,6 +137,11 @@ def _backend_status(pipeline: KuchikaePipeline) -> str:
     return f"{base} | {summary}" if summary else base
 
 
+def _status_html(message: str, processing: bool = False) -> str:
+    cls = ' class="processing"' if processing else ""
+    return f'<div id="simple-status-inner"{cls}><span class="status-text">{message}</span></div>'
+
+
 def run_simple(
     pipeline: KuchikaePipeline,
     audio_input: str | tuple | None,
@@ -162,7 +167,7 @@ def run_simple(
             gr.update(value=None),
             "",
             "",
-            "録音ファイルを取得できませんでした。マイク権限を許可し、もう一度押して話してください。",
+            _status_html("録音ファイルを取得できませんでした"),
             _voice_analysis_html(pipeline),
         )
         return
@@ -190,7 +195,6 @@ def run_simple(
             last_status = status
             last_source = src or ""
             last_text = txt or ""
-            backend_status = _backend_status(pipeline)
             voice_analysis = _voice_analysis_html(pipeline)
             logger.info(
                 "[run_simple] yield idx=%d status=%s src_len=%s txt_len=%s aud=%s src_preview=%r txt_preview=%r",
@@ -203,22 +207,22 @@ def run_simple(
                 txt[:120] if isinstance(txt, str) else txt,
             )
             if status == "DONE":
-                yield aud, src, txt, f"言い直しました | {backend_status}", voice_analysis
+                yield aud, src, txt, _status_html("言い直しました"), voice_analysis
             elif status == "VOX":
-                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}", voice_analysis
+                yield gr.update(value=None), src, txt, _status_html("音声生成中...", processing=True), voice_analysis
             elif status == "TXT":
-                yield gr.update(value=None), src, txt, f"変換中... | {backend_status}", voice_analysis
+                yield gr.update(value=None), src, txt, _status_html("文章変換中...", processing=True), voice_analysis
             elif status == "STT_PARTIAL":
-                yield gr.update(value=None), src, "", f"文字起こし中... | {backend_status}", voice_analysis
+                yield gr.update(value=None), src, "", _status_html("文字起こし中...", processing=True), voice_analysis
             else:
-                yield gr.update(value=None), "", "", f"音声認識中... | {backend_status}", voice_analysis
+                yield gr.update(value=None), "", "", _status_html("音声認識中...", processing=True), voice_analysis
     except Exception as e:
         logger.exception("[run_simple] inference failed")
         yield (
             gr.update(value=None),
             last_source,
             last_text,
-            f"{last_status} 段階で失敗しました: {type(e).__name__}: {e}",
+            _status_html(f"{last_status} 段階で失敗しました: {type(e).__name__}: {e}"),
             _voice_analysis_html(pipeline),
         )
         return

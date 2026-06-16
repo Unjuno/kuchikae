@@ -173,7 +173,7 @@ class TestOllamaSystemPrompt:
         from kuchikae.domain.text_transform import OllamaTextTransformBackend
         source = inspect.getsource(OllamaTextTransformBackend.transform)
         assert "日本語発話演出エンジン" in source
-        assert "短い社交的発話" in source or "挨拶、感謝、謝罪" in source
+        assert "挨拶" in source or "追加しない" in source
         assert "事実" in source
         assert "数値" in source
         assert "固有名詞" in source
