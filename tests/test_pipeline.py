@@ -284,8 +284,8 @@ def test_resolve_stt_preset_returns_expected_default() -> None:
 
     preset = resolve_stt_preset("balanced")
     assert preset.model_size == "small"
-    assert preset.device == "cpu"
-    assert preset.compute_type == "int8"
+    assert preset.device == "auto"
+    assert preset.compute_type == "auto"
     assert preset.beam_size == 1
     assert preset.vad_filter is True
 
@@ -298,8 +298,8 @@ def test_resolve_stt_presets_cover_fast_balanced_accurate() -> None:
     accurate = resolve_stt_preset("accurate")
 
     assert fast.model_size == "tiny"
-    assert fast.device == "cpu"
-    assert fast.compute_type == "int8"
+    assert fast.device == "auto"
+    assert fast.compute_type == "auto"
     assert fast.beam_size == 1
     assert fast.vad_filter is False
 
