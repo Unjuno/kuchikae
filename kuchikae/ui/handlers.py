@@ -164,6 +164,7 @@ def run_simple(
     if path is None:
         logger.warning("[run_simple] no path, aborting")
         yield (
+            None,
             gr.update(value=None),
             "",
             "",
@@ -207,18 +208,19 @@ def run_simple(
                 txt[:120] if isinstance(txt, str) else txt,
             )
             if status == "DONE":
-                yield aud, src, txt, _status_html("言い直しました"), voice_analysis
+                yield None, aud, src, txt, _status_html("言い直しました"), voice_analysis
             elif status == "VOX":
-                yield gr.update(value=None), src, txt, _status_html("音声生成中...", processing=True), voice_analysis
+                yield None, gr.update(value=None), src, txt, _status_html("音声生成中...", processing=True), voice_analysis
             elif status == "TXT":
-                yield gr.update(value=None), src, txt, _status_html("文章変換中...", processing=True), voice_analysis
+                yield None, gr.update(value=None), src, txt, _status_html("文章変換中...", processing=True), voice_analysis
             elif status == "STT_PARTIAL":
-                yield gr.update(value=None), src, "", _status_html("文字起こし中...", processing=True), voice_analysis
+                yield None, gr.update(value=None), src, "", _status_html("文字起こし中...", processing=True), voice_analysis
             else:
-                yield gr.update(value=None), "", "", _status_html("音声認識中...", processing=True), voice_analysis
+                yield None, gr.update(value=None), "", "", _status_html("音声認識中...", processing=True), voice_analysis
     except Exception as e:
         logger.exception("[run_simple] inference failed")
         yield (
+            None,
             gr.update(value=None),
             last_source,
             last_text,

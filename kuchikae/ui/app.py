@@ -278,7 +278,7 @@ def create_app(
                     simple_audio.change(
                         _run_simple_handler,
                         inputs=[simple_audio, simple_template, stt_preset, simple_voice_style],
-                        outputs=[simple_output, simple_source, simple_transformed, simple_status, simple_voice_analysis],
+                        outputs=[simple_audio, simple_output, simple_source, simple_transformed, simple_status, simple_voice_analysis],
                     )
 
     return demo

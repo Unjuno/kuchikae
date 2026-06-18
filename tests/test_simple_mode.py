@@ -54,7 +54,8 @@ def test_run_simple_none_input_yields_empty():
     gen = run_simple(pipeline, None)
     results = list(gen)
     assert len(results) == 1
-    aud, src, trf, sts, _ = results[0]
+    audio_reset, aud, src, trf, sts, _ = results[0]
+    assert audio_reset is None
     assert src == ""
     assert trf == ""
     assert "録音ファイルを取得できませんでした" in sts
@@ -66,7 +67,7 @@ def test_run_simple_string_path_is_not_dropped(tmp_path):
     pipeline = KuchikaePipeline()
     gen = run_simple(pipeline, str(wav))
     results = list(gen)
-    assert "言い直しました" in results[-1][3]
+    assert "言い直しました" in results[-1][4]
 
 
 def test_run_simple_with_dummy_wav_yields_done(tmp_path):
@@ -77,7 +78,8 @@ def test_run_simple_with_dummy_wav_yields_done(tmp_path):
     results = list(gen)
     assert len(results) >= 1
     last = results[-1]
-    aud, src, trf, sts, _ = last
+    audio_reset, aud, src, trf, sts, _ = last
+    assert audio_reset is None
     assert isinstance(aud, str) and aud != ""
     assert isinstance(src, str) and len(src) > 0
     assert isinstance(trf, str) and len(trf) > 0
@@ -101,7 +103,7 @@ def test_run_simple_filepath_tuple_input(tmp_path):
     results = list(gen)
     assert len(results) >= 1
     last = results[-1]
-    assert "言い直しました" in last[3]
+    assert "言い直しました" in last[4]
 
 
 def test_run_simple_dict_input(tmp_path):
@@ -112,7 +114,7 @@ def test_run_simple_dict_input(tmp_path):
     results = list(gen)
     assert len(results) >= 1
     last = results[-1]
-    assert "言い直しました" in last[3]
+    assert "言い直しました" in last[4]
 
 
 def test_run_simple_pipeline_exception_updates_status(tmp_path) -> None:
@@ -120,8 +122,8 @@ def test_run_simple_pipeline_exception_updates_status(tmp_path) -> None:
     sf.write(str(wav), np.zeros(44100, dtype=np.float32), 44100)
     gen = run_simple(_FailingPipeline(), str(wav))
     results = list(gen)
-    assert "STT 段階で失敗しました:" in results[-1][3]
-    assert "RuntimeError" in results[-1][3]
+    assert "STT 段階で失敗しました:" in results[-1][4]
+    assert "RuntimeError" in results[-1][4]
 
 
 def test_run_pipeline_exception_updates_status(tmp_path) -> None:
@@ -136,7 +138,7 @@ def test_run_pipeline_exception_updates_status(tmp_path) -> None:
 def test_run_simple_none_path_message_has_no_upload_word() -> None:
     gen = run_simple(KuchikaePipeline(), None)
     result = list(gen)[0]
-    assert "録音ファイルを取得できませんでした" in result[3]
+    assert "録音ファイルを取得できませんでした" in result[4]
 
 
 def test_run_simple_live_streaming_yields_intermediate(tmp_path) -> None:
@@ -146,7 +148,7 @@ def test_run_simple_live_streaming_yields_intermediate(tmp_path) -> None:
     gen = run_simple(pipeline, str(wav), live_streaming=True)
     results = list(gen)
     assert len(results) >= 2
-    statuses = [r[3] for r in results]
+    statuses = [r[4] for r in results]
     assert any("音声認識中" in s or "文字起こし中" in s for s in statuses)
 
 
@@ -157,7 +159,7 @@ def test_run_simple_short_audio(tmp_path) -> None:
     gen = run_simple(pipeline, str(wav))
     results = list(gen)
     assert len(results) >= 1
-    assert "言い直しました" in results[-1][3]
+    assert "言い直しました" in results[-1][4]
 
 
 def test_run_simple_custom_template(tmp_path) -> None:
@@ -167,7 +169,7 @@ def test_run_simple_custom_template(tmp_path) -> None:
     gen = run_simple(pipeline, str(wav), template_name="丁寧に")
     results = list(gen)
     assert len(results) >= 1
-    assert "言い直しました" in results[-1][3]
+    assert "言い直しました" in results[-1][4]
 
 
 def test_run_simple_unknown_template_falls_back(tmp_path) -> None:
@@ -177,7 +179,7 @@ def test_run_simple_unknown_template_falls_back(tmp_path) -> None:
     gen = run_simple(pipeline, str(wav), template_name="存在しないテンプレート")
     results = list(gen)
     assert len(results) >= 1
-    assert "言い直しました" in results[-1][3]
+    assert "言い直しました" in results[-1][4]
 
 
 def test_pipeline_stt_timeout_config() -> None:
@@ -194,7 +196,7 @@ def test_run_simple_pipeline_timeout_propagation(tmp_path) -> None:
     pipeline = KuchikaePipeline(stt_timeout_sec=0.1)
     gen = run_simple(pipeline, str(wav))
     results = list(gen)
-    last_status = results[-1][3]
+    last_status = results[-1][4]
     assert "失敗しました" in last_status or "言い直しました" in last_status
 
 
@@ -204,7 +206,7 @@ def test_run_simple_voice_style_auto(tmp_path) -> None:
     sf.write(str(wav), np.zeros(44100, dtype=np.float32), 44100)
     gen = run_simple(pipeline, str(wav), voice_style="auto")
     results = list(gen)
-    assert "言い直しました" in results[-1][3]
+    assert "言い直しました" in results[-1][4]
 
 
 def test_run_simple_stt_preset_applied(tmp_path) -> None:
@@ -213,4 +215,4 @@ def test_run_simple_stt_preset_applied(tmp_path) -> None:
     sf.write(str(wav), np.zeros(44100, dtype=np.float32), 44100)
     gen = run_simple(pipeline, str(wav), stt_preset="fast")
     results = list(gen)
-    assert "言い直しました" in results[-1][3]
+    assert "言い直しました" in results[-1][4]

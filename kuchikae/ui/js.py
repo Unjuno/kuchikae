@@ -50,12 +50,12 @@ PTT_JS = r"""
 
   function findRecordButton(wrap) {
     if (!wrap) return null;
-    return wrap.querySelector('.record-button');
+    return wrap.querySelector('.record-button') || wrap.querySelector('button[aria-label*="録音"]') || wrap.querySelector('button[aria-label*="Record"]');
   }
 
   function findStopButton(wrap) {
     if (!wrap) return null;
-    return wrap.querySelector('.stop-button');
+    return wrap.querySelector('.stop-button') || wrap.querySelector('button[aria-label*="停止"]') || wrap.querySelector('button[aria-label*="Stop"]');
   }
 
   function clickButton(btn) {
