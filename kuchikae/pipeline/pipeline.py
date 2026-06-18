@@ -671,38 +671,39 @@ class KuchikaePipeline:
         except Exception as e:
             logger.debug("Noise reduction skipped: %s", e)
 
-        self._emit(
-            "stt.start",
-            "STT started.",
-            "stt",
-            backend=type(self.stt_backend).__name__,
-        )
+        try:
+            self._emit(
+                "stt.start",
+                "STT started.",
+                "stt",
+                backend=type(self.stt_backend).__name__,
+            )
 
-        text = self._run_with_timeout(
-            self.stt_backend.transcribe,
-            args=(denoised_path,),
-            timeout_sec=self.stt_timeout_sec,
-            step_name="STT",
-        )
+            text = self._run_with_timeout(
+                self.stt_backend.transcribe,
+                args=(denoised_path,),
+                timeout_sec=self.stt_timeout_sec,
+                step_name="STT",
+            )
 
-        # Clean up denoised temp file
-        if denoised_path != audio_path and os.path.exists(denoised_path):
-            try:
-                os.unlink(denoised_path)
-            except OSError:
-                pass
+            if not self.disable_processing_cache:
+                self.processing_cache.set_stt(audio_key, text)
 
-        if not self.disable_processing_cache:
-            self.processing_cache.set_stt(audio_key, text)
-
-        self._emit(
-            "stt.done",
-            "STT finished.",
-            "stt",
-            backend=type(self.stt_backend).__name__,
-            data={"source_len": len(text), "source_preview": text[:80]},
-        )
-        return text
+            self._emit(
+                "stt.done",
+                "STT finished.",
+                "stt",
+                backend=type(self.stt_backend).__name__,
+                data={"source_len": len(text), "source_preview": text[:80]},
+            )
+            return text
+        finally:
+            # Clean up denoised temp file
+            if denoised_path != audio_path and os.path.exists(denoised_path):
+                try:
+                    os.unlink(denoised_path)
+                except OSError:
+                    pass
 
     def _run_text_transform(
         self,
