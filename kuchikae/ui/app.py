@@ -153,7 +153,7 @@ def create_app(
 
                     def _run_handler(audio_value, template_value, text_prompt_value, stt_preset_value, voice_style_value):
                         # Disable button during processing
-                        yield (gr.update(interactive=False, value="処理中..."),) + (gr.update(),) * 5
+                        yield (None, gr.update(interactive=False, value="処理中..."),) + (gr.update(),) * 5
                         for result in run(
                             audio_value,
                             template_value,
@@ -163,7 +163,7 @@ def create_app(
                             stt_preset=stt_preset_value,
                             voice_style=voice_style_value,
                         ):
-                            yield (gr.update(interactive=True, value="言い直す"),) + result
+                            yield (None, gr.update(interactive=True, value="言い直す"),) + result
 
                     template_category.change(
                         on_template_category_change,
@@ -178,7 +178,7 @@ def create_app(
                     run_btn.click(
                         _run_handler,
                         inputs=[audio_input, template, text_prompt, stt_preset, voice_style],
-                        outputs=[run_btn, output_audio, source_text, transformed_text, status, voice_analysis_label],
+                        outputs=[audio_input, run_btn, output_audio, source_text, transformed_text, status, voice_analysis_label],
                     )
 
                 with gr.Tab("簡易"):
