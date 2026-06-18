@@ -643,7 +643,7 @@ class KuchikaePipeline:
             executor.shutdown(wait=False)
 
     def _run_stt(self, audio_path: str, audio_key: AudioKey) -> str:
-        """Execute STT step with caching, timeout, and noise reduction."""
+        """Execute STT step with caching and timeout."""
         if not self.disable_processing_cache:
             cached = self.processing_cache.get_stt(audio_key)
             if cached is not None:
@@ -656,54 +656,31 @@ class KuchikaePipeline:
                 )
                 return cached
 
-        # Apply noise reduction before STT
-        denoised_path = audio_path
-        try:
-            from kuchikae.domain.audio_denoise import reduce_noise_simple
-            denoised_path = reduce_noise_simple(audio_path)
-            if denoised_path != audio_path:
-                self._emit(
-                    "stt.denoise",
-                    "Noise reduction applied.",
-                    "stt",
-                    data={"original": audio_path, "denoised": denoised_path},
-                )
-        except Exception as e:
-            logger.debug("Noise reduction skipped: %s", e)
+        self._emit(
+            "stt.start",
+            "STT started.",
+            "stt",
+            backend=type(self.stt_backend).__name__,
+        )
 
-        try:
-            self._emit(
-                "stt.start",
-                "STT started.",
-                "stt",
-                backend=type(self.stt_backend).__name__,
-            )
+        text = self._run_with_timeout(
+            self.stt_backend.transcribe,
+            args=(audio_path,),
+            timeout_sec=self.stt_timeout_sec,
+            step_name="STT",
+        )
 
-            text = self._run_with_timeout(
-                self.stt_backend.transcribe,
-                args=(denoised_path,),
-                timeout_sec=self.stt_timeout_sec,
-                step_name="STT",
-            )
+        if not self.disable_processing_cache:
+            self.processing_cache.set_stt(audio_key, text)
 
-            if not self.disable_processing_cache:
-                self.processing_cache.set_stt(audio_key, text)
-
-            self._emit(
-                "stt.done",
-                "STT finished.",
-                "stt",
-                backend=type(self.stt_backend).__name__,
-                data={"source_len": len(text), "source_preview": text[:80]},
-            )
-            return text
-        finally:
-            # Clean up denoised temp file
-            if denoised_path != audio_path and os.path.exists(denoised_path):
-                try:
-                    os.unlink(denoised_path)
-                except OSError:
-                    pass
+        self._emit(
+            "stt.done",
+            "STT finished.",
+            "stt",
+            backend=type(self.stt_backend).__name__,
+            data={"source_len": len(text), "source_preview": text[:80]},
+        )
+        return text
 
     def _run_text_transform(
         self,
@@ -831,23 +808,9 @@ class KuchikaePipeline:
             )
             return cached
 
-        denoised_path = audio_path
-        try:
-            from kuchikae.domain.audio_denoise import reduce_noise_simple
-            denoised_path = reduce_noise_simple(audio_path)
-            if denoised_path != audio_path:
-                self._emit(
-                    "stt.denoise",
-                    "Noise reduction applied.",
-                    "stt",
-                    data={"original": audio_path, "denoised": denoised_path},
-                )
-        except Exception as e:
-            logger.debug("Noise reduction skipped: %s", e)
-
         executor = ThreadPoolExecutor(max_workers=1)
         try:
-            future = executor.submit(self.stt_backend.transcribe, denoised_path)
+            future = executor.submit(self.stt_backend.transcribe, audio_path)
             text = future.result(timeout=self.stt_timeout_sec)
         except FuturesTimeoutError:
             raise TimeoutError(
@@ -856,11 +819,6 @@ class KuchikaePipeline:
             )
         finally:
             executor.shutdown(wait=False)
-            if denoised_path != audio_path and os.path.exists(denoised_path):
-                try:
-                    os.unlink(denoised_path)
-                except OSError:
-                    pass
         if not self.disable_processing_cache:
             self.processing_cache.set_stt(audio_key, text)
         return text
@@ -872,36 +830,14 @@ class KuchikaePipeline:
             "stt",
             backend=type(self.stt_backend).__name__,
         )
-
-        denoised_path = audio_path
-        try:
-            from kuchikae.domain.audio_denoise import reduce_noise_simple
-            denoised_path = reduce_noise_simple(audio_path)
-            if denoised_path != audio_path:
-                self._emit(
-                    "stt.denoise",
-                    "Noise reduction applied.",
-                    "stt",
-                    data={"original": audio_path, "denoised": denoised_path},
-                )
-        except Exception as e:
-            logger.debug("Noise reduction skipped: %s", e)
-
-        try:
-            if hasattr(self.stt_backend, "transcribe_stream"):
-                accumulated = ""
-                for partial in self.stt_backend.transcribe_stream(denoised_path):
-                    accumulated = partial
-                if not self.disable_processing_cache:
-                    self.processing_cache.set_stt(audio_key, accumulated)
-                return accumulated
-            return self._step_stt(denoised_path, audio_key)
-        finally:
-            if denoised_path != audio_path and os.path.exists(denoised_path):
-                try:
-                    os.unlink(denoised_path)
-                except OSError:
-                    pass
+        if hasattr(self.stt_backend, "transcribe_stream"):
+            accumulated = ""
+            for partial in self.stt_backend.transcribe_stream(audio_path):
+                accumulated = partial
+            if not self.disable_processing_cache:
+                self.processing_cache.set_stt(audio_key, accumulated)
+            return accumulated
+        return self._step_stt(audio_path, audio_key)
 
     def _voice_context(self, audio_path: str, audio_key: AudioKey) -> VoiceContext:
         if self.disable_processing_cache:
@@ -1231,15 +1167,22 @@ class KuchikaePipeline:
         )
 
         t3 = time.time()
-        logger.info("process:voice_context:start")
+        logger.info("process:voice_context:start (parallel with audio_emotion)")
+        self._emit(
+            "voice_context.start",
+            "Voice context extraction started.",
+            "voice_context",
+            backend=type(self._voice_context_extractor).__name__,
+        )
+
+        voice_context_executor = ThreadPoolExecutor(max_workers=1)
         try:
-            self._emit(
-                "voice_context.start",
-                "Voice context extraction started.",
-                "voice_context",
-                backend=type(self._voice_context_extractor).__name__,
-            )
-            voice_context = self._voice_context(audio_path, audio_key)
+            voice_context_future = voice_context_executor.submit(self._voice_context, audio_path, audio_key)
+            audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
+            try:
+                voice_context = voice_context_future.result(timeout=30.0)
+            except FuturesTimeoutError:
+                raise TimeoutError("Voice context extraction timed out after 30s")
             self._emit(
                 "voice_context.done",
                 "Voice context extraction finished.",
@@ -1261,6 +1204,9 @@ class KuchikaePipeline:
                 data={"hint": hint_for_error("voice_context", e)},
             )
             raise
+        finally:
+            voice_context_executor.shutdown(wait=False)
+
         logger.info(
             "process:voice_context:done reference=%r ready=%s has_embedding=%s has_prosody=%s",
             voice_context.reference_audio_path,
@@ -1269,7 +1215,6 @@ class KuchikaePipeline:
             voice_context.prosody_profile is not None,
         )
         text_for_voice = transformed_text.strip() or source_text
-        audio_emotion = self._collect_audio_emotion(audio_future, audio_executor)
         voice_output_prompt = self._build_voice_prompt(source_text, text_for_voice, audio_emotion, voice_style)
         voice_prompt_text = voice_output_prompt.instruction
         logger.info(
@@ -1566,54 +1511,31 @@ class KuchikaePipeline:
                 # Stream STT
                 if hasattr(self.stt_backend, "transcribe_stream"):
                     logger.info("process_stream_live:stt_stream:start backend=%s", type(self.stt_backend).__name__)
-
-                    denoised_path = audio_path
-                    try:
-                        from kuchikae.domain.audio_denoise import reduce_noise_simple
-                        denoised_path = reduce_noise_simple(audio_path)
-                        if denoised_path != audio_path:
-                            self._emit(
-                                "stt.denoise",
-                                "Noise reduction applied.",
-                                "stt",
-                                data={"original": audio_path, "denoised": denoised_path},
-                            )
-                    except Exception as e:
-                        logger.debug("Noise reduction skipped: %s", e)
-
-                    try:
-                        accumulated = ""
-                        for idx, partial in enumerate(self.stt_backend.transcribe_stream(denoised_path), start=1):
-                            accumulated = partial
-                            logger.info(
-                                "process_stream_live:stt_partial idx=%d partial_len=%d partial_preview=%r",
-                                idx,
-                                len(partial),
-                                partial[:120],
-                            )
-                            yield "STT_PARTIAL", partial, None, None
-                        source_text = accumulated
-                        if not self.disable_processing_cache:
-                            self.processing_cache.set_stt(audio_key, source_text)
-                        self._emit(
-                            "stt.done",
-                            "STT finished.",
-                            "stt",
-                            backend=type(self.stt_backend).__name__,
-                            data={"source_len": len(source_text), "source_preview": source_text[:80]},
-                        )
+                    accumulated = ""
+                    for idx, partial in enumerate(self.stt_backend.transcribe_stream(audio_path), start=1):
+                        accumulated = partial
                         logger.info(
-                            "process_stream_live:stt_stream:done source_len=%d source_preview=%r",
-                            len(source_text),
-                            source_text[:120],
+                            "process_stream_live:stt_partial idx=%d partial_len=%d partial_preview=%r",
+                            idx,
+                            len(partial),
+                            partial[:120],
                         )
-                    finally:
-                        if denoised_path != audio_path and os.path.exists(denoised_path):
-                            try:
-                                os.unlink(denoised_path)
-                            except OSError:
-                                pass
-
+                        yield "STT_PARTIAL", partial, None, None
+                    source_text = accumulated
+                    if not self.disable_processing_cache:
+                        self.processing_cache.set_stt(audio_key, source_text)
+                    self._emit(
+                        "stt.done",
+                        "STT finished.",
+                        "stt",
+                        backend=type(self.stt_backend).__name__,
+                        data={"source_len": len(source_text), "source_preview": source_text[:80]},
+                    )
+                    logger.info(
+                        "process_stream_live:stt_stream:done source_len=%d source_preview=%r",
+                        len(source_text),
+                        source_text[:120],
+                    )
                     logger.info("process_stream_live:yield STT")
                     yield "STT", source_text, None, None
                 else:

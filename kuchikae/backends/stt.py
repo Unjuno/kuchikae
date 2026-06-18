@@ -82,6 +82,20 @@ class FasterWhisperSTTBackend(STTBackend):
         model_size = os.environ.get("WHISPER_MODEL_SIZE", self._config.model_size)
         device = os.environ.get("WHISPER_DEVICE", self._config.device)
         compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", self._config.compute_type)
+
+        if device == "auto":
+            try:
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+
+        if compute_type == "auto":
+            if device == "cuda":
+                compute_type = "float16"
+            else:
+                compute_type = "int8"
+
         logger.info("loading whisper model '%s' (device=%s compute_type=%s)...", model_size, device, compute_type)
         t0 = time.time()
         self._model = WhisperModel(model_size, device=device, compute_type=compute_type)

@@ -20,9 +20,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class FasterWhisperConfig:
-    model_size: str = "small"
-    device: str = "cpu"
-    compute_type: str = "int8"
+    model_size: str = "medium"
+    device: str = "auto"
+    compute_type: str = "auto"
     language: str = "ja"
     beam_size: int = 1
     vad_filter: bool = True
@@ -33,23 +33,30 @@ class FasterWhisperConfig:
 STT_PRESETS: dict[str, FasterWhisperConfig] = {
     "fast": FasterWhisperConfig(
         model_size="tiny",
-        device="cpu",
-        compute_type="int8",
+        device="auto",
+        compute_type="auto",
         beam_size=1,
         vad_filter=False,
     ),
     "balanced": FasterWhisperConfig(
         model_size="small",
-        device="cpu",
-        compute_type="int8",
+        device="auto",
+        compute_type="auto",
         beam_size=1,
         vad_filter=True,
     ),
     "accurate": FasterWhisperConfig(
         model_size="medium",
-        device="cpu",
-        compute_type="int8",
+        device="auto",
+        compute_type="auto",
         beam_size=3,
+        vad_filter=True,
+    ),
+    "gpu": FasterWhisperConfig(
+        model_size="medium",
+        device="cuda",
+        compute_type="float16",
+        beam_size=1,
         vad_filter=True,
     ),
 }
